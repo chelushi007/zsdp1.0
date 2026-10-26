@@ -1,11 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Plus, Search, Store } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Plus, Search, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
   CategoryPicker,
+  Select,
+  categoryTree,
   CompanyImagesUploader,
   COMPANY_IMAGES_MIN,
   LogoUploader,
@@ -210,10 +212,12 @@ function RowActions({
   shop,
   onDetail,
   onEdit,
+  onClose,
 }: {
   shop: Shop
   onDetail: () => void
   onEdit: () => void
+  onClose: () => void
 }) {
   const common = <ActionLink onClick={onDetail}>详情</ActionLink>
   switch (shop.status) {
@@ -222,7 +226,9 @@ function RowActions({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {common}
           <ActionLink onClick={onEdit}>编辑</ActionLink>
-          <ActionLink tone="danger">关闭店铺</ActionLink>
+          <ActionLink tone="danger" onClick={onClose}>
+            关闭店铺
+          </ActionLink>
         </div>
       )
     case 'pending':
@@ -238,41 +244,112 @@ function RowActions({
       return (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {common}
-          <ActionLink>重新开通</ActionLink>
+          <ActionLink>重新开��</ActionLink>
         </div>
       )
   }
 }
 
-const filterFields: [string, string][] = [
-  ['店铺编号', '请输入'],
-  ['店铺名称', '请输入'],
-  ['店铺状态', '全部'],
-  ['主营类目', '全部类目'],
-  ['所在地区', '省 / 市 / 区（县）'],
-  ['联系人', '请输入'],
-  ['开通时间', '开始日期 - 结束日期'],
+type Filters = { id: string; name: string; status: ShopStatus | ''; category: string }
+
+const emptyFilters: Filters = { id: '', name: '', status: '', category: '' }
+
+const statusOptions: { label: string; value: ShopStatus }[] = [
+  { label: '运营中', value: 'open' },
+  { label: '未开通', value: 'pending' },
+  { label: '已关闭', value: 'closed' },
 ]
 
-function FilterPanel({ onCreate }: { onCreate: () => void }) {
+const allCategories = categoryTree.flatMap((g) => g.children)
+
+function FilterInput({
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  label: string
+  value: string
+  placeholder: string
+  onChange: (v: string) => void
+}) {
+  return (
+    <input
+      aria-label={label}
+      value={value}
+      placeholder={placeholder}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-9 flex-1 rounded border border-border bg-background px-3 text-sm placeholder:text-xs placeholder:text-muted-foreground/60"
+    />
+  )
+}
+
+function FilterPanel({
+  draft,
+  onDraftChange,
+  onSearch,
+  onReset,
+  onCreate,
+}: {
+  draft: Filters
+  onDraftChange: (next: Filters) => void
+  onSearch: () => void
+  onReset: () => void
+  onCreate: () => void
+}) {
+  const statusLabel = statusOptions.find((o) => o.value === draft.status)?.label ?? ''
   return (
     <div className="flex flex-col gap-4 rounded-md bg-card p-5">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {filterFields.map(([label, placeholder]) => (
-          <label key={label} className="flex items-center gap-3 text-sm">
-            <span className="w-16 shrink-0 text-right">{label}</span>
-            <span className="flex h-9 flex-1 items-center rounded border border-border px-3 text-muted-foreground">
-              {placeholder}
-            </span>
-          </label>
-        ))}
+        <label className="flex items-center gap-3 text-sm">
+          <span className="w-16 shrink-0 text-right">店铺编号</span>
+          <FilterInput
+            label="店铺编号"
+            value={draft.id}
+            placeholder="请输入"
+            onChange={(id) => onDraftChange({ ...draft, id })}
+          />
+        </label>
+        <label className="flex items-center gap-3 text-sm">
+          <span className="w-16 shrink-0 text-right">店铺名称</span>
+          <FilterInput
+            label="店铺名称"
+            value={draft.name}
+            placeholder="请输入"
+            onChange={(name) => onDraftChange({ ...draft, name })}
+          />
+        </label>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="w-16 shrink-0 text-right">店铺状态</span>
+          <Select
+            label="店铺状态"
+            value={statusLabel}
+            placeholder="全部"
+            options={statusOptions.map((o) => o.label)}
+            onChange={(label) =>
+              onDraftChange({ ...draft, status: statusOptions.find((o) => o.label === label)?.value ?? '' })
+            }
+          />
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="w-16 shrink-0 text-right">主营类目</span>
+          <Select
+            label="主营类目"
+            value={draft.category}
+            placeholder="全部类目"
+            options={allCategories}
+            onChange={(category) => onDraftChange({ ...draft, category })}
+          />
+        </div>
       </div>
       <div className="flex items-center gap-2">
-        <Button className="bg-[#1890ff] hover:bg-[#1890ff]/90">
+        <Button className="bg-[#1890ff] hover:bg-[#1890ff]/90" onClick={onSearch}>
           <Search data-icon="inline-start" />
           查询
         </Button>
-        <Button variant="outline">重置</Button>
+        <Button variant="outline" onClick={onReset}>
+          重置
+        </Button>
         <Button variant="outline" className="ml-auto" onClick={onCreate}>
           <Plus data-icon="inline-start" />
           新增店铺
@@ -282,30 +359,94 @@ function FilterPanel({ onCreate }: { onCreate: () => void }) {
   )
 }
 
+function matches(shop: Shop, f: Filters) {
+  if (f.id && !shop.id.toLowerCase().includes(f.id.trim().toLowerCase())) return false
+  if (f.name && !shop.name.includes(f.name.trim())) return false
+  if (f.status && shop.status !== f.status) return false
+  if (f.category && !shop.categories.includes(f.category)) return false
+  return true
+}
+
+function ConfirmCloseDialog({ shop, onCancel, onConfirm }: { shop: Shop; onCancel: () => void; onConfirm: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation">
+      <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="close-shop-title"
+        aria-describedby="close-shop-desc"
+        className="w-full max-w-[420px] rounded-md bg-card p-6 shadow-xl"
+      >
+        <div className="flex items-start gap-3">
+          <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+            <AlertTriangle className="size-4" aria-hidden />
+          </span>
+          <div className="flex flex-col gap-2">
+            <h3 id="close-shop-title" className="text-base font-semibold">
+              确认关闭店铺？
+            </h3>
+            <p id="close-shop-desc" className="text-sm leading-relaxed text-muted-foreground">
+              关闭后「{shop.name}」将从门户下架，买/租方无法浏览和下单，进行中的订单与合同不受影响。关闭后可在列表中重新开通。
+            </p>
+          </div>
+        </div>
+        <div className="mt-6 flex items-center justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={onCancel}>
+            取消
+          </Button>
+          <Button size="sm" className="bg-red-600 text-white hover:bg-red-600/90" onClick={onConfirm}>
+            确认关闭
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const columns = '125px minmax(160px,1.4fr) 80px 135px 60px 115px minmax(170px,1fr)'
 
 function ShopList({
+  shops,
   onDetail,
   onEdit,
   onCreate,
+  onClose,
 }: {
+  shops: Shop[]
   onDetail: (shop: Shop) => void
   onEdit: (shop: Shop) => void
   onCreate: () => void
+  onClose: (shop: Shop) => void
 }) {
+  const [draft, setDraft] = useState<Filters>(emptyFilters)
+  const [applied, setApplied] = useState<Filters>(emptyFilters)
+  const visible = shops.filter((s) => matches(s, applied))
+  const isFiltered = applied !== emptyFilters && Object.values(applied).some(Boolean)
+
   const counts = {
-    open: shops.filter((s) => s.status === 'open').length,
-    pending: shops.filter((s) => s.status === 'pending').length,
-    closed: shops.filter((s) => s.status === 'closed').length,
+    open: visible.filter((s) => s.status === 'open').length,
+    pending: visible.filter((s) => s.status === 'pending').length,
+    closed: visible.filter((s) => s.status === 'closed').length,
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <FilterPanel onCreate={onCreate} />
+      <FilterPanel
+        draft={draft}
+        onDraftChange={setDraft}
+        onSearch={() => setApplied(draft)}
+        onReset={() => {
+          setDraft(emptyFilters)
+          setApplied(emptyFilters)
+        }}
+        onCreate={onCreate}
+      />
 
       <div className="overflow-hidden rounded-md border border-border bg-card">
         <div className="flex items-center gap-4 border-b border-border px-4 py-2.5 text-xs">
-          <span className="font-medium">全部 {shops.length}</span>
+          <span className="font-medium">
+            {isFiltered ? `筛选结果 ${visible.length}` : `全部 ${visible.length}`}
+          </span>
           <span className="text-emerald-700">运营中 {counts.open}</span>
           <span className="text-amber-700">未开通 {counts.pending}</span>
           <span className="text-gray-600">已关闭 {counts.closed}</span>
@@ -324,7 +465,10 @@ function ShopList({
               <span>联系人电话</span>
               <span>操作</span>
             </div>
-            {shops.map((shop) => (
+            {visible.length === 0 && (
+              <p className="px-4 py-12 text-center text-sm text-muted-foreground">没有符合筛选条件的店铺</p>
+            )}
+            {visible.map((shop) => (
               <div
                 key={shop.id}
                 className="grid items-center gap-3 border-b border-border px-4 py-3 text-sm last:border-0 hover:bg-muted/30"
@@ -342,13 +486,18 @@ function ShopList({
                 <span className="text-xs tabular-nums text-muted-foreground">{shop.openedAt ?? '—'}</span>
                 <span>{shop.contact}</span>
                 <span className="tabular-nums">{shop.phone}</span>
-                <RowActions shop={shop} onDetail={() => onDetail(shop)} onEdit={() => onEdit(shop)} />
+                <RowActions
+                  shop={shop}
+                  onDetail={() => onDetail(shop)}
+                  onEdit={() => onEdit(shop)}
+                  onClose={() => onClose(shop)}
+                />
               </div>
             ))}
           </div>
         </div>
         <div className="flex items-center justify-between px-4 py-3 text-xs text-muted-foreground">
-          <span>共 {shops.length} 条</span>
+          <span>共 {visible.length} 条</span>
           <div className="flex items-center gap-1">
             <span className="flex h-7 w-7 items-center justify-center rounded border border-border">‹</span>
             <span className="flex h-7 w-7 items-center justify-center rounded border border-[#1890ff] text-[#1890ff]">1</span>
@@ -454,7 +603,7 @@ function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
             <Input placeholder="请输入店铺名称，不超过 30 个字" value={shop?.name} />
           </Field>
           <Field label="营业时间">
-            <Input placeholder="例如：周一至周五 09:00 - 18:00" value={shop?.businessHours} />
+            <Input placeholder="例如：周���至周五 09:00 - 18:00" value={shop?.businessHours} />
           </Field>
           <Field label="主营类目" required span hint={`最多选择 ${MAX_CATEGORIES} 个类目，首个类目将作为店铺主类目展示`}>
             <CategoryPicker value={categories} onChange={setCategories} />
@@ -564,7 +713,7 @@ function DescItem({ label, value, span }: { label: string; value: React.ReactNod
   )
 }
 
-function DetailActions({ shop, onEdit }: { shop: Shop; onEdit: () => void }) {
+function DetailActions({ shop, onEdit, onClose }: { shop: Shop; onEdit: () => void; onClose: () => void }) {
   switch (shop.status) {
     case 'open':
       return (
@@ -572,7 +721,7 @@ function DetailActions({ shop, onEdit }: { shop: Shop; onEdit: () => void }) {
           <Button variant="outline" size="sm" onClick={onEdit}>
             编辑
           </Button>
-          <Button variant="outline" size="sm" className="text-red-600 hover:text-red-600">
+          <Button variant="outline" size="sm" className="text-red-600 hover:text-red-600" onClick={onClose}>
             关闭店铺
           </Button>
         </>
@@ -615,7 +764,17 @@ const timeline: Record<ShopStatus, [string, string][]> = {
   ],
 }
 
-function ShopDetail({ shop, onBack, onEdit }: { shop: Shop; onBack: () => void; onEdit: () => void }) {
+function ShopDetail({
+  shop,
+  onBack,
+  onEdit,
+  onClose,
+}: {
+  shop: Shop
+  onBack: () => void
+  onEdit: () => void
+  onClose: () => void
+}) {
   const stats = [
     ['在售 / 在租商品', shop.status === 'open' ? '128' : '0'],
     ['累计订单', shop.status === 'pending' ? '0' : '1,024'],
@@ -651,7 +810,7 @@ function ShopDetail({ shop, onBack, onEdit }: { shop: Shop; onBack: () => void; 
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <DetailActions shop={shop} onEdit={onEdit} />
+            <DetailActions shop={shop} onEdit={onEdit} onClose={onClose} />
         </div>
       </div>
 
@@ -810,6 +969,21 @@ type Mode = { type: 'list' } | { type: 'create' } | { type: 'edit'; shop: Shop }
 
 export function ShopInfo({ onTitleChange }: { onTitleChange?: (title: string) => void }) {
   const [mode, setMode] = useState<Mode>({ type: 'list' })
+  const [shopList, setShopList] = useState<Shop[]>(shops)
+  const [closing, setClosing] = useState<Shop | null>(null)
+
+  const confirmClose = () => {
+    if (!closing) return
+    const today = new Date().toISOString().slice(0, 10)
+    const updated: Shop = { ...closing, status: 'closed', updatedAt: today }
+    setShopList((list) => list.map((s) => (s.id === updated.id ? updated : s)))
+    if (mode.type === 'detail' && mode.shop.id === updated.id) setMode({ type: 'detail', shop: updated })
+    setClosing(null)
+  }
+
+  const dialog = closing && (
+    <ConfirmCloseDialog shop={closing} onCancel={() => setClosing(null)} onConfirm={confirmClose} />
+  )
 
   const go = (next: Mode) => {
     setMode(next)
@@ -827,11 +1001,16 @@ export function ShopInfo({ onTitleChange }: { onTitleChange?: (title: string) =>
   switch (mode.type) {
     case 'list':
       return (
-        <ShopList
-          onDetail={(shop) => go({ type: 'detail', shop })}
-          onEdit={(shop) => go({ type: 'edit', shop })}
-          onCreate={() => go({ type: 'create' })}
-        />
+        <>
+          <ShopList
+            shops={shopList}
+            onDetail={(shop) => go({ type: 'detail', shop })}
+            onEdit={(shop) => go({ type: 'edit', shop })}
+            onCreate={() => go({ type: 'create' })}
+            onClose={setClosing}
+          />
+          {dialog}
+        </>
       )
     case 'create':
       return <ShopForm onBack={() => go({ type: 'list' })} />
@@ -839,11 +1018,15 @@ export function ShopInfo({ onTitleChange }: { onTitleChange?: (title: string) =>
       return <ShopForm shop={mode.shop} onBack={() => go({ type: 'list' })} />
     case 'detail':
       return (
-        <ShopDetail
-          shop={mode.shop}
-          onBack={() => go({ type: 'list' })}
-          onEdit={() => go({ type: 'edit', shop: mode.shop })}
-        />
+        <>
+          <ShopDetail
+            shop={mode.shop}
+            onBack={() => go({ type: 'list' })}
+            onEdit={() => go({ type: 'edit', shop: mode.shop })}
+            onClose={() => setClosing(mode.shop)}
+          />
+          {dialog}
+        </>
       )
   }
 }

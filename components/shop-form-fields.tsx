@@ -259,7 +259,7 @@ export const regionTree: Record<string, Record<string, string[]>> = {
 
 export type Region = { province: string; city: string; district: string }
 
-function Select({
+export function Select({
   value,
   placeholder,
   options,
