@@ -85,7 +85,9 @@ export function CategoryPicker({
         aria-expanded={open}
         className="flex min-h-9 flex-wrap items-center gap-1.5 rounded border border-border bg-background px-2 py-1 text-left hover:border-[#1890ff]"
       >
-        {value.length === 0 && <span className="px-1 text-muted-foreground">请选择主营类目，最多 {MAX_CATEGORIES} 个</span>}
+        {value.length === 0 && (
+          <span className="px-1 text-xs text-muted-foreground/60">请选择主营类目，最多 {MAX_CATEGORIES} 个</span>
+        )}
         {value.map((v) => (
           <span key={v} className="flex items-center gap-1 rounded bg-[#1890ff]/10 px-2 py-0.5 text-xs text-[#1890ff]">
             {v}
@@ -280,7 +282,7 @@ function Select({
       onChange={(e) => onChange(e.target.value)}
       className={cn(
         'h-9 flex-1 rounded border border-border bg-background px-2 text-sm disabled:cursor-not-allowed disabled:bg-muted/50',
-        !value && 'text-muted-foreground',
+        !value && 'text-xs text-muted-foreground/60',
       )}
     >
       <option value="">{placeholder}</option>
@@ -339,7 +341,7 @@ export function RegionCascader({
         value={detail}
         onChange={(e) => onDetailChange(e.target.value)}
         placeholder="请输入详细地址，如：张江路 100 号 3 号楼"
-        className="h-9 rounded border border-border bg-background px-3 text-sm placeholder:text-muted-foreground"
+        className="h-9 rounded border border-border bg-background px-3 text-sm placeholder:text-xs placeholder:text-muted-foreground/60"
       />
     </div>
   )

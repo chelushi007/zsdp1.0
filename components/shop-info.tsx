@@ -393,7 +393,7 @@ function Input({ placeholder, value }: { placeholder?: string; value?: string })
     <span
       className={cn(
         'flex h-9 items-center rounded border border-border bg-background px-3',
-        value ? 'text-foreground' : 'text-muted-foreground',
+        value ? 'text-foreground' : 'text-xs text-muted-foreground/60',
       )}
     >
       {value ?? placeholder}
@@ -406,7 +406,7 @@ function Textarea({ placeholder, value }: { placeholder?: string; value?: string
     <span
       className={cn(
         'flex min-h-24 items-start rounded border border-border bg-background px-3 py-2 leading-relaxed',
-        value ? 'text-foreground' : 'text-muted-foreground',
+        value ? 'text-foreground' : 'text-xs text-muted-foreground/60',
       )}
     >
       {value ?? placeholder}
@@ -507,7 +507,7 @@ function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
             <Input placeholder="请输入 18 位统一社会信用代码" value={shop?.license} />
           </Field>
           <Field label="营业执照" required>
-            <span className="flex h-9 items-center rounded border border-dashed border-border px-3 text-muted-foreground">
+            <span className="flex h-9 items-center rounded border border-dashed border-border px-3 text-xs text-muted-foreground/60">
               点击上传营业执照扫描件
             </span>
           </Field>
