@@ -105,6 +105,31 @@ export const menuTree: MenuNode[] = [
   },
 ]
 
+export type RoleId = 'seller' | 'buyer' | 'provider' | 'ops'
+
+export type Role = {
+  id: RoleId
+  label: string
+  account: string
+  org: string
+}
+
+export const userRoles: Role[] = [
+  { id: 'seller', label: '商家', account: '演示商户', org: '演示商户（上海）有限公司' },
+  { id: 'buyer', label: '买/租方', account: '演示集团', org: '演示集团股份有限公司' },
+  { id: 'provider', label: '服务商', account: '演示服务商', org: '演示资产服务有限公司' },
+]
+
+export const opsRole: Role = { id: 'ops', label: '运营', account: '平台运营', org: '租售店铺运营中心' }
+
+export function getRole(id: RoleId): Role {
+  return id === 'ops' ? opsRole : userRoles.find((r) => r.id === id)!
+}
+
+export function workspaceMenu(role: RoleId): MenuNode[] {
+  return menuTree.find((n) => n.id === role)?.children ?? []
+}
+
 export function findPath(nodes: MenuNode[], id: string, trail: MenuNode[] = []): MenuNode[] | null {
   for (const node of nodes) {
     const next = [...trail, node]

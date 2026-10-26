@@ -25,33 +25,37 @@ export function SidebarTree({ nodes, activeId, expanded, onSelect, onToggle, dep
           <li key={node.id} role="treeitem" aria-expanded={hasChildren ? isOpen : undefined} aria-selected={isActive}>
             <div
               className={cn(
-                'group flex h-8 items-center gap-1 rounded-sm pr-2 text-sm transition-colors',
-                isActive ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted',
+                'group flex h-11 items-center gap-1 pr-3 text-sm transition-colors',
+                isActive
+                  ? 'bg-[#1890ff] text-white'
+                  : depth > 0
+                    ? 'bg-black/20 text-white/70 hover:bg-black/30 hover:text-white'
+                    : 'text-white/80 hover:bg-white/5 hover:text-white',
               )}
-              style={{ paddingLeft: `${depth * 16 + 4}px` }}
+              style={{ paddingLeft: `${depth * 16 + 12}px` }}
             >
-              <button
-                type="button"
-                aria-label={hasChildren ? (isOpen ? `折叠 ${node.label}` : `展开 ${node.label}`) : undefined}
-                tabIndex={hasChildren ? 0 : -1}
-                onClick={() => hasChildren && onToggle(node.id)}
-                className={cn(
-                  'flex size-4 shrink-0 items-center justify-center rounded text-muted-foreground',
-                  hasChildren ? 'hover:text-foreground' : 'invisible',
-                )}
-              >
-                <ChevronRight className={cn('size-3 transition-transform', isOpen && 'rotate-90')} />
-              </button>
               <button
                 type="button"
                 onClick={() => {
                   onSelect(node.id)
                   if (hasChildren && !isOpen) onToggle(node.id)
                 }}
-                className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
               >
-                <FileText className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-                <span className={cn('truncate', node.emphasized && 'font-semibold')}>{node.label}</span>
+                <FileText className={cn('size-4 shrink-0', isActive ? 'text-white' : 'text-white/50')} aria-hidden />
+                <span className={cn('truncate', node.emphasized && 'font-semibold text-white')}>{node.label}</span>
+              </button>
+              <button
+                type="button"
+                aria-label={hasChildren ? (isOpen ? `折叠 ${node.label}` : `展开 ${node.label}`) : undefined}
+                tabIndex={hasChildren ? 0 : -1}
+                onClick={() => hasChildren && onToggle(node.id)}
+                className={cn(
+                  'flex size-5 shrink-0 items-center justify-center rounded text-white/50',
+                  hasChildren ? 'hover:text-white' : 'invisible',
+                )}
+              >
+                <ChevronRight className={cn('size-3.5 transition-transform', isOpen && 'rotate-90')} />
               </button>
             </div>
             {hasChildren && isOpen && (

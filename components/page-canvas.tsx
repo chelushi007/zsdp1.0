@@ -1,4 +1,4 @@
-import { ChevronRight, Plus, Search } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import type { MenuNode } from '@/lib/menu'
 
@@ -39,18 +39,34 @@ function DashboardLayout() {
 function ListLayout() {
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-card p-3">
-        <div className="flex h-8 flex-1 items-center gap-2 rounded-sm border border-border px-2 text-xs text-muted-foreground">
-          <Search className="size-3.5" aria-hidden />
-          关键词搜索
+      <div className="flex flex-col gap-4 rounded-md bg-card p-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[
+            ['编号', '请输入'],
+            ['名称', '请输入'],
+            ['类型', '全部'],
+            ['状态', '请选择'],
+            ['创建时间', '开始日期 - 结束日期'],
+          ].map(([label, placeholder]) => (
+            <label key={label} className="flex items-center gap-3 text-sm">
+              <span className="w-16 shrink-0 text-right">{label}</span>
+              <span className="flex h-9 flex-1 items-center rounded border border-border px-3 text-muted-foreground">
+                {placeholder}
+              </span>
+            </label>
+          ))}
         </div>
-        <Block label="状态筛选" className="h-8 w-28" />
-        <Block label="日期范围" className="h-8 w-36" />
-        <Button size="sm">查询</Button>
-        <Button size="sm" variant="outline">
-          <Plus data-icon="inline-start" />
-          新增
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button className="bg-[#1890ff] hover:bg-[#1890ff]/90">
+            <Search data-icon="inline-start" />
+            查询
+          </Button>
+          <Button variant="outline">重置</Button>
+          <Button variant="outline" className="ml-auto">
+            <Plus data-icon="inline-start" />
+            新增
+          </Button>
+        </div>
       </div>
       <div className="overflow-hidden rounded-md border border-border bg-card">
         <div className="grid grid-cols-6 border-b border-border bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground">
@@ -102,25 +118,9 @@ export function PageCanvas({ path, onNavigate }: Props) {
   const isHub = Boolean(node.children?.length)
 
   return (
-    <div className="flex flex-col gap-6">
-      <nav aria-label="面包屑" className="flex items-center gap-1 text-xs text-muted-foreground">
-        <span>租售店铺</span>
-        {path.map((p) => (
-          <span key={p.id} className="flex items-center gap-1">
-            <ChevronRight className="size-3" aria-hidden />
-            <button
-              type="button"
-              onClick={() => onNavigate(p.id)}
-              className={p.id === node.id ? 'text-foreground' : 'hover:text-foreground'}
-            >
-              {p.label}
-            </button>
-          </span>
-        ))}
-      </nav>
-
+    <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight">{node.label}</h1>
+        <h1 className="text-lg font-semibold tracking-tight">{node.label}</h1>
         <p className="text-sm text-muted-foreground">{node.description ?? '页面说明待补充'}</p>
       </header>
 
