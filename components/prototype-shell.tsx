@@ -14,7 +14,6 @@ type View = 'portal' | 'entry' | 'workbench'
 const views: { id: View; label: string }[] = [
   { id: 'portal', label: '门户首页' },
   { id: 'entry', label: '工作台入口选择' },
-  { id: 'workbench', label: '工作台' },
 ]
 
 export function PrototypeShell() {
@@ -73,6 +72,18 @@ export function PrototypeShell() {
               {v.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => (role === 'ops' ? enterWorkbench('seller') : setView('workbench'))}
+            className={cn(
+              'rounded-sm px-2 py-0.5 transition-colors',
+              view === 'workbench' && role !== 'ops'
+                ? 'bg-[#1890ff]/10 text-[#1890ff]'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            用户工作台
+          </button>
           <button
             type="button"
             onClick={() => enterWorkbench('ops')}
