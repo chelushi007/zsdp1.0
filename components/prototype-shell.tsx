@@ -73,6 +73,18 @@ export function PrototypeShell() {
               {v.label}
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => enterWorkbench('ops')}
+            className={cn(
+              'rounded-sm px-2 py-0.5 transition-colors',
+              view === 'workbench' && role === 'ops'
+                ? 'bg-[#1890ff]/10 text-[#1890ff]'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            运营工作台
+          </button>
         </div>
         <span className="ml-auto text-muted-foreground">租售店铺 · 原型设计稿</span>
       </div>
