@@ -36,6 +36,61 @@ function DashboardLayout() {
   )
 }
 
+function OpsDashboardLayout({ onNavigate }: { onNavigate: (id: string) => void }) {
+  const metrics = [
+    ['平台 GMV（本月）', '¥ 12,480,000', '+8.2%'],
+    ['在营店铺', '1,286', '+36'],
+    ['今日订单', '2,431', '+12.5%'],
+    ['活跃用户', '38,920', '+3.1%'],
+  ]
+  const todos = [
+    ['店铺入驻审核', '23', 'ops-audit-shop'],
+    ['商品发布审核', '158', 'ops-audit-goods'],
+    ['异常订单处理', '7', 'ops-orders'],
+    ['用户申诉', '4', 'ops-users'],
+  ]
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {metrics.map(([k, v, delta]) => (
+          <div key={k} className="rounded-md border border-border bg-card p-4">
+            <p className="text-xs text-muted-foreground">{k}</p>
+            <p className="mt-2 text-2xl font-semibold tabular-nums">{v}</p>
+            <p className="mt-1 text-xs text-emerald-600">较上期 {delta}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Block label="平台订单 / GMV 趋势图表占位" className="h-56 lg:col-span-2" />
+        <div className="flex flex-col rounded-md border border-border bg-card">
+          <p className="border-b border-border px-4 py-3 text-sm font-medium">待办审核</p>
+          <ul className="flex flex-1 flex-col">
+            {todos.map(([label, count, id]) => (
+              <li key={id}>
+                <button
+                  type="button"
+                  onClick={() => onNavigate(id)}
+                  className="flex w-full items-center justify-between px-4 py-2.5 text-sm hover:bg-muted/60"
+                >
+                  <span>{label}</span>
+                  <span className="rounded-full bg-[#1890ff]/10 px-2 py-0.5 text-xs font-medium text-[#1890ff] tabular-nums">
+                    {count}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-3">
+        <Block label="角色分布（商家 / 买租方 / 服务商）" className="h-44" />
+        <Block label="类目成交 TOP10" className="h-44" />
+        <Block label="系统公告与运营日志" className="h-44" />
+      </div>
+    </div>
+  )
+}
+
 function ListLayout() {
   return (
     <div className="flex flex-col gap-4">
@@ -124,7 +179,15 @@ export function PageCanvas({ path, onNavigate }: Props) {
         <p className="text-sm text-muted-foreground">{node.description ?? '页面说明待补充'}</p>
       </header>
 
-      {isHub ? <HubLayout node={node} onNavigate={onNavigate} /> : isDashboard ? <DashboardLayout /> : <ListLayout />}
+      {isHub ? (
+        <HubLayout node={node} onNavigate={onNavigate} />
+      ) : node.id === 'ops-dashboard' ? (
+        <OpsDashboardLayout onNavigate={onNavigate} />
+      ) : isDashboard ? (
+        <DashboardLayout />
+      ) : (
+        <ListLayout />
+      )}
     </div>
   )
 }

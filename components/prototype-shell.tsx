@@ -88,7 +88,7 @@ export function PrototypeShell() {
               collapsed ? 'w-0 overflow-hidden' : 'w-64',
             )}
           >
-            <div className="flex h-14 shrink-0 items-center gap-3 px-5">
+            <div className="flex h-14 shrink-0 items-center gap-3 border-b border-white/10 px-5">
               <div className="flex size-7 items-center justify-center rounded bg-[#1890ff]">
                 <Store className="size-4" aria-hidden />
               </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { Home, Menu, RefreshCw } from 'lucide-react'
+import { Home, Menu, RefreshCw, ShieldCheck, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { getRole, userRoles, type MenuNode, type RoleId } from '@/lib/menu'
 
@@ -90,6 +90,26 @@ export function TopBar({
               )
             })}
           </div>
+        )}
+
+        {isOps ? (
+          <button
+            type="button"
+            onClick={() => onRoleChange('seller')}
+            className="flex h-8 items-center gap-1.5 rounded border border-white/60 px-3 text-sm font-medium hover:bg-white/15"
+          >
+            <Users className="size-4" aria-hidden />
+            用户工作台
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onRoleChange('ops')}
+            className="flex h-8 items-center gap-1.5 rounded border border-white/60 px-3 text-sm font-medium hover:bg-white/15"
+          >
+            <ShieldCheck className="size-4" aria-hidden />
+            运营工作台
+          </button>
         )}
 
         <span className="hidden h-5 w-px bg-white/40 md:block" aria-hidden />
