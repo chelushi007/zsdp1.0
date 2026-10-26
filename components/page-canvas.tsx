@@ -1,5 +1,9 @@
+'use client'
+
+import { useState } from 'react'
 import { Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { ShopInfo } from '@/components/shop-info'
 import type { MenuNode } from '@/lib/menu'
 
 type Props = {
@@ -171,15 +175,19 @@ export function PageCanvas({ path, onNavigate }: Props) {
   const node = path[path.length - 1]
   const isDashboard = node.id.endsWith('dashboard') || node.id === 'portal'
   const isHub = Boolean(node.children?.length)
+  const [subTitle, setSubTitle] = useState<string | null>(null)
+  const title = node.id === 'seller-shop-info' && subTitle ? subTitle : node.label
 
   return (
     <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-1">
-        <h1 className="text-lg font-semibold tracking-tight">{node.label}</h1>
+        <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
         <p className="text-sm text-muted-foreground">{node.description ?? '页面说明待补充'}</p>
       </header>
 
-      {isHub ? (
+      {node.id === 'seller-shop-info' ? (
+        <ShopInfo key={node.id} onTitleChange={setSubTitle} />
+      ) : isHub ? (
         <HubLayout node={node} onNavigate={onNavigate} />
       ) : node.id === 'ops-dashboard' ? (
         <OpsDashboardLayout onNavigate={onNavigate} />
