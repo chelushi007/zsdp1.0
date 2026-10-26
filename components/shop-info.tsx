@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertTriangle, ArrowLeft, Plus, Search, Store } from 'lucide-react'
+import { AlertTriangle, ArrowLeft, Lock, Plus, Search, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import {
@@ -238,6 +238,19 @@ function RowActions({
   onClose: () => void
 }) {
   const common = <ActionLink onClick={onDetail}>详情</ActionLink>
+  if (shop.orgLevel === 'sub') {
+    return (
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {common}
+        <span
+          className="rounded bg-muted px-1.5 text-[10px] leading-4 text-muted-foreground ring-1 ring-inset ring-border"
+          title="下级机构的店铺仅支持查看，请由所属机构进行管理"
+        >
+          仅可查看
+        </span>
+      </div>
+    )
+  }
   switch (shop.status) {
     case 'open':
       return (
@@ -764,6 +777,14 @@ function DescItem({ label, value, span }: { label: string; value: React.ReactNod
 }
 
 function DetailActions({ shop, onEdit, onClose }: { shop: Shop; onEdit: () => void; onClose: () => void }) {
+  if (shop.orgLevel === 'sub') {
+    return (
+      <span className="flex h-8 items-center gap-1.5 rounded border border-dashed border-border px-3 text-xs text-muted-foreground">
+        <Lock className="size-3.5" aria-hidden />
+        下级机构店铺，仅可查看，请由「{shop.org}」管理
+      </span>
+    )
+  }
   switch (shop.status) {
     case 'open':
       return (
