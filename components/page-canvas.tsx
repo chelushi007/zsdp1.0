@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ShopInfo } from '@/components/shop-info'
+import { ShopCreate, ShopInfo } from '@/components/shop-info'
 import type { MenuNode } from '@/lib/menu'
 
 type Props = {
@@ -187,6 +187,8 @@ export function PageCanvas({ path, onNavigate }: Props) {
 
       {node.id === 'seller-shop-info' ? (
         <ShopInfo key={node.id} onTitleChange={setSubTitle} />
+      ) : node.id === 'seller-shop-create' ? (
+        <ShopCreate key={node.id} onDone={() => onNavigate('seller-shop-info')} />
       ) : isHub ? (
         <HubLayout node={node} onNavigate={onNavigate} />
       ) : node.id === 'ops-dashboard' ? (

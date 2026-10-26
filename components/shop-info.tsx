@@ -244,7 +244,7 @@ function RowActions({
         {common}
         <span
           className="rounded bg-muted px-1.5 text-[10px] leading-4 text-muted-foreground ring-1 ring-inset ring-border"
-          title="下级机构的店铺仅支持查看，请由所属机构进行管理"
+          title="下级机构的店铺���支持查看，请由所属机构进行管理"
         >
           仅可查看
         </span>
@@ -638,7 +638,19 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
+export function ShopCreate({ onDone }: { onDone: () => void }) {
+  return <ShopForm onBack={onDone} backLabel="返回店铺信息" />
+}
+
+function ShopForm({
+  shop,
+  onBack,
+  backLabel = '返回列表',
+}: {
+  shop?: Shop
+  onBack: () => void
+  backLabel?: string
+}) {
   const isEdit = Boolean(shop)
   const [categories, setCategories] = useState<string[]>(shop?.categories ?? [])
   const [region, setRegion] = useState<Region>(shop?.region ?? { province: '', city: '', district: '' })
@@ -655,7 +667,7 @@ function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft data-icon="inline-start" />
-          返回列表
+          {backLabel}
         </Button>
         {isEdit && <StatusBadge status={shop!.status} />}
       </div>
@@ -679,7 +691,7 @@ function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
               onDetailChange={setDetailAddress}
             />
           </Field>
-          <Field label="店铺 Logo" required span>
+          <Field label="��铺 Logo" required span>
             <LogoUploader hasLogo={hasLogo} onToggle={() => setHasLogo((v) => !v)} />
           </Field>
           <Field label="店铺简介" span>

@@ -51,9 +51,8 @@ export const menuTree: MenuNode[] = [
         label: '店铺管理',
         description: '店铺基础信息、装修与资质维护',
         children: [
-          { id: 'seller-shop-info', label: '店铺信息', description: '店铺名称、简介、联系方式与营业状态' },
-          { id: 'seller-shop-deco', label: '店铺装修', description: '首页模板、轮播图与栏目配置' },
-          { id: 'seller-shop-cert', label: '资质认证', description: '营业执照、经营许可等资质上传与审核' },
+        { id: 'seller-shop-info', label: '店铺信息', description: '店铺名称、简介、联系方式与营业状态' },
+        { id: 'seller-shop-create', label: '新增店铺', description: '填写店铺基本信息、主营类目与企业资料，发布新店铺' },
         ],
       },
       {
