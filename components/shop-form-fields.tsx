@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Check, ChevronRight, ImagePlus, Info, Trash2, X } from 'lucide-react'
+import { Check, ChevronRight, ImagePlus, Info, Minus, Trash2, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /* ---------- 类目数据 ---------- */
@@ -19,6 +19,28 @@ export const categoryTree: { name: string; children: string[] }[] = [
 
 export const MAX_CATEGORIES = 5
 
+function CheckBox({
+  state,
+  disabled,
+}: {
+  state: 'checked' | 'indeterminate' | 'unchecked'
+  disabled?: boolean
+}) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'flex size-4 shrink-0 items-center justify-center rounded-sm border bg-background',
+        state === 'unchecked' ? 'border-border' : 'border-[#1890ff] bg-[#1890ff] text-white',
+        disabled && 'opacity-40',
+      )}
+    >
+      {state === 'checked' && <Check className="size-3" />}
+      {state === 'indeterminate' && <Minus className="size-3" />}
+    </span>
+  )
+}
+
 export function CategoryPicker({
   value,
   onChange,
@@ -27,32 +49,45 @@ export function CategoryPicker({
   onChange: (next: string[]) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [activeGroup, setActiveGroup] = useState(0)
-  const group = categoryTree[activeGroup]
-  const full = value.length >= MAX_CATEGORIES
+  const [draft, setDraft] = useState<string[]>(value)
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({ [categoryTree[0].name]: true })
+  const full = draft.length >= MAX_CATEGORIES
 
-  const toggle = (name: string) => {
-    if (value.includes(name)) onChange(value.filter((v) => v !== name))
-    else if (!full) onChange([...value, name])
+  const openDialog = () => {
+    setDraft(value)
+    setOpen(true)
   }
+
+  const toggleChild = (name: string) => {
+    if (draft.includes(name)) setDraft(draft.filter((v) => v !== name))
+    else if (!full) setDraft([...draft, name])
+  }
+
+  const toggleGroup = (children: string[]) => {
+    const selected = children.filter((c) => draft.includes(c))
+    if (selected.length === children.length) {
+      setDraft(draft.filter((v) => !children.includes(v)))
+      return
+    }
+    const room = MAX_CATEGORIES - draft.length
+    const toAdd = children.filter((c) => !draft.includes(c)).slice(0, Math.max(room, 0))
+    setDraft([...draft, ...toAdd])
+  }
+
+  const removeValue = (name: string) => onChange(value.filter((v) => v !== name))
 
   return (
     <div className="flex flex-col gap-2">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={openDialog}
+        aria-haspopup="dialog"
         aria-expanded={open}
-        className={cn(
-          'flex min-h-9 flex-wrap items-center gap-1.5 rounded border border-border bg-background px-2 py-1 text-left',
-          open && 'border-[#1890ff] ring-2 ring-[#1890ff]/20',
-        )}
+        className="flex min-h-9 flex-wrap items-center gap-1.5 rounded border border-border bg-background px-2 py-1 text-left hover:border-[#1890ff]"
       >
         {value.length === 0 && <span className="px-1 text-muted-foreground">请选择主营类目，最多 {MAX_CATEGORIES} 个</span>}
         {value.map((v) => (
-          <span
-            key={v}
-            className="flex items-center gap-1 rounded bg-[#1890ff]/10 px-2 py-0.5 text-xs text-[#1890ff]"
-          >
+          <span key={v} className="flex items-center gap-1 rounded bg-[#1890ff]/10 px-2 py-0.5 text-xs text-[#1890ff]">
             {v}
             <span
               role="button"
@@ -60,13 +95,13 @@ export function CategoryPicker({
               aria-label={`移除 ${v}`}
               onClick={(e) => {
                 e.stopPropagation()
-                toggle(v)
+                removeValue(v)
               }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
                   e.stopPropagation()
-                  toggle(v)
+                  removeValue(v)
                 }
               }}
               className="rounded-sm hover:bg-[#1890ff]/20"
@@ -81,83 +116,115 @@ export function CategoryPicker({
       </button>
 
       {open && (
-        <div className="overflow-hidden rounded border border-border bg-card shadow-sm">
-          <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2 text-xs">
-            <span className="font-medium">选择类目</span>
-            <span className={cn('text-muted-foreground', full && 'text-amber-600')}>
-              {full ? `已选满 ${MAX_CATEGORIES} 个，请先移除再选择` : `还可选择 ${MAX_CATEGORIES - value.length} 个`}
-            </span>
-          </div>
-          <div className="grid grid-cols-[150px_1fr]">
-            <ul className="max-h-64 overflow-y-auto border-r border-border bg-muted/20 py-1" role="listbox" aria-label="一级类目">
-              {categoryTree.map((g, i) => {
-                const count = g.children.filter((c) => value.includes(c)).length
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="category-dialog-title"
+            className="flex max-h-[85vh] w-full max-w-[720px] flex-col rounded-md bg-card shadow-xl"
+          >
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h3 id="category-dialog-title" className="text-base font-semibold">
+                选择类目
+              </h3>
+              <div className="flex items-center gap-3">
+                <span className={cn('text-xs text-muted-foreground', full && 'text-amber-600')}>
+                  {full ? `已选满 ${MAX_CATEGORIES} 个` : `已选 ${draft.length} 个，还可选 ${MAX_CATEGORIES - draft.length} 个`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="关闭"
+                  className="rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  <X className="size-4" aria-hidden />
+                </button>
+              </div>
+            </div>
+
+            <ul className="flex-1 overflow-y-auto p-3" aria-label="类目树">
+              {categoryTree.map((g) => {
+                const isOpen = expanded[g.name] ?? false
+                const selected = g.children.filter((c) => draft.includes(c)).length
+                const groupState =
+                  selected === 0 ? 'unchecked' : selected === g.children.length ? 'checked' : 'indeterminate'
                 return (
-                  <li key={g.name}>
-                    <button
-                      type="button"
-                      onClick={() => setActiveGroup(i)}
-                      className={cn(
-                        'flex w-full items-center justify-between px-3 py-2 text-sm hover:bg-muted',
-                        i === activeGroup && 'bg-card font-medium text-[#1890ff]',
-                      )}
-                    >
-                      <span>{g.name}</span>
-                      <span className="flex items-center gap-1">
-                        {count > 0 && (
-                          <span className="rounded-full bg-[#1890ff] px-1.5 text-[10px] leading-4 text-white">{count}</span>
-                        )}
-                        <ChevronRight className="size-3.5 text-muted-foreground" aria-hidden />
-                      </span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-            <ul className="grid max-h-64 grid-cols-2 content-start gap-1 overflow-y-auto p-2" aria-label="二级类目">
-              {group.children.map((c) => {
-                const checked = value.includes(c)
-                const disabled = !checked && full
-                return (
-                  <li key={c}>
-                    <button
-                      type="button"
-                      disabled={disabled}
-                      aria-pressed={checked}
-                      onClick={() => toggle(c)}
-                      className={cn(
-                        'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted',
-                        checked && 'bg-[#1890ff]/10 text-[#1890ff]',
-                        disabled && 'cursor-not-allowed opacity-40 hover:bg-transparent',
-                      )}
-                    >
-                      <span
-                        className={cn(
-                          'flex size-4 items-center justify-center rounded-sm border',
-                          checked ? 'border-[#1890ff] bg-[#1890ff] text-white' : 'border-border bg-background',
-                        )}
-                        aria-hidden
+                  <li key={g.name} className="mb-1">
+                    <div className="flex items-center gap-2 rounded bg-muted/60 px-2 py-2">
+                      <button
+                        type="button"
+                        aria-label={isOpen ? `收起 ${g.name}` : `展开 ${g.name}`}
+                        aria-expanded={isOpen}
+                        onClick={() => setExpanded((e) => ({ ...e, [g.name]: !isOpen }))}
+                        className="rounded p-0.5 text-muted-foreground hover:text-foreground"
                       >
-                        {checked && <Check className="size-3" />}
-                      </span>
-                      {c}
-                    </button>
+                        <ChevronRight className={cn('size-4 transition-transform', isOpen && 'rotate-90')} aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        role="checkbox"
+                        aria-checked={groupState === 'indeterminate' ? 'mixed' : groupState === 'checked'}
+                        onClick={() => toggleGroup(g.children)}
+                        className="flex items-center gap-2 text-sm font-semibold"
+                      >
+                        <CheckBox state={groupState} />
+                        {g.name}
+                        {selected > 0 && (
+                          <span className="rounded-full bg-[#1890ff] px-1.5 text-[10px] font-normal leading-4 text-white">{selected}</span>
+                        )}
+                      </button>
+                    </div>
+                    {isOpen && (
+                      <ul className="py-1">
+                        {g.children.map((c) => {
+                          const checked = draft.includes(c)
+                          const disabled = !checked && full
+                          return (
+                            <li key={c}>
+                              <button
+                                type="button"
+                                role="checkbox"
+                                aria-checked={checked}
+                                disabled={disabled}
+                                onClick={() => toggleChild(c)}
+                                className={cn(
+                                  'flex w-full items-center gap-2 rounded py-2 pl-12 pr-2 text-left text-sm hover:bg-muted/50',
+                                  checked && 'text-[#1890ff]',
+                                  disabled && 'cursor-not-allowed text-muted-foreground hover:bg-transparent',
+                                )}
+                              >
+                                <CheckBox state={checked ? 'checked' : 'unchecked'} disabled={disabled} />
+                                {c}
+                              </button>
+                            </li>
+                          )
+                        })}
+                      </ul>
+                    )}
                   </li>
                 )
               })}
             </ul>
-          </div>
-          <div className="flex items-center justify-end gap-2 border-t border-border px-3 py-2">
-            <button type="button" onClick={() => onChange([])} className="text-xs text-muted-foreground hover:text-foreground">
-              清空
-            </button>
-            <button
-              type="button"
-              onClick={() => setOpen(false)}
-              className="rounded bg-[#1890ff] px-3 py-1 text-xs font-medium text-white hover:bg-[#1890ff]/90"
-            >
-              确定
-            </button>
+
+            <div className="flex items-center justify-center gap-3 border-t border-border px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="h-9 rounded border border-[#1890ff] px-5 text-sm text-[#1890ff] hover:bg-[#1890ff]/5"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onChange(draft)
+                  setOpen(false)
+                }}
+                className="h-9 rounded bg-[#1890ff] px-5 text-sm font-medium text-white hover:bg-[#1890ff]/90"
+              >
+                确定
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -399,7 +466,7 @@ export function CompanyImagesUploader({ count, onChange }: { count: number; onCh
         <span className={cn('tabular-nums', tooFew ? 'text-amber-600' : 'text-muted-foreground')}>
           已上传 {count} / {COMPANY_IMAGES_MAX} 张{tooFew && `，至少还需 ${COMPANY_IMAGES_MIN - count} 张`}
         </span>
-        <span className="text-muted-foreground">支持拖拽排序，首图将作为店铺封面</span>
+        <span className="text-muted-foreground">支持拖拽排���，首图将作为店铺封面</span>
       </div>
       <Tip tone={tooFew ? 'warn' : 'info'}>
         店铺第一张图片请上传企业正门实景照片，画面力求规整美观，尺寸比例为 16:9，最多可上传 {COMPANY_IMAGES_MAX} 张，最少{' '}
