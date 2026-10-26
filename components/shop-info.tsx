@@ -18,6 +18,8 @@ import {
 
 type ShopStatus = 'open' | 'pending' | 'closed'
 
+type OrgLevel = 'self' | 'sub'
+
 type Shop = {
   id: string
   name: string
@@ -25,6 +27,8 @@ type Shop = {
   openedAt: string | null
   contact: string
   phone: string
+  org: string
+  orgLevel: OrgLevel
   categories: string[]
   region: Region
   detailAddress: string
@@ -50,22 +54,26 @@ const statusMeta: Record<ShopStatus, { label: string; className: string }> = {
   closed: { label: '已关闭', className: 'bg-gray-100 text-gray-600 ring-gray-200' },
 }
 
+const CURRENT_ORG = '演示商户（上海）有限公司'
+
 const shops: Shop[] = [
   {
     id: 'SP20240301001',
-    name: '沪上办公家具租售旗舰店',
+    name: '沪上循环物资租售旗舰店',
     status: 'open',
     openedAt: '2024-03-01 10:20',
     contact: '王敏',
     phone: '138 0011 2233',
-    categories: ['办公桌椅', '文件柜', '会议设备'],
+    org: CURRENT_ORG,
+    orgLevel: 'self',
+    categories: ['模板类', '支护类', '脚手架类'],
     region: { province: '上海市', city: '上海市', district: '浦东新区' },
     detailAddress: '张江路 100 号 3 号楼',
-    intro: '专注办公桌椅、文件柜等办公家具的租赁与销售，支持整体方案配置。',
+    intro: '建筑模板、支护、脚手架等循环物资的租赁与销售，支持整体方案配置。',
     businessHours: '周一至周六 09:00 - 18:00',
     hasLogo: true,
     companyIntro:
-      '成立于 2012 年，专注办公空间整体解决方案，自有 8,000 ㎡ 仓储展厅，服务企业客户 2,000 余家，提供配送、安装、回收一站式服务。',
+      '成立于 2012 年，专注建筑循环物资周转服务，自有 20,000 ㎡ 堆场，服务施工企业 800 余家，提供配送、安拆、回收一站式服务。',
     companyImages: 6,
     license: '91310115MA1K3XXXXX',
     createdAt: '2024-02-26 15:02',
@@ -73,18 +81,20 @@ const shops: Shop[] = [
   },
   {
     id: 'SP20240415002',
-    name: '工程机械租赁中心（松江）',
+    name: '脚手架与支护租赁中心（松江）',
     status: 'open',
     openedAt: '2024-04-15 14:05',
     contact: '李强',
     phone: '139 2233 4455',
-    categories: ['挖掘机', '装载机', '高空作业平台', '发电机组'],
+    org: CURRENT_ORG,
+    orgLevel: 'self',
+    categories: ['脚手架类', '支护类', '拼装类', '型材类'],
     region: { province: '上海市', city: '上海市', district: '松江区' },
     detailAddress: '沪松公路 2000 号',
-    intro: '挖掘机、装载机、高空作业平台等工程机械短租与长租。',
+    intro: '盘扣脚手架、钢支撑、拼装式围挡等短租与长租。',
     businessHours: '全年无休 08:00 - 20:00',
     hasLogo: true,
-    companyIntro: '华东地区工程机械租赁服务商，设备保有量 600 余台，提供操作手派遣与现场维保。',
+    companyIntro: '华东地区循环物资租赁服务商，物资保有量 3 万吨，提供安拆班组与现场巡检。',
     companyImages: 12,
     license: '91310117MA1J2XXXXX',
     createdAt: '2024-04-10 11:30',
@@ -92,18 +102,20 @@ const shops: Shop[] = [
   },
   {
     id: 'SP20240620003',
-    name: 'IT 设备租售服务店',
+    name: '电线电缆周转物资店',
     status: 'pending',
     openedAt: null,
     contact: '赵雪',
     phone: '137 6655 8899',
-    categories: ['笔记本电脑', '服务器', '网络设备'],
+    org: CURRENT_ORG,
+    orgLevel: 'self',
+    categories: ['电线电缆', '其他材料'],
     region: { province: '上海市', city: '上海市', district: '徐汇区' },
     detailAddress: '漕河泾开发区 88 号',
-    intro: '笔记本、服务器、网络设备租赁与二手销售，提供上门部署。',
+    intro: '临电电缆、配电箱等周转物资租赁与二手销售。',
     businessHours: '周一至周五 09:30 - 18:30',
     hasLogo: false,
-    companyIntro: 'IT 设备全生命周期服务商，提供租赁、运维与数据销毁服务。',
+    companyIntro: '临时用电物资全生命周期服务商，提供租赁、检测与回收。',
     companyImages: 1,
     license: '91310104MA1H5XXXXX',
     createdAt: '2024-06-20 09:12',
@@ -111,58 +123,64 @@ const shops: Shop[] = [
   },
   {
     id: 'SP20230812004',
-    name: '会展物料租赁店',
-    status: 'closed',
+    name: '轨道型材租赁店（苏州分公司）',
+    status: 'open',
     openedAt: '2023-08-12 09:00',
     contact: '陈浩',
     phone: '136 1122 3344',
-    categories: ['展架 / 桁架', '灯光音响', 'LED 屏'],
-    region: { province: '上海市', city: '上海市', district: '青浦区' },
-    detailAddress: '崧泽大道 333 号',
-    intro: '展架、桁架、灯光音响等会展物料租赁。',
+    org: '演示商户（苏州）分公司',
+    orgLevel: 'sub',
+    categories: ['轨道类', '型材类', '拼装类'],
+    region: { province: '江苏省', city: '苏州市', district: '工业园区' },
+    detailAddress: '星湖街 328 号',
+    intro: '施工轨道、钢型材等循环物资租赁。',
     businessHours: '周一至周日 08:30 - 21:00',
     hasLogo: true,
-    companyIntro: '承接展会搭建与物料租赁，服务过多届行业大型展会。',
+    companyIntro: '苏州区域循环物资服务网点，覆盖苏锡常施工项目。',
     companyImages: 4,
-    license: '91310118MA1G8XXXXX',
+    license: '91320594MA1G8XXXXX',
     createdAt: '2023-08-05 10:00',
     updatedAt: '2024-07-30 18:20',
   },
   {
     id: 'SP20241008005',
-    name: '新能源车辆租售店（嘉定）',
+    name: '房屋建筑类物资租售店（杭州分公司）',
     status: 'pending',
     openedAt: null,
     contact: '周丽',
     phone: '135 9988 7766',
-    categories: ['新能源乘用车', '物流车', '充电设施'],
-    region: { province: '上海市', city: '上海市', district: '嘉定区' },
-    detailAddress: '安亭镇墨玉路 28 号',
-    intro: '新能源乘用车、物流车租售，提供充电桩配套服务。',
+    org: '演示商户（杭州）分公司',
+    orgLevel: 'sub',
+    categories: ['房屋建筑类', '模板类', '其他材料'],
+    region: { province: '浙江省', city: '杭州市', district: '滨江区' },
+    detailAddress: '江南大道 588 号',
+    intro: '活动板房、集装箱房及配套建筑物资租售。',
     businessHours: '周一至周日 09:00 - 19:00',
     hasLogo: false,
-    companyIntro: '新能源车辆租售与充电基础设施运营商。',
+    companyIntro: '杭州区域临建设施与循环物资服务网点。',
     companyImages: 0,
-    license: '91310114MA1F6XXXXX',
+    license: '91330108MA1F6XXXXX',
     createdAt: '2024-10-08 13:45',
     updatedAt: '2024-10-08 13:45',
   },
   {
     id: 'SP20230105006',
-    name: '医疗康复器械租赁店',
+    name: '模板支护租赁店（嘉兴项目部）',
     status: 'closed',
     openedAt: '2023-01-05 10:30',
     contact: '孙伟',
     phone: '131 4455 6677',
-    categories: ['轮椅', '护理床', '制氧机', '康复训练器材'],
-    region: { province: '上海市', city: '上海市', district: '闵行区' },
-    detailAddress: '七莘路 1500 号',
-    intro: '轮椅、护理床、制氧机等康复器械家庭租赁。',
+    org: '演示商户（嘉兴）项目部',
+    orgLevel: 'sub',
+    categories: ['模板类', '支护类'],
+    region: { province: '浙江省', city: '嘉兴市', district: '南湖区' },
+    detailAddress: '中环南路 1500 号',
+    intro: '项目周边模板、支护物资就近周转租赁。',
     businessHours: '周一至周六 09:00 - 17:30',
     hasLogo: true,
-    companyIntro: '家用康复器械租赁服务商，提供上门安装与消毒服务。',
+    companyIntro: '项目部级循环物资周转点，项目竣工后已关闭。',
     companyImages: 3,
-    license: '91310112MA1E4XXXXX',
+    license: '91330402MA1E4XXXXX',
     createdAt: '2022-12-28 09:00',
     updatedAt: '2024-05-16 14:08',
   },
@@ -250,9 +268,9 @@ function RowActions({
   }
 }
 
-type Filters = { id: string; name: string; status: ShopStatus | ''; category: string }
+type Filters = { id: string; name: string; status: ShopStatus | ''; category: string; includeSub: boolean }
 
-const emptyFilters: Filters = { id: '', name: '', status: '', category: '' }
+const emptyFilters: Filters = { id: '', name: '', status: '', category: '', includeSub: false }
 
 const statusOptions: { label: string; value: ShopStatus }[] = [
   { label: '运营中', value: 'open' },
@@ -350,6 +368,16 @@ function FilterPanel({
         <Button variant="outline" onClick={onReset}>
           重置
         </Button>
+        <label className="ml-4 flex cursor-pointer select-none items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={draft.includeSub}
+            onChange={(e) => onDraftChange({ ...draft, includeSub: e.target.checked })}
+            className="size-4 rounded border-border accent-[#1890ff]"
+          />
+          本级及下级
+          <span className="text-xs text-muted-foreground">（勾选后同时查看下级机构的店铺）</span>
+        </label>
         <Button variant="outline" className="ml-auto" onClick={onCreate}>
           <Plus data-icon="inline-start" />
           新增店铺
@@ -360,6 +388,7 @@ function FilterPanel({
 }
 
 function matches(shop: Shop, f: Filters) {
+  if (!f.includeSub && shop.orgLevel !== 'self') return false
   if (f.id && !shop.id.toLowerCase().includes(f.id.trim().toLowerCase())) return false
   if (f.name && !shop.name.includes(f.name.trim())) return false
   if (f.status && shop.status !== f.status) return false
@@ -403,7 +432,23 @@ function ConfirmCloseDialog({ shop, onCancel, onConfirm }: { shop: Shop; onCance
   )
 }
 
-const columns = '125px minmax(160px,1.4fr) 80px 135px 60px 115px minmax(170px,1fr)'
+const columns = '125px minmax(160px,1.4fr) minmax(150px,1fr) 80px 135px 60px 115px minmax(170px,1fr)'
+
+function OrgCell({ shop }: { shop: Shop }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="truncate text-xs">{shop.org}</span>
+      <span
+        className={cn(
+          'shrink-0 rounded px-1 text-[10px] leading-4 ring-1 ring-inset',
+          shop.orgLevel === 'self' ? 'bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/30' : 'bg-muted text-muted-foreground ring-border',
+        )}
+      >
+        {shop.orgLevel === 'self' ? '本级' : '下级'}
+      </span>
+    </span>
+  )
+}
 
 function ShopList({
   shops,
@@ -450,15 +495,19 @@ function ShopList({
           <span className="text-emerald-700">运营中 {counts.open}</span>
           <span className="text-amber-700">未开通 {counts.pending}</span>
           <span className="text-gray-600">已关闭 {counts.closed}</span>
+          <span className="ml-auto text-muted-foreground">
+            查看范围：{applied.includeSub ? '本级及下级' : '仅本级'}
+          </span>
         </div>
         <div className="overflow-x-auto">
-          <div className="min-w-[880px]">
+          <div className="min-w-[1040px]">
             <div
               className="grid items-center gap-3 border-b border-border bg-muted/50 px-4 py-2 text-xs font-medium text-muted-foreground"
               style={{ gridTemplateColumns: columns }}
             >
               <span>店铺编号</span>
               <span>店铺名称</span>
+              <span>所属机构</span>
               <span>状态</span>
               <span>开通时间</span>
               <span>联系人</span>
@@ -482,6 +531,7 @@ function ShopList({
                 >
                   {shop.name}
                 </button>
+                <OrgCell shop={shop} />
                 <StatusBadge status={shop.status} />
                 <span className="text-xs tabular-nums text-muted-foreground">{shop.openedAt ?? '—'}</span>
                 <span>{shop.contact}</span>
@@ -828,6 +878,7 @@ function ShopDetail({
           <Section title="基本信息">
             <dl className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <DescItem label="店铺名称" value={shop.name} />
+              <DescItem label="所属机构" value={`${shop.org}（${shop.orgLevel === 'self' ? '本级' : '下级'}）`} />
               <DescItem label="营业时间" value={shop.businessHours} />
               <DescItem
                 label="店铺 Logo"
