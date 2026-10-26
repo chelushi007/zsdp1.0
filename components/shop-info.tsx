@@ -1,9 +1,18 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Plus, Search, Store } from 'lucide-react'
+import { ArrowLeft, Building2, Plus, Search, Store } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import {
+  CategoryPicker,
+  CompanyImagesUploader,
+  COMPANY_IMAGES_MIN,
+  LogoUploader,
+  MAX_CATEGORIES,
+  RegionCascader,
+  type Region,
+} from '@/components/shop-form-fields'
 
 type ShopStatus = 'open' | 'pending' | 'closed'
 
@@ -14,13 +23,24 @@ type Shop = {
   openedAt: string | null
   contact: string
   phone: string
-  category: string
-  address: string
+  categories: string[]
+  region: Region
+  detailAddress: string
   intro: string
   businessHours: string
+  hasLogo: boolean
+  companyName: string
+  companyIntro: string
+  companyImages: number
   license: string
   createdAt: string
   updatedAt: string
+}
+
+function fullAddress(shop: Pick<Shop, 'region' | 'detailAddress'>) {
+  const { province, city, district } = shop.region
+  const parts = province === city ? [province, district] : [province, city, district]
+  return [...parts, shop.detailAddress].filter(Boolean).join(' ')
 }
 
 const statusMeta: Record<ShopStatus, { label: string; className: string }> = {
@@ -37,10 +57,16 @@ const shops: Shop[] = [
     openedAt: '2024-03-01 10:20',
     contact: '王敏',
     phone: '138 0011 2233',
-    category: '办公家具 / 设备',
-    address: '上海市浦东新区张江路 100 号',
+    categories: ['办公桌椅', '文件柜', '会议设备'],
+    region: { province: '上海市', city: '上海市', district: '浦东新区' },
+    detailAddress: '张江路 100 号 3 号楼',
     intro: '专注办公桌椅、文件柜等办公家具的租赁与销售，支持整体方案配置。',
     businessHours: '周一至周六 09:00 - 18:00',
+    hasLogo: true,
+    companyName: '演示商户（上海）有限公司',
+    companyIntro:
+      '成立于 2012 年，专注办公空间整体解决方案，自有 8,000 ㎡ 仓储展厅，服务企业客户 2,000 余家，提供配送、安装、回收一站式服务。',
+    companyImages: 6,
     license: '91310115MA1K3XXXXX',
     createdAt: '2024-02-26 15:02',
     updatedAt: '2024-09-18 09:41',
@@ -52,10 +78,15 @@ const shops: Shop[] = [
     openedAt: '2024-04-15 14:05',
     contact: '李强',
     phone: '139 2233 4455',
-    category: '工程机械',
-    address: '上海市松江区沪松公路 2000 号',
+    categories: ['挖掘机', '装载机', '高空作业平台', '发电机组'],
+    region: { province: '上海市', city: '上海市', district: '松江区' },
+    detailAddress: '沪松公路 2000 号',
     intro: '挖掘机、装载机、高空作业平台等工程机械短租与长租。',
     businessHours: '全年无休 08:00 - 20:00',
+    hasLogo: true,
+    companyName: '演示工程机械租赁（上海）有限公司',
+    companyIntro: '华东地区工程机械租赁服务商，设备保有量 600 余台，提供操作手派遣与现场维保。',
+    companyImages: 12,
     license: '91310117MA1J2XXXXX',
     createdAt: '2024-04-10 11:30',
     updatedAt: '2024-10-02 16:12',
@@ -67,10 +98,15 @@ const shops: Shop[] = [
     openedAt: null,
     contact: '赵雪',
     phone: '137 6655 8899',
-    category: '电子 / IT 设备',
-    address: '上海市徐汇区漕河泾开发区 88 号',
+    categories: ['笔记本电脑', '服务器', '网络设备'],
+    region: { province: '上海市', city: '上海市', district: '徐汇区' },
+    detailAddress: '漕河泾开发区 88 号',
     intro: '笔记本、服务器、网络设备租赁与二手销售，提供上门部署。',
     businessHours: '周一至周五 09:30 - 18:30',
+    hasLogo: false,
+    companyName: '演示信息科技（上海）有限公司',
+    companyIntro: 'IT 设备全生命周期服务商，提供租赁、运维与数据销毁服务。',
+    companyImages: 1,
     license: '91310104MA1H5XXXXX',
     createdAt: '2024-06-20 09:12',
     updatedAt: '2024-06-20 09:12',
@@ -82,10 +118,15 @@ const shops: Shop[] = [
     openedAt: '2023-08-12 09:00',
     contact: '陈浩',
     phone: '136 1122 3344',
-    category: '会展物料',
-    address: '上海市青浦区崧泽大道 333 号',
+    categories: ['展架 / 桁架', '灯光音响', 'LED 屏'],
+    region: { province: '上海市', city: '上海市', district: '青浦区' },
+    detailAddress: '崧泽大道 333 号',
     intro: '展架、桁架、灯光音响等会展物料租赁。',
     businessHours: '周一至周日 08:30 - 21:00',
+    hasLogo: true,
+    companyName: '演示会展服务（上海）有限公司',
+    companyIntro: '承接展会搭建与物料租赁，服务过多届行业大型展会。',
+    companyImages: 4,
     license: '91310118MA1G8XXXXX',
     createdAt: '2023-08-05 10:00',
     updatedAt: '2024-07-30 18:20',
@@ -97,10 +138,15 @@ const shops: Shop[] = [
     openedAt: null,
     contact: '周丽',
     phone: '135 9988 7766',
-    category: '车辆',
-    address: '上海市嘉定区安亭镇墨玉路 28 号',
+    categories: ['新能源乘用车', '物流车', '充电设施'],
+    region: { province: '上海市', city: '上海市', district: '嘉定区' },
+    detailAddress: '安亭镇墨玉路 28 号',
     intro: '新能源乘用车、物流车租售，提供充电桩配套服务。',
     businessHours: '周一至周日 09:00 - 19:00',
+    hasLogo: false,
+    companyName: '演示新能源汽车服务（上海）有限公司',
+    companyIntro: '新能源车辆租售与充电基础设施运营商。',
+    companyImages: 0,
     license: '91310114MA1F6XXXXX',
     createdAt: '2024-10-08 13:45',
     updatedAt: '2024-10-08 13:45',
@@ -112,10 +158,15 @@ const shops: Shop[] = [
     openedAt: '2023-01-05 10:30',
     contact: '孙伟',
     phone: '131 4455 6677',
-    category: '医疗器械',
-    address: '上海市闵行区七莘路 1500 号',
+    categories: ['轮椅', '护理床', '制氧机', '康复训练器材'],
+    region: { province: '上海市', city: '上海市', district: '闵行区' },
+    detailAddress: '七莘路 1500 号',
     intro: '轮椅、护理床、制氧机等康复器械家庭租赁。',
     businessHours: '周一至周六 09:00 - 17:30',
+    hasLogo: true,
+    companyName: '演示医疗器械（上海）有限公司',
+    companyIntro: '家用康复器械租赁服务商，提供上门安装与消毒服务。',
+    companyImages: 3,
     license: '91310112MA1E4XXXXX',
     createdAt: '2022-12-28 09:00',
     updatedAt: '2024-05-16 14:08',
@@ -204,6 +255,8 @@ const filterFields: [string, string][] = [
   ['店铺编号', '请输入'],
   ['店铺名称', '请输入'],
   ['店铺状态', '全部'],
+  ['主营类目', '全部类目'],
+  ['所在地区', '省 / 市 / 区（县）'],
   ['联系人', '请输入'],
   ['开通时间', '开始日期 - 结束日期'],
 ]
@@ -320,20 +373,25 @@ function Field({
   required,
   children,
   span,
+  hint,
 }: {
   label: string
   required?: boolean
   children: React.ReactNode
   span?: boolean
+  hint?: string
 }) {
   return (
-    <label className={cn('flex flex-col gap-1.5 text-sm', span && 'md:col-span-2')}>
-      <span className="text-muted-foreground">
-        {required && <span className="mr-0.5 text-red-500">*</span>}
-        {label}
+    <div className={cn('flex flex-col gap-1.5 text-sm', span && 'md:col-span-2')}>
+      <span className="flex items-baseline gap-2 text-muted-foreground">
+        <span>
+          {required && <span className="mr-0.5 text-red-500">*</span>}
+          {label}
+        </span>
+        {hint && <span className="text-xs text-muted-foreground/80">{hint}</span>}
       </span>
       {children}
-    </label>
+    </div>
   )
 }
 
@@ -377,6 +435,16 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
   const isEdit = Boolean(shop)
+  const [categories, setCategories] = useState<string[]>(shop?.categories ?? [])
+  const [region, setRegion] = useState<Region>(shop?.region ?? { province: '', city: '', district: '' })
+  const [detailAddress, setDetailAddress] = useState(shop?.detailAddress ?? '')
+  const [hasLogo, setHasLogo] = useState(shop?.hasLogo ?? false)
+  const [companyImages, setCompanyImages] = useState(shop?.companyImages ?? 0)
+  const [agreed, setAgreed] = useState(isEdit)
+
+  const imagesOk = companyImages >= COMPANY_IMAGES_MIN
+  const canPublish = agreed && imagesOk && categories.length > 0
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -392,22 +460,45 @@ function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
           <Field label="店铺名称" required>
             <Input placeholder="请输入店铺名称，不超过 30 个字" value={shop?.name} />
           </Field>
-          <Field label="主营类目" required>
-            <Input placeholder="请选择" value={shop?.category} />
-          </Field>
-          <Field label="店铺地址" required span>
-            <Input placeholder="请选择省市区并填写详细地址" value={shop?.address} />
-          </Field>
           <Field label="营业时间">
             <Input placeholder="例如：周一至周五 09:00 - 18:00" value={shop?.businessHours} />
           </Field>
-          <Field label="店铺 Logo">
-            <span className="flex h-9 items-center rounded border border-dashed border-border px-3 text-muted-foreground">
-              点击上传，建议 200×200 PNG
-            </span>
+          <Field label="主营类目" required span hint={`最多选择 ${MAX_CATEGORIES} 个类目，首个类目将作为店铺主类目展示`}>
+            <CategoryPicker value={categories} onChange={setCategories} />
+          </Field>
+          <Field label="店铺地址" required span>
+            <RegionCascader
+              value={region}
+              onChange={setRegion}
+              detail={detailAddress}
+              onDetailChange={setDetailAddress}
+            />
+          </Field>
+          <Field label="店铺 Logo" required span>
+            <LogoUploader hasLogo={hasLogo} onToggle={() => setHasLogo((v) => !v)} />
           </Field>
           <Field label="店铺简介" span>
             <Textarea placeholder="介绍店铺的经营范围、服务特色等，不超过 200 字" value={shop?.intro} />
+          </Field>
+        </div>
+      </Section>
+
+      <Section title="企业信息介绍">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="企业名称" required>
+            <Input placeholder="请输入企业全称，需与营业执照一致" value={shop?.companyName} />
+          </Field>
+          <Field label="成立时间">
+            <Input placeholder="请选择日期" value={isEdit ? '2012-06-18' : undefined} />
+          </Field>
+          <Field label="企业简介" required span>
+            <Textarea
+              placeholder="介绍企业背景、规模、服务能力与优势等，建议 100 - 500 字"
+              value={shop?.companyIntro}
+            />
+          </Field>
+          <Field label="企业图片" required span>
+            <CompanyImagesUploader count={companyImages} onChange={setCompanyImages} />
           </Field>
         </div>
       </Section>
@@ -436,15 +527,42 @@ function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
         </div>
       </Section>
 
-      <div className="sticky bottom-0 flex items-center gap-2 rounded-md border border-border bg-card px-5 py-3">
-        <Button className="bg-[#1890ff] hover:bg-[#1890ff]/90">{isEdit ? '保存' : '保存并开通'}</Button>
-        {!isEdit && <Button variant="outline">仅保存（未开通）</Button>}
-        <Button variant="ghost" onClick={onBack}>
-          取消
-        </Button>
-        <p className="ml-auto text-xs text-muted-foreground">
-          {isEdit ? '修改后立即生效' : '保存后店铺状态为「未开通」，可在列表中开通'}
-        </p>
+      <div className="sticky bottom-0 flex flex-col gap-3 rounded-md border border-border bg-card px-5 py-3">
+        <label className="flex cursor-pointer items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={agreed}
+            onChange={(e) => setAgreed(e.target.checked)}
+            className="mt-0.5 size-4 accent-[#1890ff]"
+          />
+          <span>
+            请阅读并同意
+            <button type="button" className="mx-0.5 text-[#1890ff] hover:underline">
+              《租售店铺开店须知》
+            </button>
+            后发布
+          </span>
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button className="bg-[#1890ff] hover:bg-[#1890ff]/90" disabled={!canPublish}>
+            {isEdit ? '保存并发布' : '发布并开通'}
+          </Button>
+          <Button variant="outline">{isEdit ? '仅保存' : '仅保存（未开通）'}</Button>
+          <Button variant="ghost" onClick={onBack}>
+            取消
+          </Button>
+          <p className="ml-auto text-xs text-muted-foreground">
+            {!agreed
+              ? '勾选同意开店须知后方可发布'
+              : !imagesOk
+                ? `企业图片至少上传 ${COMPANY_IMAGES_MIN} 张后方可发布`
+                : categories.length === 0
+                  ? '请选择主营类目后发布'
+                  : isEdit
+                    ? '发布后修改立即生效'
+                    : '仅保存时店铺状态为「未开通」，可在列表中开通'}
+          </p>
+        </div>
       </div>
     </div>
   )
@@ -526,8 +644,14 @@ function ShopDetail({ shop, onBack, onEdit }: { shop: Shop; onBack: () => void; 
       </Button>
 
       <div className="flex flex-col gap-4 rounded-md border border-border bg-card p-5 md:flex-row md:items-center">
-        <div className="flex size-16 shrink-0 items-center justify-center rounded-md bg-[#1890ff]/10 text-[#1890ff]">
-          <Store className="size-8" aria-hidden />
+        <div
+          className={cn(
+            'flex size-16 shrink-0 items-center justify-center rounded-md',
+            shop.hasLogo ? 'bg-[#1890ff]/10 text-[#1890ff]' : 'border border-dashed border-border text-muted-foreground',
+          )}
+          aria-label={shop.hasLogo ? '店铺 Logo' : '未上传 Logo'}
+        >
+          {shop.hasLogo ? <span className="text-2xl font-bold">{shop.name.slice(0, 1)}</span> : <Store className="size-7" aria-hidden />}
         </div>
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
           <div className="flex flex-wrap items-center gap-2">
@@ -535,7 +659,12 @@ function ShopDetail({ shop, onBack, onEdit }: { shop: Shop; onBack: () => void; 
             <StatusBadge status={shop.status} />
           </div>
           <p className="text-xs text-muted-foreground">
-            店铺编号 <span className="font-mono">{shop.id}</span> · {shop.category} · 开通时间 {shop.openedAt ?? '—'}
+            店铺编号 <span className="font-mono">{shop.id}</span> · 主类目 {shop.categories[0]} · 开通时间{' '}
+            {shop.openedAt ?? '—'}
+          </p>
+          <p className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Building2 className="size-3.5" aria-hidden />
+            {shop.companyName}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -557,10 +686,89 @@ function ShopDetail({ shop, onBack, onEdit }: { shop: Shop; onBack: () => void; 
           <Section title="基本信息">
             <dl className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <DescItem label="店铺名称" value={shop.name} />
-              <DescItem label="主营类目" value={shop.category} />
               <DescItem label="营业时间" value={shop.businessHours} />
-              <DescItem label="店铺地址" value={shop.address} span />
+              <DescItem
+                label="店铺 Logo"
+                value={shop.hasLogo ? <span className="text-emerald-700">已上传（1:1）</span> : <span className="text-amber-600">未上传</span>}
+              />
+              <DescItem
+                label={`主营类目（${shop.categories.length}/${MAX_CATEGORIES}）`}
+                span
+                value={
+                  <span className="flex flex-wrap gap-1.5">
+                    {shop.categories.map((c, i) => (
+                      <span
+                        key={c}
+                        className={cn(
+                          'rounded px-2 py-0.5 text-xs',
+                          i === 0 ? 'bg-[#1890ff] text-white' : 'bg-[#1890ff]/10 text-[#1890ff]',
+                        )}
+                      >
+                        {i === 0 && '主 · '}
+                        {c}
+                      </span>
+                    ))}
+                  </span>
+                }
+              />
+              <DescItem
+                label="店铺地址"
+                span
+                value={
+                  <span className="flex flex-col gap-0.5">
+                    <span>{fullAddress(shop)}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {shop.region.province} / {shop.region.city} / {shop.region.district}
+                    </span>
+                  </span>
+                }
+              />
               <DescItem label="店铺简介" value={shop.intro} span />
+            </dl>
+          </Section>
+          <Section title="企业信息介绍">
+            <dl className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <DescItem label="企业名称" value={shop.companyName} />
+              <DescItem label="成立时间" value="2012-06-18" />
+              <DescItem
+                label={`企业图片（${shop.companyImages} 张）`}
+                value={
+                  shop.companyImages < COMPANY_IMAGES_MIN ? (
+                    <span className="text-amber-600">不足 {COMPANY_IMAGES_MIN} 张，发布前需补充</span>
+                  ) : (
+                    <span className="text-emerald-700">已满足要求</span>
+                  )
+                }
+              />
+              <DescItem label="企业简介" value={shop.companyIntro} span />
+              {shop.companyImages > 0 && (
+                <DescItem
+                  label="图片预览"
+                  span
+                  value={
+                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                      {Array.from({ length: Math.min(shop.companyImages, 6) }).map((_, i) => (
+                        <span
+                          key={i}
+                          className={cn(
+                            'relative flex aspect-video items-center justify-center rounded border text-[11px]',
+                            i === 0
+                              ? 'border-[#1890ff] bg-[#1890ff]/10 text-[#1890ff]'
+                              : 'border-border bg-muted text-muted-foreground',
+                          )}
+                        >
+                          {i === 0 ? '正门实景' : `图片 ${i + 1}`}
+                          {i === 5 && shop.companyImages > 6 && (
+                            <span className="absolute inset-0 flex items-center justify-center rounded bg-black/55 text-xs text-white">
+                              +{shop.companyImages - 6}
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  }
+                />
+              )}
             </dl>
           </Section>
           <Section title="联系人信息">
