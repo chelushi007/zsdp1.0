@@ -5,6 +5,7 @@ import { Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ShopCreate, ShopInfo } from '@/components/shop-info'
 import { GoodsList } from '@/components/goods-list'
+import { GoodsPublish } from '@/components/goods-publish'
 import type { MenuNode } from '@/lib/menu'
 
 type Props = {
@@ -192,6 +193,12 @@ export function PageCanvas({ path, onNavigate }: Props) {
         <ShopCreate key={node.id} onDone={() => onNavigate('seller-shop-info')} />
       ) : node.id === 'seller-goods-list' ? (
         <GoodsList key={node.id} onCreate={() => onNavigate('seller-goods-publish')} />
+      ) : node.id === 'seller-goods-publish' ? (
+        <GoodsPublish
+          key={node.id}
+          onBack={() => onNavigate('seller-goods-list')}
+          onSubmitted={() => onNavigate('seller-goods-list')}
+        />
       ) : isHub ? (
         <HubLayout node={node} onNavigate={onNavigate} />
       ) : node.id === 'ops-dashboard' ? (
