@@ -1,10 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Check, FileText, ImagePlus, Info, Plus, ShoppingCart, Timer, Trash2, X } from 'lucide-react'
+import { ArrowLeft, Ban, Check, FileText, ImagePlus, Info, Plus, ShoppingCart, Timer, Trash2, Truck, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { Select, Tip, categoryTree } from '@/components/shop-form-fields'
+import { RegionCascader, Select, Tip, categoryTree, regionTree, type Region } from '@/components/shop-form-fields'
 
 /* ---------- 基础数据 ---------- */
 
@@ -12,9 +12,30 @@ const UNITS = ['张', '件', '套', '根', '米', '吨', '平方米', '块']
 const CONDITIONS = ['全新', '九成新', '八成新', '七成新及以下']
 const SHOPS = ['华东建设工程有限公司周转材料店', '苏州分公司模板租赁店', '杭州分公司脚手架专营店']
 const RENT_PERIODS = ['天', '月'] as const
+const TAX_RATES = ['不含税', '1%', '3%', '6%', '9%', '13%']
 const GOODS_IMAGES_MAX = 9
+const EMPTY_REGION: Region = { province: '', city: '', district: '' }
 
 type RentPeriod = (typeof RENT_PERIODS)[number]
+
+/** 区域禁售模板：选中后带出禁售省份，可继续手动增减 */
+const BAN_TEMPLATES: { name: string; desc: string; provinces: string[] }[] = [
+  { name: '不设禁售', desc: '全国范围均可下单', provinces: [] },
+  { name: '仅限华东', desc: '仅上海、江苏、浙江可下单，其余省份禁售', provinces: ['北京市', '广东省'] },
+  { name: '仅限本市', desc: '仅商品所在省市可下单', provinces: ['北京市', '浙江省', '江苏省', '广东省'] },
+]
+
+type FreightMode = '包邮' | '固定运费' | '按距离计费' | '到付'
+type FreightRule = { mode: FreightMode; base: string; perKm: string; freeOver: string }
+
+/** 运费模板：选中后带出计费方式与金额 */
+const FREIGHT_TEMPLATES: { name: string; desc: string; rule: FreightRule }[] = [
+  { name: '周转材料-包邮', desc: '全国包邮，由商家承担运费', rule: { mode: '包邮', base: '', perKm: '', freeOver: '' } },
+  { name: '周转材料-固定运费', desc: '每单固定 300 元，满 20000 元免运费', rule: { mode: '固定运费', base: '300', perKm: '', freeOver: '20000' } },
+  { name: '大件-按距离计费', desc: '起步 500 元，超出 50km 每公里 8 元', rule: { mode: '按距离计费', base: '500', perKm: '8', freeOver: '' } },
+  { name: '运费到付', desc: '由买方承担运费，物流到付', rule: { mode: '到付', base: '', perKm: '', freeOver: '' } },
+]
+const FREIGHT_MODES: FreightMode[] = ['包邮', '固定运费', '按距离计费', '到付']
 
 /* ---------- 通用表单控件 ---------- */
 
@@ -243,6 +264,54 @@ function Attachments({ files, onChange }: { files: Attachment[]; onChange: (f: A
   )
 }
 
+/* ---------- 模板选择 ---------- */
+
+function TemplatePicker({
+  label,
+  templates,
+  value,
+  onChange,
+}: {
+  label: string
+  templates: { name: string; desc: string }[]
+  value: string
+  onChange: (name: string) => void
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="grid gap-2 sm:grid-cols-2">
+      {templates.map((t) => {
+        const active = value === t.name
+        return (
+          <button
+            key={t.name}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(t.name)}
+            className={cn(
+              'flex items-start gap-2 rounded border px-3 py-2 text-left transition-colors',
+              active ? 'border-[#1890ff] bg-[#1890ff]/5' : 'border-border bg-background hover:border-[#1890ff]/50',
+            )}
+          >
+            <span
+              className={cn(
+                'mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border',
+                active ? 'border-[#1890ff] bg-[#1890ff] text-white' : 'border-border',
+              )}
+            >
+              {active && <Check className="size-3" aria-hidden />}
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="text-sm">{t.name}</span>
+              <span className="text-xs text-muted-foreground">{t.desc}</span>
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 /* ---------- 租售方式 ---------- */
 
 function BizCard({
@@ -290,6 +359,8 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const [condition, setCondition] = useState('')
   const [shop, setShop] = useState(SHOPS[0])
   const [images, setImages] = useState(0)
+  const [region, setRegion] = useState<Region>(EMPTY_REGION)
+  const [address, setAddress] = useState('')
 
   const [stock, setStock] = useState('')
   const [warnStock, setWarnStock] = useState('')
@@ -298,7 +369,7 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const [saleOn, setSaleOn] = useState(true)
   const [salePrice, setSalePrice] = useState('')
   const [minOrder, setMinOrder] = useState('')
-  const [taxIncluded, setTaxIncluded] = useState(true)
+  const [taxRate, setTaxRate] = useState('13%')
   const [negotiable, setNegotiable] = useState(false)
 
   const [rentOn, setRentOn] = useState(false)
@@ -307,30 +378,65 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const [deposit, setDeposit] = useState('')
   const [minDays, setMinDays] = useState('')
   const [maxDays, setMaxDays] = useState('')
+  const [rentTaxRate, setRentTaxRate] = useState('13%')
+  const [rentNegotiable, setRentNegotiable] = useState(false)
   const [lossRule, setLossRule] = useState('')
+
+  const [banTemplate, setBanTemplate] = useState(BAN_TEMPLATES[0].name)
+  const [bannedProvinces, setBannedProvinces] = useState<string[]>([])
+
+  const [freightTemplate, setFreightTemplate] = useState(FREIGHT_TEMPLATES[0].name)
+  const [freight, setFreight] = useState<FreightRule>(FREIGHT_TEMPLATES[0].rule)
 
   const [description, setDescription] = useState('')
   const [files, setFiles] = useState<Attachment[]>([])
   const [agreed, setAgreed] = useState(false)
 
+  const applyBanTemplate = (name: string) => {
+    setBanTemplate(name)
+    setBannedProvinces(BAN_TEMPLATES.find((t) => t.name === name)?.provinces ?? [])
+  }
+  const toggleBannedProvince = (p: string) =>
+    setBannedProvinces((list) => (list.includes(p) ? list.filter((x) => x !== p) : [...list, p]))
+
+  const applyFreightTemplate = (name: string) => {
+    setFreightTemplate(name)
+    const t = FREIGHT_TEMPLATES.find((x) => x.name === name)
+    if (t) setFreight(t.rule)
+  }
+  const updateFreight = (patch: Partial<FreightRule>) => setFreight((f) => ({ ...f, ...patch }))
+
   const unitLabel = unit || '单位'
   const bizSelected = saleOn || rentOn
   const saleOk = !saleOn || Number(salePrice) > 0
   const rentOk = !rentOn || (Number(rentPrice) > 0 && Number(deposit) >= 0 && Number(minDays) > 0)
-  const basicOk = name.trim().length > 0 && subCategory && spec.trim().length > 0 && unit && images > 0 && Number(stock) > 0
-  const canSubmit = agreed && basicOk && bizSelected && saleOk && rentOk
+  const regionOk = Boolean(region.province && region.city && region.district) && address.trim().length > 0
+  const basicOk =
+    name.trim().length > 0 && subCategory && spec.trim().length > 0 && unit && images > 0 && Number(stock) > 0 && regionOk
+  const freightOk =
+    freight.mode === '包邮' ||
+    freight.mode === '到付' ||
+    (freight.mode === '固定运费' && Number(freight.base) >= 0 && freight.base !== '') ||
+    (freight.mode === '按距离计费' && Number(freight.base) >= 0 && freight.base !== '' && Number(freight.perKm) > 0)
+  const canSubmit = agreed && basicOk && bizSelected && saleOk && rentOk && freightOk
 
   const blocker = !basicOk
-    ? '请完善基本信息（名称、品类、规格、单位、主图、库存）'
+    ? !regionOk
+      ? '请选择商品所在地并填写具体地址'
+      : '请完善基本信息（名称、品类、规格、单位、主图、库存）'
     : !bizSelected
       ? '请至少启用一种租售方式'
       : !saleOk
         ? '请填写出售单价'
         : !rentOk
           ? '请填写租金单价、押金与最短租期'
-          : !agreed
-            ? '勾选同意商品发布规范后方可提交'
-            : '提交后进入平台审核，审核通过自动上架为「运营中」'
+          : !freightOk
+            ? '请完善运费设置'
+            : !agreed
+              ? '勾选同意商品发布规范后方可提交'
+              : '提交后进入平台审核，审核通过自动上架为「运营中」'
+
+  const regionLabel = [region.province, region.city, region.district].filter(Boolean).join(' / ')
 
   return (
     <div className="flex flex-col gap-4">
@@ -380,6 +486,9 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
               <Field label="成色">
                 <Select label="成色" placeholder="请选择成色" value={condition} options={CONDITIONS} onChange={setCondition} />
               </Field>
+              <Field label="商品所在地" required span hint="省 / 市 / 区县 + 具体地址，用于计算运费与买方筛选">
+                <RegionCascader value={region} onChange={setRegion} detail={address} onDetailChange={setAddress} />
+              </Field>
               <Field label="商品图片" required span>
                 <GoodsImages count={images} onChange={setImages} />
               </Field>
@@ -419,16 +528,15 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
                 <Field label="起订量">
                   <TextInput type="number" value={minOrder} onChange={setMinOrder} placeholder="不限" suffix={unitLabel} />
                 </Field>
-                <div className="flex items-center gap-6 text-sm md:col-span-2">
-                  <label className="flex items-center gap-2">
-                    <Switch checked={taxIncluded} onChange={setTaxIncluded} label="价格含税" />
-                    价格含税（13% 增值税）
-                  </label>
-                  <label className="flex items-center gap-2">
-                    <Switch checked={negotiable} onChange={setNegotiable} label="支持议价" />
+                <Field label="税率" required hint="选择「不含税」则价格为不含税报价">
+                  <Select label="出售税率" placeholder="请选择税率" value={taxRate} options={TAX_RATES} onChange={setTaxRate} />
+                </Field>
+                <Field label="议价">
+                  <label className="flex h-9 items-center gap-2 text-sm">
+                    <Switch checked={negotiable} onChange={setNegotiable} label="出售支持议价" />
                     支持议价
                   </label>
-                </div>
+                </Field>
               </BizCard>
 
               <BizCard
@@ -461,6 +569,15 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
                 <Field label="最长租期">
                   <TextInput type="number" value={maxDays} onChange={setMaxDays} placeholder="不限" suffix={rentPeriod} />
                 </Field>
+                <Field label="税率" required hint="选择「不含税」则租金为不含税报价">
+                  <Select label="出租税率" placeholder="请选择税率" value={rentTaxRate} options={TAX_RATES} onChange={setRentTaxRate} />
+                </Field>
+                <Field label="议价">
+                  <label className="flex h-9 items-center gap-2 text-sm">
+                    <Switch checked={rentNegotiable} onChange={setRentNegotiable} label="出租支持议价" />
+                    支持议价
+                  </label>
+                </Field>
                 <Field label="损耗赔付标准" span>
                   <TextArea
                     value={lossRule}
@@ -471,6 +588,114 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
               </BizCard>
 
               {!bizSelected && <Tip tone="warn">请至少启用一种租售方式，否则商品无法上架。</Tip>}
+            </div>
+          </Section>
+
+          <Section
+            title="区域禁售"
+            extra={
+              <button type="button" className="text-xs text-[#1890ff] hover:underline">
+                管理禁售模板
+              </button>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <Field label="选择模板" hint="选择后可在下方继续调整禁售省份">
+                <TemplatePicker label="区域禁售模板" templates={BAN_TEMPLATES} value={banTemplate} onChange={applyBanTemplate} />
+              </Field>
+              <Field label="禁售省份" hint={bannedProvinces.length ? `已选 ${bannedProvinces.length} 个省份` : '未设置禁售区域'}>
+                <div className="flex flex-wrap gap-2">
+                  {Object.keys(regionTree).map((p) => {
+                    const banned = bannedProvinces.includes(p)
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        aria-pressed={banned}
+                        onClick={() => toggleBannedProvince(p)}
+                        className={cn(
+                          'flex h-8 items-center gap-1 rounded border px-2.5 text-xs transition-colors',
+                          banned
+                            ? 'border-red-200 bg-red-50 text-red-600'
+                            : 'border-border bg-background text-muted-foreground hover:border-[#1890ff] hover:text-[#1890ff]',
+                        )}
+                      >
+                        {banned && <Ban className="size-3" aria-hidden />}
+                        {p}
+                      </button>
+                    )
+                  })}
+                </div>
+              </Field>
+              {bannedProvinces.length > 0 && (
+                <Tip>禁售省份的买方将无法查看价格与下单，商品详情页显示「该地区暂不支持」。</Tip>
+              )}
+            </div>
+          </Section>
+
+          <Section
+            title="运费设置"
+            extra={
+              <button type="button" className="text-xs text-[#1890ff] hover:underline">
+                管理运费模板
+              </button>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <Field label="选择模板" hint="选择后可在下方微调，修改不影响模板本身">
+                <TemplatePicker
+                  label="运费模板"
+                  templates={FREIGHT_TEMPLATES}
+                  value={freightTemplate}
+                  onChange={applyFreightTemplate}
+                />
+              </Field>
+              <div className="grid gap-4 md:grid-cols-3">
+                <Field label="计费方式" required>
+                  <Select
+                    label="计费方式"
+                    placeholder="请选择计费方式"
+                    value={freight.mode}
+                    options={FREIGHT_MODES}
+                    onChange={(mode) => updateFreight({ mode: mode as FreightMode })}
+                  />
+                </Field>
+                {freight.mode === '固定运费' && (
+                  <>
+                    <Field label="每单运费" required>
+                      <TextInput type="number" value={freight.base} onChange={(v) => updateFreight({ base: v })} placeholder="0.00" prefix="¥" suffix="/ 单" />
+                    </Field>
+                    <Field label="满额包邮" hint="订单金额达到后免运费">
+                      <TextInput type="number" value={freight.freeOver} onChange={(v) => updateFreight({ freeOver: v })} placeholder="不设置" prefix="¥" />
+                    </Field>
+                  </>
+                )}
+                {freight.mode === '按距离计费' && (
+                  <>
+                    <Field label="起步运费" required hint="含 50km 以内">
+                      <TextInput type="number" value={freight.base} onChange={(v) => updateFreight({ base: v })} placeholder="0.00" prefix="¥" />
+                    </Field>
+                    <Field label="超出每公里" required>
+                      <TextInput type="number" value={freight.perKm} onChange={(v) => updateFreight({ perKm: v })} placeholder="0.00" prefix="¥" suffix="/ km" />
+                    </Field>
+                  </>
+                )}
+                {freight.mode === '包邮' && (
+                  <p className="flex items-center text-sm text-muted-foreground md:col-span-2">
+                    <Truck className="mr-1.5 size-4" aria-hidden />
+                    全国包邮，运费由商家承担
+                  </p>
+                )}
+                {freight.mode === '到付' && (
+                  <p className="flex items-center text-sm text-muted-foreground md:col-span-2">
+                    <Truck className="mr-1.5 size-4" aria-hidden />
+                    运费由买方在收货时支付给物流方
+                  </p>
+                )}
+              </div>
+              {regionLabel && freight.mode === '按距离计费' && (
+                <Tip>运输距离以商品所在地「{regionLabel}」为起点，按买方收货地址估算。</Tip>
+              )}
             </div>
           </Section>
 
@@ -498,8 +723,11 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
             unit={unit}
             stock={stock}
             images={images}
-            sale={saleOn ? { price: salePrice, minOrder } : null}
-            rent={rentOn ? { price: rentPrice, period: rentPeriod, deposit, minDays } : null}
+            region={regionLabel}
+            sale={saleOn ? { price: salePrice, minOrder, taxRate, negotiable } : null}
+            rent={rentOn ? { price: rentPrice, period: rentPeriod, deposit, minDays, taxRate: rentTaxRate, negotiable: rentNegotiable } : null}
+            bannedCount={bannedProvinces.length}
+            freight={freight}
           />
           <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-4 text-xs text-muted-foreground">
             <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
@@ -562,8 +790,11 @@ function PreviewCard({
   unit,
   stock,
   images,
+  region,
   sale,
   rent,
+  bannedCount,
+  freight,
 }: {
   name: string
   subCategory: string
@@ -571,20 +802,48 @@ function PreviewCard({
   unit: string
   stock: string
   images: number
-  sale: { price: string; minOrder: string } | null
-  rent: { price: string; period: RentPeriod; deposit: string; minDays: string } | null
+  region: string
+  sale: { price: string; minOrder: string; taxRate: string; negotiable: boolean } | null
+  rent: { price: string; period: RentPeriod; deposit: string; minDays: string; taxRate: string; negotiable: boolean } | null
+  bannedCount: number
+  freight: FreightRule
 }) {
   const u = unit || '单位'
+  const taxText = (rate: string) => (rate === '不含税' ? '不含税' : `含税 ${rate}`)
   const listings = [
-    sale && { key: 'sale', label: '出售', tone: 'bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/30', main: `¥ ${fmt(sale.price)} / ${u}`, sub: sale.minOrder ? `起订 ${sale.minOrder} ${u}` : '不限起订量' },
+    sale && {
+      key: 'sale',
+      label: '出售',
+      tone: 'bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/30',
+      main: `¥ ${fmt(sale.price)} / ${u}`,
+      sub: [sale.minOrder ? `起订 ${sale.minOrder} ${u}` : '不限起订量', taxText(sale.taxRate), sale.negotiable ? '可议价' : null]
+        .filter(Boolean)
+        .join(' · '),
+    },
     rent && {
       key: 'rent',
       label: '出租',
       tone: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
       main: `¥ ${fmt(rent.price)} / ${u} / ${rent.period}`,
-      sub: `押金 ¥ ${fmt(rent.deposit)}${rent.minDays ? ` · 最短 ${rent.minDays} ${rent.period}` : ''}`,
+      sub: [
+        `押金 ¥ ${fmt(rent.deposit)}`,
+        rent.minDays ? `最短 ${rent.minDays} ${rent.period}` : null,
+        taxText(rent.taxRate),
+        rent.negotiable ? '可议价' : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
     },
   ].filter(Boolean) as { key: string; label: string; tone: string; main: string; sub: string }[]
+
+  const freightText =
+    freight.mode === '包邮'
+      ? '全国包邮'
+      : freight.mode === '到付'
+        ? '运费到付'
+        : freight.mode === '固定运费'
+          ? `运费 ¥ ${fmt(freight.base)} / 单${freight.freeOver ? `，满 ¥ ${Number(freight.freeOver).toLocaleString()} 包邮` : ''}`
+          : `起步 ¥ ${fmt(freight.base)}，超出每公里 ¥ ${fmt(freight.perKm)}`
 
   return (
     <div className="flex flex-col gap-3 rounded-md border border-border bg-card p-4">
@@ -603,7 +862,25 @@ function PreviewCard({
           <p className="text-xs text-muted-foreground">
             库存 {Number(stock) > 0 ? Number(stock).toLocaleString() : '—'} {u}
           </p>
+          <p className={cn('truncate text-xs', region ? 'text-muted-foreground' : 'text-muted-foreground/60')}>
+            {region || '商品所在地'}
+          </p>
         </div>
+      </div>
+      <div className="flex flex-wrap gap-1.5 text-[11px]">
+        <span className="flex items-center gap-1 rounded bg-muted px-1.5 leading-5 text-muted-foreground ring-1 ring-inset ring-border">
+          <Truck className="size-3" aria-hidden />
+          {freightText}
+        </span>
+        <span
+          className={cn(
+            'flex items-center gap-1 rounded px-1.5 leading-5 ring-1 ring-inset',
+            bannedCount > 0 ? 'bg-red-50 text-red-600 ring-red-200' : 'bg-muted text-muted-foreground ring-border',
+          )}
+        >
+          <Ban className="size-3" aria-hidden />
+          {bannedCount > 0 ? `${bannedCount} 个省份禁售` : '全国可售'}
+        </span>
       </div>
       <div className="flex flex-col gap-2 border-t border-border pt-3">
         <p className="text-xs text-muted-foreground">将生成 {listings.length} 条上架记录</p>
