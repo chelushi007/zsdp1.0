@@ -29,6 +29,9 @@ type Listing = {
   used: number
 }
 
+/** 商品状态：草稿 / 运营中 / 已下架 / 违规下架 / 审核驳回 */
+type GoodsStatus = 'draft' | 'active' | 'off' | 'violation' | 'rejected'
+
 type Goods = {
   code: string
   name: string
@@ -38,6 +41,9 @@ type Goods = {
   unit: string
   /** 商品总库存（实物） */
   stock: number
+  status: GoodsStatus
+  /** 违规下架 / 审核驳回的原因说明 */
+  statusNote?: string
   listings: Listing[]
   updatedAt: string
 }
@@ -51,6 +57,7 @@ const goodsData: Goods[] = [
     subCategory: '模板类',
     unit: '张',
     stock: 5000,
+    status: 'active',
     listings: [
       { id: 'L240302001', type: 'sale', status: 'on', price: 128, minOrder: 50, quantity: 3200, used: 1250 },
       { id: 'L240302002', type: 'rent', status: 'on', price: 0.6, period: '天', deposit: 60, minDays: 30, quantity: 1800, used: 1260 },
@@ -65,6 +72,7 @@ const goodsData: Goods[] = [
     subCategory: '脚手架类',
     unit: '根',
     stock: 12000,
+    status: 'active',
     listings: [
       { id: 'L240315001', type: 'rent', status: 'on', price: 0.045, period: '天', deposit: 85, minDays: 90, quantity: 12000, used: 9800 },
       { id: 'L240110003', type: 'rent', status: 'off', price: 0.05, period: '天', deposit: 85, minDays: 90, quantity: 8000, used: 8000 },
@@ -79,6 +87,7 @@ const goodsData: Goods[] = [
     subCategory: '支护类',
     unit: '吨',
     stock: 420,
+    status: 'active',
     listings: [
       { id: 'L240408001', type: 'sale', status: 'off', price: 5800, minOrder: 10, quantity: 120, used: 120 },
       { id: 'L240408002', type: 'rent', status: 'on', price: 12, period: '天', deposit: 3000, minDays: 180, quantity: 420, used: 410 },
@@ -93,7 +102,8 @@ const goodsData: Goods[] = [
     subCategory: '拼装类',
     unit: '片',
     stock: 860,
-    listings: [{ id: 'L240520001', type: 'sale', status: 'on', price: 365, minOrder: 20, quantity: 860, used: 210 }],
+    status: 'draft',
+    listings: [{ id: 'L240520001', type: 'sale', status: 'off', price: 365, minOrder: 20, quantity: 860, used: 210 }],
     updatedAt: '2024-10-02 08:50',
   },
   {
@@ -104,7 +114,8 @@ const goodsData: Goods[] = [
     subCategory: '轨道类',
     unit: '根',
     stock: 60,
-    listings: [{ id: 'L240611001', type: 'rent', status: 'on', price: 280, period: '月', deposit: 6000, minDays: 90, quantity: 60, used: 18 }],
+    status: 'off',
+    listings: [{ id: 'L240611001', type: 'rent', status: 'off', price: 280, period: '月', deposit: 6000, minDays: 90, quantity: 60, used: 18 }],
     updatedAt: '2024-08-19 13:25',
   },
   {
@@ -115,6 +126,7 @@ const goodsData: Goods[] = [
     subCategory: '型材类',
     unit: '吨',
     stock: 395,
+    status: 'active',
     listings: [
       { id: 'L240703001', type: 'sale', status: 'on', price: 4280, minOrder: 5, quantity: 95, used: 30 },
       { id: 'L240703002', type: 'rent', status: 'on', price: 9.5, period: '天', deposit: 2500, minDays: 60, quantity: 300, used: 120 },
@@ -129,7 +141,9 @@ const goodsData: Goods[] = [
     subCategory: '电线电缆',
     unit: '米',
     stock: 8000,
-    listings: [{ id: 'L240816001', type: 'rent', status: 'on', price: 0.35, period: '天', deposit: 45, minDays: 30, quantity: 8000, used: 7900 }],
+    status: 'violation',
+    statusNote: '商品图片含联系方式水印，违反平台发布规范',
+    listings: [{ id: 'L240816001', type: 'rent', status: 'off', price: 0.35, period: '天', deposit: 45, minDays: 30, quantity: 8000, used: 7900 }],
     updatedAt: '2024-10-22 10:00',
   },
   {
@@ -140,9 +154,11 @@ const goodsData: Goods[] = [
     subCategory: '房屋建筑类',
     unit: '个',
     stock: 64,
+    status: 'rejected',
+    statusNote: '缺少产品合格证明材料，请补充后重新提交',
     listings: [
-      { id: 'L240905001', type: 'sale', status: 'on', price: 16800, minOrder: 1, quantity: 24, used: 6 },
-      { id: 'L240905002', type: 'rent', status: 'on', price: 980, period: '月', deposit: 5000, minDays: 180, quantity: 40, used: 33 },
+      { id: 'L240905001', type: 'sale', status: 'off', price: 16800, minOrder: 1, quantity: 24, used: 6 },
+      { id: 'L240905002', type: 'rent', status: 'off', price: 980, period: '月', deposit: 5000, minDays: 180, quantity: 40, used: 33 },
     ],
     updatedAt: '2024-10-18 09:35',
   },
@@ -158,8 +174,19 @@ const listingStatusMeta: Record<ListingStatus, { label: string; className: strin
   off: { label: '已下架', className: 'bg-muted text-muted-foreground ring-border' },
 }
 
-/** 商品状态由上架中的记录推导：有出售记录为「在售」，有出租记录为「在租」，两者可同时存在 */
-function goodsStatuses(g: Goods): BizType[] {
+const goodsStatusOrder: GoodsStatus[] = ['draft', 'active', 'off', 'violation', 'rejected']
+
+const goodsStatusMeta: Record<GoodsStatus, { label: string; className: string; countClass: string }> = {
+  draft: { label: '草稿', className: 'bg-muted text-muted-foreground ring-border', countClass: 'text-muted-foreground' },
+  active: { label: '运营中', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200', countClass: 'text-emerald-700' },
+  off: { label: '已下架', className: 'bg-gray-100 text-gray-600 ring-gray-200', countClass: 'text-gray-600' },
+  violation: { label: '违规下架', className: 'bg-red-50 text-red-600 ring-red-200', countClass: 'text-red-600' },
+  rejected: { label: '审核驳回', className: 'bg-amber-50 text-amber-700 ring-amber-200', countClass: 'text-amber-700' },
+}
+
+/** 运营中商品的业务类型，由上架中的记录推导：有出售记录为「在售」，有出租记录为「在租」 */
+function activeBizTypes(g: Goods): BizType[] {
+  if (g.status !== 'active') return []
   const active = g.listings.filter((l) => l.status === 'on')
   return (['sale', 'rent'] as BizType[]).filter((t) => active.some((l) => l.type === t))
 }
@@ -191,13 +218,56 @@ function ActionLink({
   )
 }
 
-type Filters = { code: string; name: string; category: string; status: BizType | '' }
+function GoodsActions({ status }: { status: GoodsStatus }) {
+  const actions: Record<GoodsStatus, React.ReactNode> = {
+    draft: (
+      <>
+        <ActionLink>编辑</ActionLink>
+        <ActionLink>提交审核</ActionLink>
+        <ActionLink tone="danger">删除</ActionLink>
+      </>
+    ),
+    active: (
+      <>
+        <ActionLink>详情</ActionLink>
+        <ActionLink>编辑</ActionLink>
+        <ActionLink>上架</ActionLink>
+        <ActionLink>调整库存</ActionLink>
+        <ActionLink tone="danger">下架</ActionLink>
+      </>
+    ),
+    off: (
+      <>
+        <ActionLink>详情</ActionLink>
+        <ActionLink>编辑</ActionLink>
+        <ActionLink>重新上架</ActionLink>
+      </>
+    ),
+    violation: (
+      <>
+        <ActionLink>详情</ActionLink>
+        <ActionLink>查看违规原因</ActionLink>
+        <ActionLink>整改后重新提交</ActionLink>
+      </>
+    ),
+    rejected: (
+      <>
+        <ActionLink>详情</ActionLink>
+        <ActionLink>编辑</ActionLink>
+        <ActionLink>重新提交审核</ActionLink>
+      </>
+    ),
+  }
+  return <span className="flex flex-wrap items-center gap-x-3 gap-y-1">{actions[status]}</span>
+}
+
+type Filters = { code: string; name: string; category: string; status: GoodsStatus | '' }
 const emptyFilters: Filters = { code: '', name: '', category: '', status: '' }
 
-const statusOptions: { label: string; value: BizType }[] = [
-  { label: '在售', value: 'sale' },
-  { label: '在租', value: 'rent' },
-]
+const statusOptions: { label: string; value: GoodsStatus }[] = goodsStatusOrder.map((s) => ({
+  label: goodsStatusMeta[s].label,
+  value: s,
+}))
 const allCategories = categoryTree.flatMap((g) => g.children)
 
 function FilterInput({
@@ -292,7 +362,7 @@ function matches(g: Goods, f: Filters) {
   if (f.code && !g.code.toLowerCase().includes(f.code.trim().toLowerCase())) return false
   if (f.name && !g.name.includes(f.name.trim())) return false
   if (f.category && g.subCategory !== f.category) return false
-  if (f.status && !goodsStatuses(g).includes(f.status)) return false
+  if (f.status && g.status !== f.status) return false
   return true
 }
 
@@ -353,10 +423,15 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
 
   const visible = goodsData.filter((g) => matches(g, applied))
   const isFiltered = Object.values(applied).some(Boolean)
-  const counts = {
-    sale: visible.filter((g) => goodsStatuses(g).includes('sale')).length,
-    rent: visible.filter((g) => goodsStatuses(g).includes('rent')).length,
-    idle: visible.filter((g) => goodsStatuses(g).length === 0).length,
+
+  /** 各状态数量按除状态以外的其他条件统计，便于在页签间切换时看到全貌 */
+  const baseFilters: Filters = { ...applied, status: '' }
+  const base = goodsData.filter((g) => matches(g, baseFilters))
+  const countOf = (s: GoodsStatus | '') => (s ? base.filter((g) => g.status === s).length : base.length)
+
+  const selectStatus = (s: GoodsStatus | '') => {
+    setDraft((d) => ({ ...d, status: s }))
+    setApplied((a) => ({ ...a, status: s }))
   }
 
   const toggle = (code: string) => setExpanded((e) => ({ ...e, [code]: !e[code] }))
@@ -375,12 +450,33 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
       />
 
       <div className="overflow-hidden rounded-md border border-border bg-card">
-        <div className="flex items-center gap-4 border-b border-border px-4 py-2.5 text-xs">
-          <span className="font-medium">{isFiltered ? `筛选结果 ${visible.length}` : `全部 ${visible.length}`}</span>
-          <span className="text-[#1890ff]">在售 {counts.sale}</span>
-          <span className="text-emerald-700">在租 {counts.rent}</span>
-          <span className="text-muted-foreground">未上架 {counts.idle}</span>
-          <span className="ml-auto text-muted-foreground">点击编码前的角标可展开查看上架记录</span>
+        <div className="flex items-center gap-1 border-b border-border px-2 text-xs" role="tablist" aria-label="商品状态">
+          {(['', ...goodsStatusOrder] as (GoodsStatus | '')[]).map((s) => {
+            const active = applied.status === s
+            const label = s ? goodsStatusMeta[s].label : '全部'
+            return (
+              <button
+                key={s || 'all'}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => selectStatus(s)}
+                className={cn(
+                  'relative flex h-10 items-center gap-1.5 px-3 hover:text-foreground',
+                  active ? 'font-medium text-[#1890ff]' : 'text-muted-foreground',
+                )}
+              >
+                {label}
+                <span className={cn('tabular-nums', active ? 'text-[#1890ff]' : s ? goodsStatusMeta[s].countClass : '')}>
+                  {countOf(s)}
+                </span>
+                {active && <span className="absolute inset-x-2 bottom-0 h-0.5 rounded-full bg-[#1890ff]" aria-hidden />}
+              </button>
+            )
+          })}
+          <span className="ml-auto pr-2 text-muted-foreground">
+            {isFiltered ? `筛选结果 ${visible.length} 条 · ` : ''}点击编码前的角标可展开查看上架记录
+          </span>
         </div>
 
         <div className="overflow-x-auto">
@@ -404,7 +500,8 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
 
             {visible.map((g) => {
               const open = expanded[g.code] ?? false
-              const statuses = goodsStatuses(g)
+              const bizTypes = activeBizTypes(g)
+              const statusMeta = goodsStatusMeta[g.status]
               return (
                 <Fragment key={g.code}>
                   <div
@@ -441,20 +538,20 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                     <span className="tabular-nums">
                       {g.stock.toLocaleString()} {g.unit}
                     </span>
-                    <span className="flex flex-wrap gap-1">
-                      {statuses.length === 0 && <Tag className="bg-muted text-muted-foreground ring-border">未上架</Tag>}
-                      {statuses.map((t) => (
-                        <Tag key={t} className={bizMeta[t].className}>
-                          {bizMeta[t].status}
-                        </Tag>
-                      ))}
+                    <span className="flex min-w-0 flex-col items-start gap-1">
+                      <Tag className={statusMeta.className}>{statusMeta.label}</Tag>
+                      {bizTypes.length > 0 && (
+                        <span className="text-[11px] text-muted-foreground">
+                          {bizTypes.map((t) => bizMeta[t].status).join(' · ')}
+                        </span>
+                      )}
+                      {g.statusNote && (
+                        <span className="line-clamp-2 text-[11px] leading-4 text-muted-foreground" title={g.statusNote}>
+                          {g.statusNote}
+                        </span>
+                      )}
                     </span>
-                    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                      <ActionLink>详情</ActionLink>
-                      <ActionLink>编辑</ActionLink>
-                      <ActionLink>上架</ActionLink>
-                      <ActionLink>调整库存</ActionLink>
-                    </span>
+                    <GoodsActions status={g.status} />
                   </div>
                   {open && (
                     <div id={`listings-${g.code}`} className="border-b border-border bg-muted/20 px-4 py-3 pl-[84px]">
