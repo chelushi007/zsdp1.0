@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Ban, Check, FileText, ImagePlus, Info, Plus, ShoppingCart, Timer, Trash2, Truck, X } from 'lucide-react'
+import { ArrowLeft, Ban, Check, FileText, History, ImagePlus, Info, Plus, ShoppingCart, Timer, Trash2, Truck, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { RegionCascader, Select, Tip, categoryTree, regionTree, type Region } from '@/components/shop-form-fields'
@@ -18,24 +18,61 @@ const EMPTY_REGION: Region = { province: '', city: '', district: '' }
 
 type RentPeriod = (typeof RENT_PERIODS)[number]
 
-/** 区域禁售模板：选中后带出禁售省份，可继续手动增减 */
-const BAN_TEMPLATES: { name: string; desc: string; provinces: string[] }[] = [
-  { name: '不设禁售', desc: '全国范围均可下单', provinces: [] },
-  { name: '仅限华东', desc: '仅上海、江苏、浙江可下单，其余省份禁售', provinces: ['北京市', '广东省'] },
-  { name: '仅限本市', desc: '仅商品所在省市可下单', provinces: ['北京市', '浙江省', '江苏省', '广东省'] },
+/** 禁售地区：精确到省或市，city 为空表示整省禁售 */
+type BanArea = { province: string; city?: string }
+
+function banAreaKey(a: BanArea) {
+  return a.city ? `${a.province}/${a.city}` : a.province
+}
+function banAreaLabel(a: BanArea) {
+  return a.city ? `${a.province} · ${a.city}` : `${a.province}（全省）`
+}
+
+/** 区域禁售模板：引用后带入禁售地区，可继续自定义增减 */
+const BAN_TEMPLATES: { name: string; desc: string; areas: BanArea[] }[] = [
+  { name: '仅限华东', desc: '北京、广东全省禁售', areas: [{ province: '北京市' }, { province: '广东省' }] },
+  {
+    name: '仅限本市',
+    desc: '除上海外其余省份全部禁售',
+    areas: [{ province: '北京市' }, { province: '浙江省' }, { province: '江苏省' }, { province: '广东省' }],
+  },
+  { name: '华南限售', desc: '广州、深圳禁售', areas: [{ province: '广东省', city: '广州市' }, { province: '广东省', city: '深圳市' }] },
 ]
 
-type FreightMode = '包邮' | '固定运费' | '按距离计费' | '到付'
-type FreightRule = { mode: FreightMode; base: string; perKm: string; freeOver: string }
+/** 历史记录：商家之前发布商品时使用过的禁售设置 */
+const BAN_HISTORY: { goods: string; date: string; areas: BanArea[] }[] = [
+  { goods: '建筑模板 915×1830×15mm', date: '2024-09-12', areas: [{ province: '广东省' }, { province: '北京市', city: '北京市' }] },
+  { goods: '盘扣式脚手架 Φ48×3.2', date: '2024-08-03', areas: [{ province: '北京市' }] },
+  { goods: '钢支撑 Φ609×16', date: '2024-07-21', areas: [{ province: '浙江省', city: '宁波市' }, { province: '江苏省', city: '南京市' }] },
+]
+
+type FreightMode = '包邮' | '固定运费' | '按数量计费' | '按距离计费' | '到付'
+type FreightRule = {
+  mode: FreightMode
+  /** 固定运费 / 按距离起步费 / 按数量首件运费 */
+  base: string
+  perKm: string
+  freeOver: string
+  /** 按数量计费：首件数量、续件数量、续件运费 */
+  firstQty: string
+  addQty: string
+  addFee: string
+}
+const EMPTY_FREIGHT: FreightRule = { mode: '包邮', base: '', perKm: '', freeOver: '', firstQty: '', addQty: '', addFee: '' }
 
 /** 运费模板：选中后带出计费方式与金额 */
 const FREIGHT_TEMPLATES: { name: string; desc: string; rule: FreightRule }[] = [
-  { name: '周转材料-包邮', desc: '全国包邮，由商家承担运费', rule: { mode: '包邮', base: '', perKm: '', freeOver: '' } },
-  { name: '周转材料-固定运费', desc: '每单固定 300 元，满 20000 元免运费', rule: { mode: '固定运费', base: '300', perKm: '', freeOver: '20000' } },
-  { name: '大件-按距离计费', desc: '起步 500 元，超出 50km 每公里 8 元', rule: { mode: '按距离计费', base: '500', perKm: '8', freeOver: '' } },
-  { name: '运费到付', desc: '由买方承担运费，物流到付', rule: { mode: '到付', base: '', perKm: '', freeOver: '' } },
+  { name: '周转材料-包邮', desc: '全国包邮，由商家承担运费', rule: { ...EMPTY_FREIGHT, mode: '包邮' } },
+  { name: '周转材料-固定运费', desc: '每单固定 300 元，满 20000 元免运费', rule: { ...EMPTY_FREIGHT, mode: '固定运费', base: '300', freeOver: '20000' } },
+  {
+    name: '周转材料-按数量计费',
+    desc: '首 100 件 300 元，每增加 100 件加收 150 元',
+    rule: { ...EMPTY_FREIGHT, mode: '按数量计费', firstQty: '100', base: '300', addQty: '100', addFee: '150' },
+  },
+  { name: '大件-按距离计费', desc: '起步 500 元，超出 50km 每公里 8 元', rule: { ...EMPTY_FREIGHT, mode: '按距离计费', base: '500', perKm: '8' } },
+  { name: '运费到付', desc: '由买方承担运费，物流到付', rule: { ...EMPTY_FREIGHT, mode: '到付' } },
 ]
-const FREIGHT_MODES: FreightMode[] = ['包邮', '固定运费', '按距离计费', '到付']
+const FREIGHT_MODES: FreightMode[] = ['包邮', '固定运费', '按数量计费', '按距离计费', '到付']
 
 /* ---------- 通用表单控件 ---------- */
 
@@ -382,8 +419,11 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const [rentNegotiable, setRentNegotiable] = useState(false)
   const [lossRule, setLossRule] = useState('')
 
-  const [banTemplate, setBanTemplate] = useState(BAN_TEMPLATES[0].name)
-  const [bannedProvinces, setBannedProvinces] = useState<string[]>([])
+  const [banEnabled, setBanEnabled] = useState(false)
+  const [banAreas, setBanAreas] = useState<BanArea[]>([])
+  const [banSource, setBanSource] = useState<string | null>(null)
+  const [banRef, setBanRef] = useState<'template' | 'history' | null>(null)
+  const [banPick, setBanPick] = useState<{ province: string; city: string }>({ province: '', city: '' })
 
   const [freightTemplate, setFreightTemplate] = useState(FREIGHT_TEMPLATES[0].name)
   const [freight, setFreight] = useState<FreightRule>(FREIGHT_TEMPLATES[0].rule)
@@ -392,12 +432,27 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const [files, setFiles] = useState<Attachment[]>([])
   const [agreed, setAgreed] = useState(false)
 
-  const applyBanTemplate = (name: string) => {
-    setBanTemplate(name)
-    setBannedProvinces(BAN_TEMPLATES.find((t) => t.name === name)?.provinces ?? [])
+  const importBanAreas = (areas: BanArea[], source: string) => {
+    setBanAreas(areas)
+    setBanSource(source)
+    setBanRef(null)
+    setBanEnabled(true)
   }
-  const toggleBannedProvince = (p: string) =>
-    setBannedProvinces((list) => (list.includes(p) ? list.filter((x) => x !== p) : [...list, p]))
+  const addBanArea = () => {
+    if (!banPick.province) return
+    const area: BanArea = banPick.city ? { province: banPick.province, city: banPick.city } : { province: banPick.province }
+    setBanAreas((list) => {
+      // 整省禁售时移除该省下已单独添加的城市；添加城市时若整省已禁售则忽略
+      const key = banAreaKey(area)
+      if (list.some((a) => banAreaKey(a) === key || (!a.city && a.province === area.province))) return list
+      const rest = area.city ? list : list.filter((a) => a.province !== area.province)
+      return [...rest, area]
+    })
+    setBanPick({ province: '', city: '' })
+  }
+  const removeBanArea = (key: string) => setBanAreas((list) => list.filter((a) => banAreaKey(a) !== key))
+  const bannedProvinceCount = new Set(banAreas.map((a) => a.province)).size
+  const effectiveBanAreas = banEnabled ? banAreas : []
 
   const applyFreightTemplate = (name: string) => {
     setFreightTemplate(name)
@@ -405,6 +460,7 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
     if (t) setFreight(t.rule)
   }
   const updateFreight = (patch: Partial<FreightRule>) => setFreight((f) => ({ ...f, ...patch }))
+  const num = (v: string) => (v === '' ? NaN : Number(v))
 
   const unitLabel = unit || '单位'
   const bizSelected = saleOn || rentOn
@@ -416,8 +472,13 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const freightOk =
     freight.mode === '包邮' ||
     freight.mode === '到付' ||
-    (freight.mode === '固定运费' && Number(freight.base) >= 0 && freight.base !== '') ||
-    (freight.mode === '按距离计费' && Number(freight.base) >= 0 && freight.base !== '' && Number(freight.perKm) > 0)
+    (freight.mode === '固定运费' && num(freight.base) >= 0) ||
+    (freight.mode === '按距离计费' && num(freight.base) >= 0 && num(freight.perKm) > 0) ||
+    (freight.mode === '按数量计费' &&
+      num(freight.firstQty) > 0 &&
+      num(freight.base) >= 0 &&
+      num(freight.addQty) > 0 &&
+      num(freight.addFee) >= 0)
   const canSubmit = agreed && basicOk && bizSelected && saleOk && rentOk && freightOk
 
   const blocker = !basicOk
@@ -600,35 +661,169 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
             }
           >
             <div className="flex flex-col gap-4">
-              <Field label="选择模板" hint="选择后可在下方继续调整禁售省份">
-                <TemplatePicker label="区域禁售模板" templates={BAN_TEMPLATES} value={banTemplate} onChange={applyBanTemplate} />
-              </Field>
-              <Field label="禁售省份" hint={bannedProvinces.length ? `已选 ${bannedProvinces.length} 个省份` : '未设置禁售区域'}>
-                <div className="flex flex-wrap gap-2">
-                  {Object.keys(regionTree).map((p) => {
-                    const banned = bannedProvinces.includes(p)
-                    return (
-                      <button
-                        key={p}
-                        type="button"
-                        aria-pressed={banned}
-                        onClick={() => toggleBannedProvince(p)}
-                        className={cn(
-                          'flex h-8 items-center gap-1 rounded border px-2.5 text-xs transition-colors',
-                          banned
-                            ? 'border-red-200 bg-red-50 text-red-600'
-                            : 'border-border bg-background text-muted-foreground hover:border-[#1890ff] hover:text-[#1890ff]',
+              <label className="flex items-center gap-2 text-sm">
+                <Switch checked={banEnabled} onChange={setBanEnabled} label="启用区域禁售" />
+                启用区域禁售
+                <span className="text-xs text-muted-foreground">（关闭时全国范围均可下单）</span>
+              </label>
+
+              {banEnabled && (
+                <>
+                  <Field label="快捷引用" hint="引用后会替换当前禁售地区，可继续自定义增减">
+                    <div className="flex flex-col gap-2">
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          aria-expanded={banRef === 'template'}
+                          onClick={() => setBanRef(banRef === 'template' ? null : 'template')}
+                          className={cn(
+                            'flex h-8 items-center gap-1.5 rounded border px-3 text-xs transition-colors',
+                            banRef === 'template' ? 'border-[#1890ff] bg-[#1890ff]/5 text-[#1890ff]' : 'border-border hover:border-[#1890ff] hover:text-[#1890ff]',
+                          )}
+                        >
+                          <FileText className="size-3.5" aria-hidden />
+                          引用模板
+                        </button>
+                        <button
+                          type="button"
+                          aria-expanded={banRef === 'history'}
+                          onClick={() => setBanRef(banRef === 'history' ? null : 'history')}
+                          className={cn(
+                            'flex h-8 items-center gap-1.5 rounded border px-3 text-xs transition-colors',
+                            banRef === 'history' ? 'border-[#1890ff] bg-[#1890ff]/5 text-[#1890ff]' : 'border-border hover:border-[#1890ff] hover:text-[#1890ff]',
+                          )}
+                        >
+                          <History className="size-3.5" aria-hidden />
+                          引用历史记录
+                        </button>
+                        {banSource && (
+                          <span className="flex h-8 items-center text-xs text-muted-foreground">
+                            当前来源：{banSource}
+                            {banAreas.length > 0 && '（可继续调整）'}
+                          </span>
                         )}
-                      >
-                        {banned && <Ban className="size-3" aria-hidden />}
-                        {p}
-                      </button>
-                    )
-                  })}
-                </div>
-              </Field>
-              {bannedProvinces.length > 0 && (
-                <Tip>禁售省份的买方将无法查看价格与下单，商品详情页显示「该地区暂不支持」。</Tip>
+                      </div>
+
+                      {banRef === 'template' && (
+                        <ul className="divide-y divide-border rounded border border-border">
+                          {BAN_TEMPLATES.map((t) => (
+                            <li key={t.name} className="flex items-center gap-3 px-3 py-2 text-sm">
+                              <span className="flex min-w-0 flex-1 flex-col">
+                                <span>{t.name}</span>
+                                <span className="truncate text-xs text-muted-foreground">
+                                  {t.desc} · {t.areas.map(banAreaLabel).join('、')}
+                                </span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => importBanAreas(t.areas, `模板「${t.name}」`)}
+                                className="shrink-0 text-xs text-[#1890ff] hover:underline"
+                              >
+                                引用
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+
+                      {banRef === 'history' && (
+                        <ul className="divide-y divide-border rounded border border-border">
+                          {BAN_HISTORY.map((h) => (
+                            <li key={h.goods} className="flex items-center gap-3 px-3 py-2 text-sm">
+                              <span className="flex min-w-0 flex-1 flex-col">
+                                <span className="truncate">{h.goods}</span>
+                                <span className="truncate text-xs text-muted-foreground">
+                                  {h.date} 发布 · {h.areas.map(banAreaLabel).join('、')}
+                                </span>
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => importBanAreas(h.areas, `历史记录「${h.goods}」`)}
+                                className="shrink-0 text-xs text-[#1890ff] hover:underline"
+                              >
+                                引用
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </Field>
+
+                  <Field label="自定义添加" hint="可选择整省禁售，或精确到地级市">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="w-40">
+                        <Select
+                          label="禁售省份"
+                          placeholder="选择省份"
+                          value={banPick.province}
+                          options={Object.keys(regionTree)}
+                          onChange={(province) => setBanPick({ province, city: '' })}
+                        />
+                      </div>
+                      <div className="w-40">
+                        <Select
+                          label="禁售城市"
+                          placeholder={banPick.province ? '全省' : '先选择省份'}
+                          value={banPick.city}
+                          options={banPick.province ? Object.keys(regionTree[banPick.province]) : []}
+                          onChange={(city) => setBanPick((p) => ({ ...p, city }))}
+                          disabled={!banPick.province}
+                        />
+                      </div>
+                      <Button type="button" variant="outline" size="sm" onClick={addBanArea} disabled={!banPick.province}>
+                        <Plus data-icon="inline-start" />
+                        添加
+                      </Button>
+                    </div>
+                  </Field>
+
+                  <Field
+                    label="禁售地区"
+                    hint={banAreas.length ? `共 ${banAreas.length} 个地区，涉及 ${bannedProvinceCount} 个省份` : '尚未添加禁售地区'}
+                  >
+                    {banAreas.length === 0 ? (
+                      <p className="flex h-9 items-center text-sm text-muted-foreground">请通过引用或自定义添加禁售地区</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {banAreas.map((a) => {
+                          const key = banAreaKey(a)
+                          return (
+                            <span
+                              key={key}
+                              className="flex h-8 items-center gap-1 rounded border border-red-200 bg-red-50 pl-2.5 pr-1 text-xs text-red-600"
+                            >
+                              <Ban className="size-3" aria-hidden />
+                              {banAreaLabel(a)}
+                              <button
+                                type="button"
+                                aria-label={`移除 ${banAreaLabel(a)}`}
+                                onClick={() => removeBanArea(key)}
+                                className="ml-0.5 flex size-5 items-center justify-center rounded hover:bg-red-100"
+                              >
+                                <X className="size-3" aria-hidden />
+                              </button>
+                            </span>
+                          )
+                        })}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setBanAreas([])
+                            setBanSource(null)
+                          }}
+                          className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                        >
+                          清空
+                        </button>
+                      </div>
+                    )}
+                  </Field>
+
+                  {banAreas.length > 0 && (
+                    <Tip>禁售地区的买方将无法查看价格与下单，商品详情页显示「该地区暂不支持」。</Tip>
+                  )}
+                </>
               )}
             </div>
           </Section>
@@ -670,6 +865,25 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
                     </Field>
                   </>
                 )}
+                {freight.mode === '按数量计费' && (
+                  <>
+                    <Field label="首件数量" required>
+                      <TextInput type="number" value={freight.firstQty} onChange={(v) => updateFreight({ firstQty: v })} placeholder="0" suffix={unitLabel} />
+                    </Field>
+                    <Field label="首件运费" required>
+                      <TextInput type="number" value={freight.base} onChange={(v) => updateFreight({ base: v })} placeholder="0.00" prefix="¥" />
+                    </Field>
+                    <Field label="续件数量" required hint="每增加该数量加收一次续件运费">
+                      <TextInput type="number" value={freight.addQty} onChange={(v) => updateFreight({ addQty: v })} placeholder="0" suffix={unitLabel} />
+                    </Field>
+                    <Field label="续件运费" required>
+                      <TextInput type="number" value={freight.addFee} onChange={(v) => updateFreight({ addFee: v })} placeholder="0.00" prefix="¥" />
+                    </Field>
+                    <Field label="满额包邮" hint="订单金额达到后免运费">
+                      <TextInput type="number" value={freight.freeOver} onChange={(v) => updateFreight({ freeOver: v })} placeholder="不设置" prefix="¥" />
+                    </Field>
+                  </>
+                )}
                 {freight.mode === '按距离计费' && (
                   <>
                     <Field label="起步运费" required hint="含 50km 以内">
@@ -695,6 +909,12 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
               </div>
               {regionLabel && freight.mode === '按距离计费' && (
                 <Tip>运输距离以商品所在地「{regionLabel}」为起点，按买方收货地址估算。</Tip>
+              )}
+              {freight.mode === '按数量计费' && num(freight.firstQty) > 0 && num(freight.addQty) > 0 && (
+                <Tip>
+                  示例：购买 {num(freight.firstQty) + num(freight.addQty) * 2} {unitLabel}，运费 = ¥ {fmt(freight.base)} + 2 × ¥{' '}
+                  {fmt(freight.addFee)} = ¥ {fmt(String(num(freight.base) + 2 * num(freight.addFee)))}
+                </Tip>
               )}
             </div>
           </Section>
@@ -726,7 +946,7 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
             region={regionLabel}
             sale={saleOn ? { price: salePrice, minOrder, taxRate, negotiable } : null}
             rent={rentOn ? { price: rentPrice, period: rentPeriod, deposit, minDays, taxRate: rentTaxRate, negotiable: rentNegotiable } : null}
-            bannedCount={bannedProvinces.length}
+            bannedCount={effectiveBanAreas.length}
             freight={freight}
           />
           <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-4 text-xs text-muted-foreground">
@@ -843,7 +1063,9 @@ function PreviewCard({
         ? '运费到付'
         : freight.mode === '固定运费'
           ? `运费 ¥ ${fmt(freight.base)} / 单${freight.freeOver ? `，满 ¥ ${Number(freight.freeOver).toLocaleString()} 包邮` : ''}`
-          : `起步 ¥ ${fmt(freight.base)}，超出每公里 ¥ ${fmt(freight.perKm)}`
+          : freight.mode === '按数量计费'
+            ? `首 ${freight.firstQty || '—'} ${u} ¥ ${fmt(freight.base)}，每增 ${freight.addQty || '—'} ${u} 加 ¥ ${fmt(freight.addFee)}`
+            : `起步 ¥ ${fmt(freight.base)}，超出每公里 ¥ ${fmt(freight.perKm)}`
 
   return (
     <div className="flex flex-col gap-3 rounded-md border border-border bg-card p-4">
@@ -879,7 +1101,7 @@ function PreviewCard({
           )}
         >
           <Ban className="size-3" aria-hidden />
-          {bannedCount > 0 ? `${bannedCount} 个省份禁售` : '全国可售'}
+          {bannedCount > 0 ? `${bannedCount} 个地区禁售` : '全国可售'}
         </span>
       </div>
       <div className="flex flex-col gap-2 border-t border-border pt-3">
