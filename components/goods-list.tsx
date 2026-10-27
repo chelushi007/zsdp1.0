@@ -164,11 +164,6 @@ function goodsStatuses(g: Goods): BizType[] {
   return (['sale', 'rent'] as BizType[]).filter((t) => active.some((l) => l.type === t))
 }
 
-/** 已上架数量 = 上架中记录的剩余可用数量之和 */
-function listedAvailable(g: Goods) {
-  return g.listings.filter((l) => l.status === 'on').reduce((sum, l) => sum + (l.quantity - l.used), 0)
-}
-
 function Tag({ className, children }: { className: string; children: React.ReactNode }) {
   return (
     <span className={cn('inline-flex h-5 items-center rounded px-1.5 text-xs ring-1 ring-inset', className)}>{children}</span>
@@ -301,8 +296,8 @@ function matches(g: Goods, f: Filters) {
   return true
 }
 
-const columns = '32px 118px minmax(180px,1.5fr) 120px 110px 100px minmax(180px,1fr)'
-const listingColumns = '110px 64px minmax(150px,1fr) 120px 110px 110px 72px 120px'
+const columns = '48px 118px minmax(160px,1.5fr) 120px 90px 100px minmax(170px,1fr)'
+const listingColumns = '120px 72px minmax(160px,1fr) 110px 80px 130px'
 
 function ListingTable({ goods }: { goods: Goods }) {
   return (
@@ -318,15 +313,12 @@ function ListingTable({ goods }: { goods: Goods }) {
         <span>上架单号</span>
         <span>业务类型</span>
         <span>价格</span>
-        <span>上架数量</span>
         <span>已售 / 已租</span>
-        <span>押金 / 起订量</span>
         <span>状态</span>
         <span>操作</span>
       </div>
       {goods.listings.map((l) => {
         const meta = bizMeta[l.type]
-        const remain = l.quantity - l.used
         return (
           <div
             key={l.id}
@@ -340,18 +332,7 @@ function ListingTable({ goods }: { goods: Goods }) {
               {l.type === 'rent' && l.period ? ` / ${l.period}` : ''}
             </span>
             <span className="tabular-nums">
-              {l.quantity.toLocaleString()} {goods.unit}
-              <span className={cn('ml-1 text-xs', remain <= 0 ? 'text-red-600' : 'text-muted-foreground')}>
-                （余 {remain.toLocaleString()}）
-              </span>
-            </span>
-            <span className="tabular-nums">
               {l.used.toLocaleString()} {goods.unit}
-            </span>
-            <span className="tabular-nums text-xs">
-              {l.type === 'rent'
-                ? `押金 ¥ ${fmtPrice(l.deposit ?? 0)} / ${goods.unit}，最短 ${l.minDays} 天`
-                : `起订 ${l.minOrder} ${goods.unit}`}
             </span>
             <Tag className={listingStatusMeta[l.status].className}>{listingStatusMeta[l.status].label}</Tag>
             <span className="flex items-center gap-3">
@@ -403,12 +384,12 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
         </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[900px]">
+          <div className="min-w-[860px]">
             <div
               className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-medium text-muted-foreground"
               style={{ gridTemplateColumns: columns }}
             >
-              <span className="sr-only">展开</span>
+              <span className="text-center">展开</span>
               <span>商品编码</span>
               <span>商品名称</span>
               <span>品类</span>
@@ -424,7 +405,6 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
             {visible.map((g) => {
               const open = expanded[g.code] ?? false
               const statuses = goodsStatuses(g)
-              const listed = listedAvailable(g)
               return (
                 <Fragment key={g.code}>
                   <div
@@ -434,19 +414,21 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                     )}
                     style={{ gridTemplateColumns: columns }}
                   >
-                    <button
-                      type="button"
-                      onClick={() => toggle(g.code)}
-                      aria-expanded={open}
-                      aria-controls={`listings-${g.code}`}
-                      aria-label={open ? `收起 ${g.name} 上架记录` : `展开 ${g.name} 上架记录`}
-                      className="relative flex size-6 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:border-[#1890ff] hover:text-[#1890ff]"
-                    >
-                      <ChevronRight className={cn('size-3.5 transition-transform', open && 'rotate-90')} aria-hidden />
-                      <span className="absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full bg-[#1890ff] text-[9px] leading-none text-white">
-                        {g.listings.length}
-                      </span>
-                    </button>
+                    <span className="flex justify-center">
+                      <button
+                        type="button"
+                        onClick={() => toggle(g.code)}
+                        aria-expanded={open}
+                        aria-controls={`listings-${g.code}`}
+                        aria-label={open ? `收起 ${g.name} 上架记录` : `展开 ${g.name} 上架记录`}
+                        className="relative flex size-6 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:border-[#1890ff] hover:text-[#1890ff]"
+                      >
+                        <ChevronRight className={cn('size-3.5 transition-transform', open && 'rotate-90')} aria-hidden />
+                        <span className="absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full bg-[#1890ff] text-[9px] leading-none text-white">
+                          {g.listings.length}
+                        </span>
+                      </button>
+                    </span>
                     <span className="font-mono text-xs text-muted-foreground">{g.code}</span>
                     <span className="flex min-w-0 flex-col">
                       <span className="truncate font-medium">{g.name}</span>
@@ -456,13 +438,8 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                       <span className="text-muted-foreground">{g.category} / </span>
                       {g.subCategory}
                     </span>
-                    <span className="flex flex-col tabular-nums">
-                      <span>
-                        {g.stock.toLocaleString()} {g.unit}
-                      </span>
-                      <span className={cn('text-xs', listed <= 0 ? 'text-red-600' : 'text-muted-foreground')}>
-                        可售/可租 {listed.toLocaleString()}
-                      </span>
+                    <span className="tabular-nums">
+                      {g.stock.toLocaleString()} {g.unit}
                     </span>
                     <span className="flex flex-wrap gap-1">
                       {statuses.length === 0 && <Tag className="bg-muted text-muted-foreground ring-border">未上架</Tag>}
@@ -480,7 +457,7 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                     </span>
                   </div>
                   {open && (
-                    <div id={`listings-${g.code}`} className="border-b border-border bg-muted/20 px-4 py-3 pl-[76px]">
+                    <div id={`listings-${g.code}`} className="border-b border-border bg-muted/20 px-4 py-3 pl-[84px]">
                       <ListingTable goods={g} />
                     </div>
                   )}
