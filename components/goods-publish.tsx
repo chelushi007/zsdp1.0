@@ -1,7 +1,27 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, Ban, Check, FileText, History, ImagePlus, Info, Plus, ShoppingCart, Timer, Trash2, Truck, X } from 'lucide-react'
+import {
+  ArrowLeft,
+  Ban,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  FileText,
+  History,
+  ImagePlus,
+  Info,
+  Plus,
+  RotateCcw,
+  Save,
+  ShieldCheck,
+  ShoppingCart,
+  Timer,
+  Trash2,
+  Truck,
+  X,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { RegionCascader, Select, Tip, categoryTree, regionTree, type Region } from '@/components/shop-form-fields'
@@ -301,6 +321,83 @@ function Attachments({ files, onChange }: { files: Attachment[]; onChange: (f: A
   )
 }
 
+/* ---------- 发布流程图 ---------- */
+
+type FlowNode = { key: string; title: string; desc: string; icon: React.ComponentType<{ className?: string }>; tone: 'current' | 'default' | 'success' | 'warn' }
+
+const FLOW_NODES: FlowNode[] = [
+  { key: 'fill', title: '填写商品信息', desc: '基本信息、库存、租售方式、运费', icon: FileText, tone: 'current' },
+  { key: 'draft', title: '保存草稿', desc: '可随时修改，不对外展示', icon: Save, tone: 'default' },
+  { key: 'review', title: '提交平台审核', desc: '1 个工作日内完成', icon: ShieldCheck, tone: 'default' },
+  { key: 'live', title: '审核通过 · 自动上架', desc: '状态变为「运营中」', icon: CheckCircle2, tone: 'success' },
+]
+
+const flowTone: Record<FlowNode['tone'], { ring: string; icon: string; title: string }> = {
+  current: { ring: 'border-[#1890ff] bg-[#1890ff]/5', icon: 'bg-[#1890ff] text-white', title: 'text-[#1890ff]' },
+  default: { ring: 'border-border bg-background', icon: 'bg-muted text-muted-foreground', title: 'text-foreground' },
+  success: { ring: 'border-emerald-200 bg-emerald-50/60', icon: 'bg-emerald-600 text-white', title: 'text-emerald-700' },
+  warn: { ring: 'border-amber-200 bg-amber-50/60', icon: 'bg-amber-500 text-white', title: 'text-amber-700' },
+}
+
+function PublishFlow() {
+  return (
+    <section aria-label="发布流程" className="rounded-md border border-border bg-card px-5 py-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="flex items-center gap-1.5 text-sm font-medium">
+          <Info className="size-4 text-[#1890ff]" aria-hidden />
+          发布流程
+        </h2>
+        <span className="text-xs text-muted-foreground">当前处于第 1 步</span>
+      </div>
+
+      <ol className="flex flex-col gap-2 lg:flex-row lg:items-stretch lg:gap-0">
+        {FLOW_NODES.map((node, i) => {
+          const tone = flowTone[node.tone]
+          const Icon = node.icon
+          const isLast = i === FLOW_NODES.length - 1
+          return (
+            <li key={node.key} className="flex flex-1 flex-col lg:flex-row lg:items-center">
+              <div className={cn('flex flex-1 items-center gap-3 rounded-md border px-3 py-2.5', tone.ring)}>
+                <span className={cn('flex size-8 shrink-0 items-center justify-center rounded-full', tone.icon)}>
+                  <Icon className="size-4" aria-hidden />
+                </span>
+                <span className="flex min-w-0 flex-col">
+                  <span className={cn('text-sm font-medium', tone.title)}>
+                    <span className="mr-1 text-xs text-muted-foreground">{i + 1}.</span>
+                    {node.title}
+                  </span>
+                  <span className="truncate text-xs text-muted-foreground">{node.desc}</span>
+                </span>
+              </div>
+              {!isLast && (
+                <span className="flex items-center justify-center py-1 text-muted-foreground lg:px-1.5 lg:py-0" aria-hidden>
+                  <ChevronRight className="hidden size-4 lg:block" />
+                  <ChevronDown className="size-4 lg:hidden" />
+                </span>
+              )}
+            </li>
+          )
+        })}
+      </ol>
+
+      <div className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground lg:flex-row lg:items-center lg:gap-4">
+        <span className="flex items-center gap-1.5">
+          <span className="flex size-4 items-center justify-center rounded-full bg-amber-500 text-white">
+            <RotateCcw className="size-2.5" aria-hidden />
+          </span>
+          审核驳回：返回第 1 步修改后可重新提交
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="flex size-4 items-center justify-center rounded-full bg-red-500 text-white">
+            <Ban className="size-2.5" aria-hidden />
+          </span>
+          上架后如违规将被下架，整改后重新提交审核
+        </span>
+      </div>
+    </section>
+  )
+}
+
 /* ---------- 模板选择 ---------- */
 
 function TemplatePicker({
@@ -452,7 +549,6 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   }
   const removeBanArea = (key: string) => setBanAreas((list) => list.filter((a) => banAreaKey(a) !== key))
   const bannedProvinceCount = new Set(banAreas.map((a) => a.province)).size
-  const effectiveBanAreas = banEnabled ? banAreas : []
 
   const applyFreightTemplate = (name: string) => {
     setFreightTemplate(name)
@@ -511,7 +607,9 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
         </span>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_272px]">
+      <PublishFlow />
+
+      <div className="flex flex-col gap-4">
         <div className="flex min-w-0 flex-col gap-4">
           <Section title="基本信息">
             <div className="grid gap-4 md:grid-cols-2">
@@ -935,39 +1033,6 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
           </Section>
         </div>
 
-        <aside className="flex flex-col gap-4 lg:sticky lg:top-4 lg:self-start">
-          <PreviewCard
-            name={name}
-            subCategory={subCategory}
-            spec={spec}
-            unit={unit}
-            stock={stock}
-            images={images}
-            region={regionLabel}
-            sale={saleOn ? { price: salePrice, minOrder, taxRate, negotiable } : null}
-            rent={rentOn ? { price: rentPrice, period: rentPeriod, deposit, minDays, taxRate: rentTaxRate, negotiable: rentNegotiable } : null}
-            bannedCount={effectiveBanAreas.length}
-            freight={freight}
-          />
-          <div className="flex flex-col gap-2 rounded-md border border-border bg-card p-4 text-xs text-muted-foreground">
-            <p className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-              <Info className="size-4 text-[#1890ff]" aria-hidden />
-              发布流程
-            </p>
-            <ol className="flex flex-col gap-1.5">
-              {['填写信息并保存草稿', '提交平台审核（1 个工作日内）', '审核通过自动上架为「运营中」', '审核驳回可修改后重新提交'].map(
-                (s, i) => (
-                  <li key={s} className="flex items-start gap-2">
-                    <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] text-foreground">
-                      {i + 1}
-                    </span>
-                    {s}
-                  </li>
-                ),
-              )}
-            </ol>
-          </div>
-        </aside>
       </div>
 
       <div className="sticky bottom-0 flex flex-col items-center gap-3 rounded-md border border-border bg-card px-5 py-4 text-center">
@@ -996,128 +1061,9 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   )
 }
 
-/* ---------- 右侧预览 ---------- */
+/* ---------- 工具 ---------- */
 
 function fmt(v: string) {
   const n = Number(v)
   return n > 0 ? n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'
-}
-
-function PreviewCard({
-  name,
-  subCategory,
-  spec,
-  unit,
-  stock,
-  images,
-  region,
-  sale,
-  rent,
-  bannedCount,
-  freight,
-}: {
-  name: string
-  subCategory: string
-  spec: string
-  unit: string
-  stock: string
-  images: number
-  region: string
-  sale: { price: string; minOrder: string; taxRate: string; negotiable: boolean } | null
-  rent: { price: string; period: RentPeriod; deposit: string; minDays: string; taxRate: string; negotiable: boolean } | null
-  bannedCount: number
-  freight: FreightRule
-}) {
-  const u = unit || '单位'
-  const taxText = (rate: string) => (rate === '不含税' ? '不含税' : `含税 ${rate}`)
-  const listings = [
-    sale && {
-      key: 'sale',
-      label: '出售',
-      tone: 'bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/30',
-      main: `¥ ${fmt(sale.price)} / ${u}`,
-      sub: [sale.minOrder ? `起订 ${sale.minOrder} ${u}` : '不限起订量', taxText(sale.taxRate), sale.negotiable ? '可议价' : null]
-        .filter(Boolean)
-        .join(' · '),
-    },
-    rent && {
-      key: 'rent',
-      label: '出租',
-      tone: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-      main: `¥ ${fmt(rent.price)} / ${u} / ${rent.period}`,
-      sub: [
-        `押金 ¥ ${fmt(rent.deposit)}`,
-        rent.minDays ? `最短 ${rent.minDays} ${rent.period}` : null,
-        taxText(rent.taxRate),
-        rent.negotiable ? '可议价' : null,
-      ]
-        .filter(Boolean)
-        .join(' · '),
-    },
-  ].filter(Boolean) as { key: string; label: string; tone: string; main: string; sub: string }[]
-
-  const freightText =
-    freight.mode === '包邮'
-      ? '全国包邮'
-      : freight.mode === '到付'
-        ? '运费到付'
-        : freight.mode === '固定运费'
-          ? `运费 ¥ ${fmt(freight.base)} / 单${freight.freeOver ? `，满 ¥ ${Number(freight.freeOver).toLocaleString()} 包邮` : ''}`
-          : freight.mode === '按数量计费'
-            ? `首 ${freight.firstQty || '—'} ${u} ¥ ${fmt(freight.base)}，每增 ${freight.addQty || '—'} ${u} 加 ¥ ${fmt(freight.addFee)}`
-            : `起步 ¥ ${fmt(freight.base)}，超出每公里 ¥ ${fmt(freight.perKm)}`
-
-  return (
-    <div className="flex flex-col gap-3 rounded-md border border-border bg-card p-4">
-      <p className="text-sm font-medium">上架预览</p>
-      <div className="flex gap-3">
-        <div className="flex size-16 shrink-0 items-center justify-center rounded border border-border bg-muted/40 text-[10px] text-muted-foreground">
-          {images > 0 ? '主图' : '暂无图'}
-        </div>
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <p className={cn('line-clamp-2 text-sm font-medium leading-5', !name && 'text-muted-foreground/60')}>
-            {name || '商品名称'}
-          </p>
-          <p className="truncate text-xs text-muted-foreground">
-            {[subCategory || '品类', spec || '规格型号'].join(' · ')}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            库存 {Number(stock) > 0 ? Number(stock).toLocaleString() : '—'} {u}
-          </p>
-          <p className={cn('truncate text-xs', region ? 'text-muted-foreground' : 'text-muted-foreground/60')}>
-            {region || '商品所在地'}
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-1.5 text-[11px]">
-        <span className="flex items-center gap-1 rounded bg-muted px-1.5 leading-5 text-muted-foreground ring-1 ring-inset ring-border">
-          <Truck className="size-3" aria-hidden />
-          {freightText}
-        </span>
-        <span
-          className={cn(
-            'flex items-center gap-1 rounded px-1.5 leading-5 ring-1 ring-inset',
-            bannedCount > 0 ? 'bg-red-50 text-red-600 ring-red-200' : 'bg-muted text-muted-foreground ring-border',
-          )}
-        >
-          <Ban className="size-3" aria-hidden />
-          {bannedCount > 0 ? `${bannedCount} 个地区禁售` : '全国可售'}
-        </span>
-      </div>
-      <div className="flex flex-col gap-2 border-t border-border pt-3">
-        <p className="text-xs text-muted-foreground">将生成 {listings.length} 条上架记录</p>
-        {listings.length === 0 && <p className="text-xs text-amber-700">尚未启用租售方式</p>}
-        {listings.map((l) => (
-          <div key={l.key} className="flex items-center gap-2 rounded border border-border px-2.5 py-2">
-            <span className={cn('rounded px-1.5 text-[10px] leading-4 ring-1 ring-inset', l.tone)}>{l.label}</span>
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="truncate text-sm tabular-nums">{l.main}</span>
-              <span className="truncate text-[11px] text-muted-foreground">{l.sub}</span>
-            </span>
-            <Check className={cn('size-4', l.main.includes('—') ? 'text-muted-foreground/30' : 'text-emerald-600')} aria-hidden />
-          </div>
-        ))}
-      </div>
-    </div>
-  )
 }
