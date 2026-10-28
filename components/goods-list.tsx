@@ -51,6 +51,7 @@ type Goods = {
   code: string
   name: string
   spec: string
+  shop: string
   category: string
   subCategory: string
   unit: string
@@ -68,6 +69,7 @@ type Goods = {
 const goodsData: Goods[] = [
   {
     code: 'G2024030001',
+    shop: '华东建设工程有限公司周转材料店',
     name: '覆膜竹胶板 1220×2440×15mm',
     spec: '15mm / 整张',
     category: '循环物资',
@@ -84,6 +86,7 @@ const goodsData: Goods[] = [
   },
   {
     code: 'G2024030002',
+    shop: '杭州分公司脚手架专营店',
     name: '盘扣式钢管脚手架 Φ48×3.2 立杆 2.0m',
     spec: 'Q355 / 热镀锌',
     category: '循环物资',
@@ -100,6 +103,7 @@ const goodsData: Goods[] = [
   },
   {
     code: 'G2024040003',
+    shop: '华东建设工程有限公司周转材料店',
     name: '钢支撑 Φ609×16 基坑内支撑',
     spec: '9m / 12m 标准节',
     category: '循环物资',
@@ -126,6 +130,7 @@ const goodsData: Goods[] = [
   },
   {
     code: 'G2024050004',
+    shop: '苏州分公司模板租赁店',
     name: '装配式围挡 2.5m 高 彩钢',
     spec: '2.5m×2.0m / 片',
     category: '循环物资',
@@ -139,6 +144,7 @@ const goodsData: Goods[] = [
   },
   {
     code: 'G2024060005',
+    shop: '华东建设工程有限公司周转材料店',
     name: '施工轨道 P43 钢轨 12.5m',
     spec: '43kg/m',
     category: '循环物资',
@@ -152,6 +158,7 @@ const goodsData: Goods[] = [
   },
   {
     code: 'G2024070006',
+    shop: '杭州分公司脚手架专营店',
     name: 'H 型钢 400×200×8×13',
     spec: 'Q235B / 12m',
     category: '循环物资',
@@ -168,6 +175,7 @@ const goodsData: Goods[] = [
   },
   {
     code: 'G2024100009',
+    shop: '苏州分公司模板租赁店',
     name: '组合式钢模板 300×1500 平模',
     spec: 'Q235 / 5mm 面板',
     category: '循环物资',
@@ -192,6 +200,7 @@ const goodsData: Goods[] = [
   },
   {
     code: 'G2024080007',
+    shop: '华东建设工程有限公司周转材料店',
     name: 'YJV 低压电缆 3×95+1×50',
     spec: '0.6/1kV / 米',
     category: '循环物资',
@@ -206,6 +215,7 @@ const goodsData: Goods[] = [
   },
   {
     code: 'G2024090008',
+    shop: '苏州分公司模板租赁店',
     name: '打包箱式活动房 3×6m 标准箱',
     spec: '含门窗 / 不含电',
     category: '循环物资',
@@ -887,7 +897,7 @@ function matches(g: Goods, f: Filters) {
   return true
 }
 
-const columns = '48px 118px minmax(160px,1.5fr) 120px 90px 100px 72px 92px minmax(170px,1fr)'
+const columns = '48px 118px minmax(160px,1.5fr) minmax(130px,1fr) 120px 90px 100px 72px 92px minmax(170px,1fr)'
 const listingColumns = '120px 72px minmax(160px,1fr) 110px 80px 130px'
 const entrustColumns = '100px 72px minmax(160px,1fr) 100px minmax(170px,1fr) 80px 90px'
 
@@ -1111,7 +1121,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
         </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[1040px]">
+          <div className="min-w-[1180px]">
             <div
               className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-medium text-muted-foreground"
               style={{ gridTemplateColumns: columns }}
@@ -1119,6 +1129,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
               <span className="text-center">展开</span>
               <span>商品编码</span>
               <span>商品名称</span>
+              <span>所属店铺</span>
               <span>品类</span>
               <span>库存</span>
               <span>状态</span>
@@ -1162,6 +1173,9 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
                     <span className="flex min-w-0 flex-col">
                       <span className="truncate font-medium">{g.name}</span>
                       <span className="truncate text-xs text-muted-foreground">{g.spec}</span>
+                    </span>
+                    <span className="truncate text-xs" title={g.shop}>
+                      {g.shop}
                     </span>
                     <span className="text-xs">
                       <span className="text-muted-foreground">{g.category} / </span>

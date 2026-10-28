@@ -31,11 +31,13 @@ const UNITS = ['张', '件', '套', '根', '米', '吨', '平方米', '块']
 const CONDITIONS = ['全新', '九成新', '八成新', '七成新及以下']
 const SHOPS = ['华东建设工程有限公司周转材料店', '苏州分公司模板租赁店', '杭州分公司脚手架专营店']
 const RENT_PERIODS = ['天', '月'] as const
+const PAY_TERMS = ['先款后货', '货到付款'] as const
 const TAX_RATES = ['不含税', '1%', '3%', '6%', '9%', '13%']
 const GOODS_IMAGES_MAX = 9
 const EMPTY_REGION: Region = { province: '', city: '', district: '' }
 
 type RentPeriod = (typeof RENT_PERIODS)[number]
+type PayTerm = (typeof PAY_TERMS)[number]
 
 /** 禁售地区：精确到省或市，city 为空表示整省禁售 */
 type BanArea = { province: string; city?: string }
@@ -583,7 +585,7 @@ function BanTemplateManager({
                   </Button>
                 </div>
               </Field>
-              <Field label="禁售地区" required hint={draft.areas.length ? `共 ${draft.areas.length} 个地区` : '至少添加一个禁售地区'}>
+              <Field label="禁售地区" required hint={draft.areas.length ? `共 ${draft.areas.length} 个地区` : '至少���加一个禁售地区'}>
                 {draft.areas.length === 0 ? (
                   <p className="flex h-9 items-center text-sm text-muted-foreground">尚未添加</p>
                 ) : (
@@ -739,9 +741,11 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const [minOrder, setMinOrder] = useState('')
   const [taxRate, setTaxRate] = useState('13%')
   const [negotiable, setNegotiable] = useState(false)
+  const [salePayTerm, setSalePayTerm] = useState<PayTerm>('先款后货')
 
   const [rentOn, setRentOn] = useState(false)
   const [rentPeriod, setRentPeriod] = useState<RentPeriod>('天')
+  const [rentPayTerm, setRentPayTerm] = useState<PayTerm>('先款后货')
   const [rentPrice, setRentPrice] = useState('')
   const [deposit, setDeposit] = useState('')
   const [minDays, setMinDays] = useState('')
@@ -936,6 +940,9 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
                 <Field label="税率" required hint="选择「不含税」则价格为不含税报价">
                   <Select label="出售税率" placeholder="请选择税率" value={taxRate} options={TAX_RATES} onChange={setTaxRate} />
                 </Field>
+                <Field label="结算方式" required>
+                  <RadioGroup label="出售结算方式" value={salePayTerm} options={PAY_TERMS} onChange={setSalePayTerm} />
+                </Field>
                 <Field label="议价">
                   <label className="flex h-9 items-center gap-2 text-sm">
                     <Switch checked={negotiable} onChange={setNegotiable} label="出售支持议价" />
@@ -976,6 +983,9 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
                 </Field>
                 <Field label="税率" required hint="选择「不含税」则租金为不含税报价">
                   <Select label="出租税率" placeholder="请选择税率" value={rentTaxRate} options={TAX_RATES} onChange={setRentTaxRate} />
+                </Field>
+                <Field label="结算方式" required>
+                  <RadioGroup label="出租结算方式" value={rentPayTerm} options={PAY_TERMS} onChange={setRentPayTerm} />
                 </Field>
                 <Field label="议价">
                   <label className="flex h-9 items-center gap-2 text-sm">
