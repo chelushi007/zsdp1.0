@@ -61,6 +61,7 @@ type Goods = {
   statusNote?: string
   listings: Listing[]
   entrust?: Entrust
+  createdAt: string
   updatedAt: string
 }
 
@@ -78,6 +79,7 @@ const goodsData: Goods[] = [
       { id: 'L240302001', type: 'sale', status: 'on', price: 128, minOrder: 50, quantity: 3200, used: 1250 },
       { id: 'L240302002', type: 'rent', status: 'on', price: 0.6, period: '天', deposit: 60, minDays: 30, quantity: 1800, used: 1260 },
     ],
+    createdAt: '2024-03-15 10:20',
     updatedAt: '2024-10-12 09:20',
   },
   {
@@ -93,6 +95,7 @@ const goodsData: Goods[] = [
       { id: 'L240315001', type: 'rent', status: 'on', price: 0.045, period: '天', deposit: 85, minDays: 90, quantity: 12000, used: 9800 },
       { id: 'L240110003', type: 'rent', status: 'off', price: 0.05, period: '天', deposit: 85, minDays: 90, quantity: 8000, used: 8000 },
     ],
+    createdAt: '2024-05-08 14:30',
     updatedAt: '2024-10-20 16:45',
   },
   {
@@ -118,6 +121,7 @@ const goodsData: Goods[] = [
       status: 'accepted',
       createdAt: '2024-09-18',
     },
+    createdAt: '2024-04-02 09:05',
     updatedAt: '2024-09-30 11:10',
   },
   {
@@ -130,6 +134,7 @@ const goodsData: Goods[] = [
     stock: 860,
     status: 'draft',
     listings: [{ id: 'L240520001', type: 'sale', status: 'off', price: 365, minOrder: 20, quantity: 860, used: 210 }],
+    createdAt: '2024-06-18 16:40',
     updatedAt: '2024-10-02 08:50',
   },
   {
@@ -142,6 +147,7 @@ const goodsData: Goods[] = [
     stock: 60,
     status: 'off',
     listings: [{ id: 'L240611001', type: 'rent', status: 'off', price: 280, period: '月', deposit: 6000, minDays: 90, quantity: 60, used: 18 }],
+    createdAt: '2024-05-27 11:15',
     updatedAt: '2024-08-19 13:25',
   },
   {
@@ -157,6 +163,7 @@ const goodsData: Goods[] = [
       { id: 'L240703001', type: 'sale', status: 'on', price: 4280, minOrder: 5, quantity: 95, used: 30 },
       { id: 'L240703002', type: 'rent', status: 'on', price: 9.5, period: '天', deposit: 2500, minDays: 60, quantity: 300, used: 120 },
     ],
+    createdAt: '2024-07-09 10:00',
     updatedAt: '2024-10-25 17:05',
   },
   {
@@ -180,6 +187,7 @@ const goodsData: Goods[] = [
       status: 'pending',
       createdAt: '2024-10-27',
     },
+    createdAt: '2024-08-21 15:30',
     updatedAt: '2024-10-27 10:15',
   },
   {
@@ -193,6 +201,7 @@ const goodsData: Goods[] = [
     status: 'violation',
     statusNote: '商品图片含联系方式水印，违反平台发布规范',
     listings: [{ id: 'L240816001', type: 'rent', status: 'off', price: 0.35, period: '天', deposit: 45, minDays: 30, quantity: 8000, used: 7900 }],
+    createdAt: '2024-09-12 09:45',
     updatedAt: '2024-10-22 10:00',
   },
   {
@@ -209,6 +218,7 @@ const goodsData: Goods[] = [
       { id: 'L240905001', type: 'sale', status: 'off', price: 16800, minOrder: 1, quantity: 24, used: 6 },
       { id: 'L240905002', type: 'rent', status: 'off', price: 980, period: '月', deposit: 5000, minDays: 180, quantity: 40, used: 33 },
     ],
+    createdAt: '2024-10-16 13:20',
     updatedAt: '2024-10-18 09:35',
   },
 ]
@@ -877,7 +887,7 @@ function matches(g: Goods, f: Filters) {
   return true
 }
 
-const columns = '48px 118px minmax(160px,1.5fr) 120px 90px 100px 72px minmax(170px,1fr)'
+const columns = '48px 118px minmax(160px,1.5fr) 120px 90px 100px 72px 92px minmax(170px,1fr)'
 const listingColumns = '120px 72px minmax(160px,1fr) 110px 80px 130px'
 const entrustColumns = '100px 72px minmax(160px,1fr) 100px minmax(170px,1fr) 80px 90px'
 
@@ -950,6 +960,15 @@ function EntrustTable({ goods, onCancel }: { goods: Goods; onCancel: () => void 
   )
 }
 
+const usedLabel = (t: BizType) => (t === 'sale' ? '已售' : '已租')
+
+/** 表头按该商品上架记录的租售类型取名：只有出售显示「已售」，只有出租显示「已租」，混合时为「已售 / 已租」并在行内标注 */
+function listingUsedHeader(listings: Listing[]) {
+  const types = new Set(listings.map((l) => l.type))
+  if (types.size === 1) return usedLabel([...types][0])
+  return '已售 / 已租'
+}
+
 function ListingTable({ goods }: { goods: Goods }) {
   return (
     <div className="overflow-hidden rounded border border-border bg-card">
@@ -964,12 +983,13 @@ function ListingTable({ goods }: { goods: Goods }) {
         <span>上架单号</span>
         <span>租售方式</span>
         <span>价格</span>
-        <span>已售 / 已租</span>
+        <span>{listingUsedHeader(goods.listings)}</span>
         <span>状态</span>
         <span>操作</span>
       </div>
       {goods.listings.map((l) => {
         const meta = bizMeta[l.type]
+        const mixed = new Set(goods.listings.map((x) => x.type)).size > 1
         return (
           <div
             key={l.id}
@@ -983,6 +1003,7 @@ function ListingTable({ goods }: { goods: Goods }) {
               {l.type === 'rent' && l.period ? ` / ${l.period}` : ''}
             </span>
             <span className="tabular-nums">
+              {mixed && <span className="mr-1 text-xs text-muted-foreground">{usedLabel(l.type)}</span>}
               {l.used.toLocaleString()} {goods.unit}
             </span>
             <Tag className={listingStatusMeta[l.status].className}>{listingStatusMeta[l.status].label}</Tag>
@@ -1090,7 +1111,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
         </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[940px]">
+          <div className="min-w-[1040px]">
             <div
               className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-medium text-muted-foreground"
               style={{ gridTemplateColumns: columns }}
@@ -1102,6 +1123,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
               <span>库存</span>
               <span>状态</span>
               <span>委托情况</span>
+              <span>创建时间</span>
               <span>操作</span>
             </div>
 
@@ -1165,6 +1187,10 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
                       ) : (
                         <Tag className="bg-muted text-muted-foreground ring-border">无</Tag>
                       )}
+                    </span>
+                    <span className="flex flex-col font-mono text-xs leading-4 text-muted-foreground">
+                      <span>{g.createdAt.slice(0, 10)}</span>
+                      <span className="text-[11px]">{g.createdAt.slice(11)}</span>
                     </span>
                     <GoodsActions goods={g} onAction={(a) => handleAction(g, a)} />
                   </div>
