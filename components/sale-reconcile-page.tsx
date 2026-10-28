@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { CheckCircle2, FileText, Paperclip, Plus, Upload } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarRange,
+  CheckCircle2,
+  FileText,
+  Paperclip,
+  Plus,
+  Upload,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -39,6 +47,8 @@ export type StatementDraft = {
   amount: number;
   cycle: StatementCycle;
   period: string;
+  periodStart?: string;
+  periodEnd?: string;
   lines: StatementLine[];
   note: string;
   attachment: string;
@@ -59,19 +69,346 @@ export function nextStatementNo(o: SaleOrder) {
   return { seq, no: `DZ${o.id.slice(2)}-${String(seq).padStart(2, "0")}` };
 }
 
-/** 根据周期类型给出默认的周期描述：一次性为全量，按月 / 按季度取当前所属期 */
-function defaultPeriod(cycle: StatementCycle) {
+/* ---------- 周期 / 日期工具 ---------- */
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const monthEnd = (y: number, m: number) => new Date(y, m, 0).getDate();
+const addDays = (d: string, n: number) => {
+  const [y, m, dd] = d.split("-").map(Number);
+  const t = new Date(y, m - 1, dd + n);
+  return `${t.getFullYear()}-${pad2(t.getMonth() + 1)}-${pad2(t.getDate())}`;
+};
+const fmtDate = (d: string) => d.replace(/-/g, "/");
+
+type Quarter = { year: number; q: number };
+const quarterRange = ({ year, q }: Quarter) => {
+  const m1 = (q - 1) * 3 + 1;
+  return {
+    start: `${year}-${pad2(m1)}-01`,
+    end: `${year}-${pad2(m1 + 2)}-${monthEnd(year, m1 + 2)}`,
+  };
+};
+const quarterOf = (d: string): Quarter => {
+  const [y, m] = d.split("-").map(Number);
+  return { year: y, q: Math.ceil(m / 3) };
+};
+const nextQuarter = ({ year, q }: Quarter): Quarter =>
+  q === 4 ? { year: year + 1, q: 1 } : { year, q: q + 1 };
+const quarterLabel = ({ year, q }: Quarter) => `${year} 年第 ${q} 季度对账`;
+const quarterKey = ({ year, q }: Quarter) => `${year}Q${q}`;
+
+type PeriodRange = { start: string; end: string };
+
+/** 按方式计算默认周期：按月取当月，按季度取上期之后的季度，自定义从上期结束次日到今天 */
+function defaultRange(cycle: StatementCycle, latest?: Statement): PeriodRange {
   const [y, m] = TODAY.split("-").map(Number);
-  if (cycle === "按月") return `${y}-${String(m).padStart(2, "0")} 月度对账`;
-  if (cycle === "按季度") return `${y} 年第 ${Math.ceil(m / 3)} 季度对账`;
+  if (cycle === "按月") {
+    return {
+      start: `${y}-${pad2(m)}-01`,
+      end: `${y}-${pad2(m)}-${monthEnd(y, m)}`,
+    };
+  }
+  if (cycle === "按季度") {
+    const q = latest?.periodEnd
+      ? nextQuarter(quarterOf(latest.periodEnd))
+      : quarterOf(TODAY);
+    return quarterRange(q);
+  }
+  if (cycle === "自定义") {
+    return {
+      start: latest?.periodEnd ? addDays(latest.periodEnd, 1) : TODAY,
+      end: TODAY,
+    };
+  }
+  return { start: TODAY, end: TODAY };
+}
+
+function periodLabel(cycle: StatementCycle, r: PeriodRange) {
+  if (cycle === "按月") return `${r.start.slice(0, 7)} 月度对账`;
+  if (cycle === "按季度") return quarterLabel(quarterOf(r.start));
+  if (cycle === "自定义") return `${r.start} ~ ${r.end}`;
   return `${TODAY} 一次性对账`;
 }
 
 const cycleHint: Record<StatementCycle, string> = {
   一次性: "一次性对账：按订单全部未对账数量一次对账，不分期",
   按月: "按月分期：默认带入本月未对账数量，可按实际到货调整",
-  按季度: "按季度分期：默认带入本季度未对账数量，可按实际到货调整",
+  按季度: "按季度分期：每季度对账一次，选择所属季度后自动带出起止日期",
+  自定义: "自定义周期：自行设定起止日期，可多次对账，各期首尾相接",
 };
+
+/** 按季度：季度选择器 + 已对账季度时间轴 */
+function QuarterPicker({
+  value,
+  history,
+  orderStart,
+  onChange,
+}: {
+  value: Quarter;
+  history: Statement[];
+  orderStart: string;
+  onChange: (q: Quarter) => void;
+}) {
+  const done = new Map(
+    history
+      .filter((s) => s.periodStart)
+      .map((s) => [quarterKey(quarterOf(s.periodStart!)), s] as const),
+  );
+  const current = quarterOf(TODAY);
+  const years = Array.from(
+    new Set([
+      ...history.map((s) =>
+        s.periodStart ? quarterOf(s.periodStart).year : current.year,
+      ),
+      current.year,
+      value.year,
+    ]),
+  ).sort();
+  return (
+    <div className="flex flex-col gap-3">
+      {years.map((year) => (
+        <div key={year} className="flex items-center gap-2">
+          <span className="w-12 shrink-0 text-xs text-muted-foreground tabular-nums">
+            {year} 年
+          </span>
+          <div className="grid flex-1 grid-cols-4 gap-2">
+            {[1, 2, 3, 4].map((q) => {
+              const qt = { year, q };
+              const st = done.get(quarterKey(qt));
+              const selected = value.year === year && value.q === q;
+              const future =
+                year > current.year || (year === current.year && q > current.q);
+              const ongoing = year === current.year && q === current.q;
+              const beforeOrder = quarterRange(qt).end < orderStart;
+              const unavailable = future || beforeOrder;
+              return (
+                <button
+                  key={q}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  disabled={!!st || unavailable}
+                  onClick={() => onChange(qt)}
+                  title={
+                    st
+                      ? `${st.no} · ${st.state}`
+                      : future
+                        ? "季度尚未开始"
+                        : beforeOrder
+                          ? "早于订单创建时间"
+                          : undefined
+                  }
+                  className={cn(
+                    "flex h-12 flex-col items-center justify-center rounded border text-xs transition-colors",
+                    selected
+                      ? "border-[#1890ff] bg-[#1890ff]/5 font-medium text-[#1890ff]"
+                      : st
+                        ? "cursor-default border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : unavailable
+                          ? "cursor-not-allowed border-dashed border-border text-muted-foreground/60"
+                          : "border-border bg-background text-muted-foreground hover:border-[#1890ff]/50 hover:text-foreground",
+                  )}
+                >
+                  <span className="font-medium">Q{q}</span>
+                  <span className="text-[10px] leading-3">
+                    {st
+                      ? `第 ${st.seq} 期 · ${st.state}`
+                      : beforeOrder
+                        ? "订单前"
+                        : selected
+                          ? ongoing
+                            ? "本季度 · 进行中"
+                            : "本期对账"
+                          : ongoing
+                            ? "本季度"
+                            : future
+                              ? "未开始"
+                              : "未对账"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 自定义：起止日期 + 历史周期时间轴 */
+function CustomRangeEditor({
+  range,
+  history,
+  onChange,
+  error,
+}: {
+  range: PeriodRange;
+  history: Statement[];
+  onChange: (r: PeriodRange) => void;
+  error?: string;
+}) {
+  const minStart = history.length
+    ? addDays(history[history.length - 1].periodEnd ?? TODAY, 1)
+    : undefined;
+  const days =
+    range.start && range.end && range.end >= range.start
+      ? Math.round(
+          (new Date(range.end).getTime() - new Date(range.start).getTime()) /
+            86400000,
+        ) + 1
+      : 0;
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="grid gap-3 sm:grid-cols-[1fr_auto_1fr_auto]">
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          周期开始
+          <input
+            type="date"
+            aria-label="周期开始"
+            value={range.start}
+            min={minStart}
+            max={TODAY}
+            onChange={(e) => onChange({ ...range, start: e.target.value })}
+            className={cn(INPUT_CLS, "tabular-nums", error && "border-red-400")}
+          />
+        </label>
+        <span className="hidden items-end pb-2.5 text-muted-foreground sm:flex">
+          ~
+        </span>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          周期结束
+          <input
+            type="date"
+            aria-label="周期结束"
+            value={range.end}
+            min={range.start || minStart}
+            max={TODAY}
+            onChange={(e) => onChange({ ...range, end: e.target.value })}
+            className={cn(INPUT_CLS, "tabular-nums", error && "border-red-400")}
+          />
+        </label>
+        <div className="flex items-end">
+          <span className="flex h-9 items-center rounded border border-border bg-muted/40 px-3 text-xs tabular-nums text-muted-foreground">
+            {days > 0 ? `共 ${days} 天` : "��"}
+          </span>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-muted-foreground">快捷：</span>
+        {[
+          ["截至今天", { start: minStart ?? range.start, end: TODAY }],
+          ["最近 15 天", { start: addDays(TODAY, -14), end: TODAY }],
+          ["最近 30 天", { start: addDays(TODAY, -29), end: TODAY }],
+          ["本月至今", { start: `${TODAY.slice(0, 7)}-01`, end: TODAY }],
+        ].map(([label, r]) => {
+          const rr = r as PeriodRange;
+          const disabled = !!minStart && rr.start < minStart;
+          return (
+            <button
+              key={label as string}
+              type="button"
+              disabled={disabled}
+              onClick={() => onChange(rr)}
+              className="rounded border border-border px-2 py-0.5 text-muted-foreground hover:border-[#1890ff]/50 hover:text-[#1890ff] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              {label as string}
+            </button>
+          );
+        })}
+      </div>
+      {error ? (
+        <span className="flex items-center gap-1 text-xs text-red-600">
+          <AlertTriangle className="size-3.5" />
+          {error}
+        </span>
+      ) : (
+        minStart && (
+          <span className="text-xs text-muted-foreground">
+            上一期截至 {history[history.length - 1].periodEnd}，本期需从{" "}
+            {minStart} 起连续对账
+          </span>
+        )
+      )}
+      <PeriodTimeline history={history} current={range} />
+    </div>
+  );
+}
+
+/** 周期时间轴：历史各期 + 本期（用于自定义 / 按季度） */
+function PeriodTimeline({
+  history,
+  current,
+}: {
+  history: Statement[];
+  current?: PeriodRange;
+}) {
+  const items = [
+    ...history.map((s) => ({
+      key: s.no,
+      label: `第 ${s.seq} 期`,
+      start: s.periodStart,
+      end: s.periodEnd,
+      state: s.state as StatementState | "本期",
+      amount: s.amount,
+    })),
+    ...(current && current.start && current.end
+      ? [
+          {
+            key: "current",
+            label: `第 ${history.length + 1} 期`,
+            start: current.start,
+            end: current.end,
+            state: "本期" as const,
+            amount: undefined,
+          },
+        ]
+      : []),
+  ];
+  if (items.length === 0) return null;
+  return (
+    <ol className="flex flex-wrap gap-2">
+      {items.map((it) => (
+        <li
+          key={it.key}
+          className={cn(
+            "flex min-w-[150px] flex-1 flex-col gap-0.5 rounded border px-3 py-2 text-xs",
+            it.state === "本期"
+              ? "border-[#1890ff] bg-[#1890ff]/5"
+              : it.state === "已确认"
+                ? "border-emerald-200 bg-emerald-50/60"
+                : it.state === "有异议"
+                  ? "border-red-200 bg-red-50/60"
+                  : "border-amber-200 bg-amber-50/60",
+          )}
+        >
+          <span className="flex items-center justify-between gap-2">
+            <span
+              className={cn(
+                "font-medium",
+                it.state === "本期" && "text-[#1890ff]",
+              )}
+            >
+              {it.label}
+            </span>
+            {it.state === "本期" ? (
+              <span className="text-[#1890ff]">本期</span>
+            ) : (
+              <StatementTag state={it.state} />
+            )}
+          </span>
+          <span className="flex items-center gap-1 tabular-nums text-muted-foreground">
+            <CalendarRange className="size-3" />
+            {it.start ? fmtDate(it.start) : "—"} ~{" "}
+            {it.end ? fmtDate(it.end) : "—"}
+          </span>
+          {it.amount !== undefined && (
+            <span className="tabular-nums">{fmtMoney(it.amount)}</span>
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 type LineRow = OrderLine & { done: number; remain: number };
 
@@ -144,6 +481,11 @@ function StatementHistory({
                   )}
                   <span className="truncate text-xs">{s.period || "—"}</span>
                 </span>
+                {s.periodStart && s.periodEnd && s.cycle !== "自定义" && (
+                  <span className="text-[11px] tabular-nums text-muted-foreground">
+                    {fmtDate(s.periodStart)} ~ {fmtDate(s.periodEnd)}
+                  </span>
+                )}
                 {s.note && (
                   <span
                     className="truncate text-xs text-muted-foreground"
@@ -387,17 +729,39 @@ export function SaleReconcilePage({
       !allDone &&
       (!latest || latest.state === "有异议" || history.length > 0),
   );
-  const [cycle, setCycle] = useState<StatementCycle>(latest?.cycle ?? "一次性");
-  const [period, setPeriod] = useState(
-    defaultPeriod(latest?.cycle ?? "一次性"),
+  const initialCycle: StatementCycle = latest?.cycle ?? "一次性";
+  const [cycle, setCycle] = useState<StatementCycle>(initialCycle);
+  const [range, setRange] = useState<PeriodRange>(() =>
+    defaultRange(initialCycle, latest),
+  );
+  const [periodText, setPeriodText] = useState(() =>
+    periodLabel(initialCycle, defaultRange(initialCycle, latest)),
   );
   const [qty, setQty] = useState<Record<string, string>>(() =>
     Object.fromEntries(rows.map((r) => [r.code, String(r.remain)])),
   );
   const [freightIncluded, setFreightIncluded] = useState(seq === 1 || allDone);
   const oneOff = cycle === "一次性";
+  const quarterly = cycle === "按季度";
+  const custom = cycle === "自定义";
   /** 已发出过分期对账单后，对账方式随首期固定，不可再切换 */
   const cycleLocked = history.length > 0 && !!latest?.cycle;
+  /** 按月沿用可编辑文本，其余方式由起止日期推导 */
+  const period = cycle === "按月" ? periodText : periodLabel(cycle, range);
+  const minCustomStart = latest?.periodEnd
+    ? addDays(latest.periodEnd, 1)
+    : undefined;
+  const rangeError = custom
+    ? !range.start || !range.end
+      ? "请填写周期开始与结束日期"
+      : range.end < range.start
+        ? "结束日期不能早于开始日期"
+        : minCustomStart && range.start < minCustomStart
+          ? `开始日期不能早于上一期结束次日（${minCustomStart}）`
+          : range.end > TODAY
+            ? "结束日期不能晚于今天"
+            : undefined
+    : undefined;
   const [note, setNote] = useState("");
   const [attachment, setAttachment] = useState("");
 
@@ -412,7 +776,11 @@ export function SaleReconcilePage({
   const amountNum = goodsTotal + freightPart;
   const overflow = rows.some((r) => (Number(qty[r.code]) || 0) > r.remain);
   const valid =
-    draftLines.length > 0 && amountNum > 0 && period.trim() && !overflow;
+    draftLines.length > 0 &&
+    amountNum > 0 &&
+    period.trim() &&
+    !overflow &&
+    !rangeError;
   const isLastPeriod = rows.every(
     (r) => (Number(qty[r.code]) || 0) >= r.remain,
   );
@@ -420,10 +788,16 @@ export function SaleReconcilePage({
   const fillRemain = () =>
     setQty(Object.fromEntries(rows.map((r) => [r.code, String(r.remain)])));
 
+  const applyCycle = (c: StatementCycle) => {
+    const r = defaultRange(c, latest);
+    setCycle(c);
+    setRange(r);
+    setPeriodText(periodLabel(c, r));
+  };
+
   const changeCycle = (c: StatementCycle) => {
     if (cycleLocked) return;
-    setCycle(c);
-    setPeriod(defaultPeriod(c));
+    applyCycle(c);
     if (c === "一次性") {
       fillRemain();
       setFreightIncluded(o.freight > 0);
@@ -431,9 +805,7 @@ export function SaleReconcilePage({
   };
 
   const resetForm = () => {
-    const c = latest?.cycle ?? "一次性";
-    setCycle(c);
-    setPeriod(defaultPeriod(c));
+    applyCycle(initialCycle);
     setQty(Object.fromEntries(rows.map((r) => [r.code, String(r.remain)])));
     setFreightIncluded(seq === 1);
     setNote("");
@@ -445,6 +817,16 @@ export function SaleReconcilePage({
   const summaryRows: [string, React.ReactNode][] = [
     ["对账状态", o.reconcile ?? "—"],
     ["对账方式", latest?.cycle ?? (creating ? cycle : "—")],
+    ...(latest?.periodStart && latest.periodEnd
+      ? ([
+          [
+            "上期周期",
+            <span key="p" className="text-xs tabular-nums">
+              {fmtDate(latest.periodStart)} ~ {fmtDate(latest.periodEnd)}
+            </span>,
+          ],
+        ] as [string, React.ReactNode][])
+      : []),
     ["累计对账期数", `${history.length} 期`],
     ["买方已确认", `${confirmed.length} 期`],
     [
@@ -527,7 +909,7 @@ export function SaleReconcilePage({
                   <div
                     role="radiogroup"
                     aria-label="对账方式"
-                    className="grid grid-cols-3 gap-2"
+                    className="grid grid-cols-4 gap-2"
                   >
                     {statementCycles.map((c) => (
                       <button
@@ -552,10 +934,10 @@ export function SaleReconcilePage({
                     ))}
                   </div>
                 </DialogField>
-                {oneOff ? (
+                {oneOff && (
                   <DialogField
                     label="对账范围"
-                    hint="一次性对账覆盖订单全部商品数量，无需分期"
+                    hint="一次性对账覆盖���单全部商品数量，无需分期"
                   >
                     <div className="flex h-9 items-center justify-between rounded border border-border bg-muted/40 px-3 text-sm">
                       <span className="text-xs text-muted-foreground">
@@ -564,20 +946,85 @@ export function SaleReconcilePage({
                       <span className="tabular-nums">{period}</span>
                     </div>
                   </DialogField>
-                ) : (
+                )}
+                {cycle === "按月" && (
                   <DialogField
                     label="所属期 / 范围"
                     required
-                    hint="按所选方式自动带出，可手动修改"
+                    hint={`${fmtDate(range.start)} ~ ${fmtDate(range.end)}，可手动修改所属期名称`}
                   >
                     <DialogInput
                       label="所属期"
-                      value={period}
-                      onChange={setPeriod}
+                      value={periodText}
+                      onChange={setPeriodText}
                     />
                   </DialogField>
                 )}
+                {quarterly && (
+                  <DialogField
+                    label="所属季度"
+                    required
+                    hint={`${period}：${fmtDate(range.start)} ~ ${fmtDate(range.end)}`}
+                  >
+                    <div className="flex h-9 items-center justify-between rounded border border-border bg-muted/40 px-3 text-sm">
+                      <span className="text-xs text-muted-foreground">
+                        第 {seq} 期
+                      </span>
+                      <span className="tabular-nums">
+                        {quarterOf(range.start).year} Q
+                        {quarterOf(range.start).q}
+                      </span>
+                    </div>
+                  </DialogField>
+                )}
+                {custom && (
+                  <DialogField
+                    label="对账周期"
+                    required
+                    hint={rangeError ? undefined : `第 ${seq} 期：${period}`}
+                  >
+                    <div className="flex h-9 items-center justify-between rounded border border-border bg-muted/40 px-3 text-sm">
+                      <span className="text-xs text-muted-foreground">
+                        自定义起止
+                      </span>
+                      <span className="tabular-nums">
+                        {range.start && range.end
+                          ? `${fmtDate(range.start)} ~ ${fmtDate(range.end)}`
+                          : "—"}
+                      </span>
+                    </div>
+                  </DialogField>
+                )}
               </div>
+
+              {quarterly && (
+                <DialogField
+                  label="选择季度"
+                  hint="已对账的季度不可重复选择；绿色为已完成期次，当前季度可按截至目前到货对账"
+                >
+                  <QuarterPicker
+                    value={quarterOf(range.start)}
+                    history={history}
+                    orderStart={o.createdAt.slice(0, 10)}
+                    onChange={(q) => {
+                      const r = quarterRange(q);
+                      setRange(r);
+                      setPeriodText(periodLabel("按季度", r));
+                    }}
+                  />
+                </DialogField>
+              )}
+
+              {custom && (
+                <DialogField label="设置周期起止">
+                  <CustomRangeEditor
+                    range={range}
+                    history={history}
+                    error={rangeError}
+                    onChange={setRange}
+                  />
+                </DialogField>
+              )}
 
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
@@ -755,6 +1202,8 @@ export function SaleReconcilePage({
                         amount: amountNum,
                         cycle,
                         period: period.trim(),
+                        periodStart: oneOff ? undefined : range.start,
+                        periodEnd: oneOff ? undefined : range.end,
                         lines: draftLines,
                         note: note.trim(),
                         attachment,

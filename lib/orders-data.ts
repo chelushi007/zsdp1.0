@@ -40,8 +40,13 @@ export type ReconcileState = "待对账" | "已对账" | "免对账";
 
 export type StatementState = "待确认" | "已确认" | "有异议";
 /** 对账方式：一次性（全部数量一次对账）或按月 / 按季度分期对账 */
-export type StatementCycle = "一次性" | "按月" | "按季度";
-export const statementCycles: StatementCycle[] = ["一次性", "按月", "按季度"];
+export type StatementCycle = "一次性" | "按月" | "按季度" | "自定义";
+export const statementCycles: StatementCycle[] = [
+  "一次性",
+  "按月",
+  "按季度",
+  "自定义",
+];
 
 /** 订单商品明细行（多商品订单） */
 export type OrderLine = OrderGoods & { quantity: number; unitPrice: number };
@@ -56,6 +61,9 @@ export type Statement = {
   cycle?: StatementCycle;
   /** 对账周期 / 范围 */
   period?: string;
+  /** 周期起止日期（按月 / 按季度 / 自定义） */
+  periodStart?: string;
+  periodEnd?: string;
   /** 本期各商品对账数量 */
   lines?: StatementLine[];
   note?: string;
@@ -976,6 +984,8 @@ export const saleOrdersData: SaleOrder[] = [
         amount: 176200,
         cycle: "按月",
         period: "2024-08 月度对账",
+        periodStart: "2024-08-01",
+        periodEnd: "2024-08-31",
         lines: [
           { code: G.formwork.code, quantity: 200 },
           { code: G.support.code, quantity: 10 },
@@ -993,6 +1003,8 @@ export const saleOrdersData: SaleOrder[] = [
         amount: 243000,
         cycle: "按月",
         period: "2024-09 月度对账",
+        periodStart: "2024-09-01",
+        periodEnd: "2024-09-30",
         lines: [
           { code: G.formwork.code, quantity: 250 },
           { code: G.support.code, quantity: 15 },
@@ -1047,6 +1059,192 @@ export const saleOrdersData: SaleOrder[] = [
       {
         at: "2024-10-09 11:15",
         label: "买/租方确认对账 ¥243,000.00",
+        by: "买/租方",
+      },
+    ],
+  },
+  {
+    kind: "sale",
+    id: "SO2024041509",
+    lines: [
+      { ...G.hBeam, quantity: 320, unitPrice: 4680 },
+      { ...G.box, quantity: 24, unitPrice: 9800 },
+    ],
+    statements: [
+      {
+        no: "DZ2024041509-01",
+        seq: 1,
+        amount: 594600,
+        cycle: "按季度",
+        period: "2024 年第 2 季度对账",
+        periodStart: "2024-04-01",
+        periodEnd: "2024-06-30",
+        lines: [
+          { code: G.hBeam.code, quantity: 110 },
+          { code: G.box.code, quantity: 8 },
+        ],
+        note: "二季度到货部分，含首批运费",
+        state: "已确认",
+        createdAt: "2024-07-03 09:20",
+        repliedAt: "2024-07-04 15:10",
+        reply: "买方已确认对账",
+      },
+      {
+        no: "DZ2024041509-02",
+        seq: 2,
+        amount: 640000,
+        cycle: "按季度",
+        period: "2024 年第 3 季度对账",
+        periodStart: "2024-07-01",
+        periodEnd: "2024-09-30",
+        lines: [
+          { code: G.hBeam.code, quantity: 120 },
+          { code: G.box.code, quantity: 8 },
+        ],
+        note: "三季度到货部分",
+        state: "已确认",
+        createdAt: "2024-10-08 10:00",
+        repliedAt: "2024-10-09 16:30",
+        reply: "买方已确认对账",
+      },
+    ],
+    shop: "华东建设工程有限公司周转材料店",
+    status: "toReconcile",
+    payTerm: "先款后货",
+    reconcile: "待对账",
+    goods: G.hBeam,
+    quantity: 320,
+    seller: DEMO.seller,
+    buyer: DEMO.buyer,
+    unitPrice: 4680,
+    freight: 1400,
+    address: ADDR.nanjing,
+    payMethod: "对公转账",
+    invoice: "待开票",
+    contractNo: "HT-2024-0415-09",
+    createdAt: "2024-04-15 09:00",
+    updatedAt: "2024-10-09 16:30",
+    statementAmount: 640000,
+    timeline: [
+      {
+        at: "2024-04-15 09:00",
+        label: "买方提交订单，按季度分期对账",
+        by: "买/租方",
+      },
+      {
+        at: "2024-07-03 09:20",
+        label: "商家发送对账单 ¥594,600.00（第 1 期 · 2024 Q2）",
+        by: "商家",
+        note: "二季度到货部分，含首批运费",
+      },
+      {
+        at: "2024-07-04 15:10",
+        label: "买/租方确认对账 ¥594,600.00",
+        by: "买/租方",
+      },
+      {
+        at: "2024-10-08 10:00",
+        label: "商家发送对账单 ¥640,000.00（第 2 期 · 2024 Q3）",
+        by: "商家",
+        note: "三季度到货部分",
+      },
+      {
+        at: "2024-10-09 16:30",
+        label: "买/租方确认对账 ¥640,000.00",
+        by: "买/租方",
+      },
+    ],
+  },
+  {
+    kind: "sale",
+    id: "SO2024070110",
+    lines: [
+      { ...G.scaffold, quantity: 8000, unitPrice: 24 },
+      { ...G.fence, quantity: 400, unitPrice: 330 },
+      { ...G.formwork, quantity: 900, unitPrice: 186 },
+    ],
+    statements: [
+      {
+        no: "DZ2024070110-01",
+        seq: 1,
+        amount: 158900,
+        cycle: "自定义",
+        period: "2024-07-01 ~ 2024-08-15",
+        periodStart: "2024-07-01",
+        periodEnd: "2024-08-15",
+        lines: [
+          { code: G.scaffold.code, quantity: 3000 },
+          { code: G.fence.code, quantity: 120 },
+          { code: G.formwork.code, quantity: 250 },
+        ],
+        note: "一期主体施工到货，按进场签收单对账",
+        state: "已确认",
+        createdAt: "2024-08-16 09:00",
+        repliedAt: "2024-08-17 10:20",
+        reply: "买方已确认对账",
+      },
+      {
+        no: "DZ2024070110-02",
+        seq: 2,
+        amount: 148800,
+        cycle: "自定义",
+        period: "2024-08-16 ~ 2024-09-30",
+        periodStart: "2024-08-16",
+        periodEnd: "2024-09-30",
+        lines: [
+          { code: G.scaffold.code, quantity: 2500 },
+          { code: G.fence.code, quantity: 100 },
+          { code: G.formwork.code, quantity: 300 },
+        ],
+        note: "二期进场部分，围挡以现场验收数量为准",
+        state: "已确认",
+        createdAt: "2024-10-08 14:00",
+        repliedAt: "2024-10-10 09:05",
+        reply: "买方已确认对账，围挡数量与签收单一致",
+      },
+    ],
+    shop: "杭州分公司脚手架专营店",
+    status: "toReconcile",
+    payTerm: "先款后货",
+    reconcile: "待对账",
+    goods: G.scaffold,
+    quantity: 8000,
+    seller: DEMO.seller,
+    buyer: DEMO.buyer,
+    unitPrice: 24,
+    freight: 800,
+    address: ADDR.hangzhou,
+    payMethod: "在线支付",
+    invoice: "待开票",
+    createdAt: "2024-07-01 08:40",
+    updatedAt: "2024-10-10 09:05",
+    statementAmount: 148800,
+    timeline: [
+      {
+        at: "2024-07-01 08:40",
+        label: "买方提交订单，按施工节点自定义对账",
+        by: "买/租方",
+      },
+      {
+        at: "2024-08-16 09:00",
+        label: "商家发送对账单 ¥158,900.00（第 1 期 · 07-01 ~ 08-15）",
+        by: "商家",
+        note: "一期主体施工到货，按进场签收单对账",
+      },
+      {
+        at: "2024-08-17 10:20",
+        label: "买/租方确认对账 ¥158,900.00",
+        by: "买/租方",
+      },
+      {
+        at: "2024-10-08 14:00",
+        label: "商家发送对账单 ¥148,800.00（第 2 期 · 08-16 ~ 09-30）",
+        by: "商家",
+        note: "二期进场部分",
+      },
+      {
+        at: "2024-10-10 09:05",
+        label: "买/租方确认对账 ¥148,800.00",
         by: "买/租方",
       },
     ],

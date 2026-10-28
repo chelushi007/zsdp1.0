@@ -1566,6 +1566,8 @@ function SaleOrders({ role }: { role: OrderRole }) {
               amount: d.amount,
               cycle: d.cycle,
               period: d.period,
+              periodStart: d.periodStart,
+              periodEnd: d.periodEnd,
               lines: d.lines,
               note: d.note || undefined,
               attachment: d.attachment || undefined,
