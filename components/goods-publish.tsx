@@ -658,7 +658,6 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
 
   const [lines, setLines] = useState<GoodsLine[]>([])
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [warnStock, setWarnStock] = useState('')
 
 
   const [banEnabled, setBanEnabled] = useState(false)
@@ -805,14 +804,7 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
               </span>
             }
           >
-            <div className="flex flex-col gap-4">
-              <GoodsDetailTable lines={lines} onChange={setLines} onAdd={() => setPickerOpen(true)} />
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label="库存预警值" hint="任一规格库存低于该值时列表标记为紧张">
-                  <TextInput type="number" value={warnStock} onChange={setWarnStock} placeholder="选填" />
-                </Field>
-              </div>
-            </div>
+            <GoodsDetailTable lines={lines} onChange={setLines} onAdd={() => setPickerOpen(true)} />
           </Section>
 
           <Section

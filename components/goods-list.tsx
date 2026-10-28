@@ -750,7 +750,7 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () =
           <DialogField label="议价">
             <label className="flex h-9 items-center gap-2 text-sm">
               <input type="checkbox" checked={negotiable} onChange={(e) => setNegotiable(e.target.checked)} className="accent-[#1890ff]" />
-              支持买{type === 'sale' ? '' : '/租'}方发起议价
+              支持{type === 'sale' ? '买' : '租'}方发起议价
             </label>
           </DialogField>
           {type === 'rent' && (
@@ -996,7 +996,7 @@ function matches(g: Goods, f: Filters) {
   return true
 }
 
-const columns = '48px 118px minmax(160px,1.5fr) minmax(130px,1fr) 120px 90px 100px 72px 92px minmax(170px,1fr)'
+const columns = '48px 118px minmax(150px,1.3fr) minmax(110px,1fr) minmax(120px,1fr) 120px 90px 100px 72px 92px minmax(170px,1fr)'
 const listingColumns = '120px 72px minmax(160px,1fr) 110px 80px 130px'
 const entrustColumns = '100px 72px minmax(160px,1fr) 100px minmax(170px,1fr) 80px 90px'
 
@@ -1227,7 +1227,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
         </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[1180px]">
+          <div className="min-w-[1300px]">
             <div
               className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-medium text-muted-foreground"
               style={{ gridTemplateColumns: columns }}
@@ -1235,6 +1235,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
               <span className="text-center">展开</span>
               <span>商品编码</span>
               <span>商品名称</span>
+              <span>商品规格</span>
               <span>所属店铺</span>
               <span>品类</span>
               <span>库存</span>
@@ -1276,9 +1277,11 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
                       </button>
                     </span>
                     <span className="font-mono text-xs text-muted-foreground">{g.code}</span>
-                    <span className="flex min-w-0 flex-col">
-                      <span className="truncate font-medium">{g.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">{g.spec}</span>
+                    <span className="truncate font-medium" title={g.name}>
+                      {g.name}
+                    </span>
+                    <span className="truncate text-xs" title={g.spec}>
+                      {g.spec}
                     </span>
                     <span className="truncate text-xs" title={g.shop}>
                       {g.shop}
