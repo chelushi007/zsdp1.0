@@ -39,6 +39,7 @@ type ProviderListing = {
   used: number
 }
 
+/** 受托商品：一条记录只对应一种委托方式（出售或出租），同一商品同时委托租售时拆为两条 */
 type EntrustedGoods = {
   id: string
   code: string
@@ -47,14 +48,13 @@ type EntrustedGoods = {
   subCategory: string
   unit: string
   seller: string
-  types: BizType[]
+  type: BizType
   quantity: number
-  salePrice?: number
-  rentPrice?: number
-  rentDeposit?: number
-  months: number
+  /** 商家底价：出售按单位计，出租按单位 / 天计 */
+  basePrice: number
+  /** 出租押金（仅出租） */
+  deposit?: number
   entrustedAt: string
-  expiresAt: string
   status: EntrustStatus
   statusNote?: string
   listings: ProviderListing[]
@@ -70,13 +70,11 @@ const seed: EntrustedGoods[] = [
     subCategory: '支护类',
     unit: '吨',
     seller: '上海松江周转材料有限公司',
-    types: ['rent'],
+    type: 'rent',
     quantity: 120,
-    rentPrice: 10,
-    rentDeposit: 3000,
-    months: 6,
+    basePrice: 10,
+    deposit: 3000,
     entrustedAt: '2024-09-18',
-    expiresAt: '2025-03-18',
     status: 'listed',
     listings: [
       { id: 'PL240920001', type: 'rent', status: 'on', basePrice: 10, markupMode: 'percent', markupValue: 15, price: 11.5, period: '天', deposit: 3000, minDays: 180, quantity: 100, used: 62 },
@@ -91,51 +89,60 @@ const seed: EntrustedGoods[] = [
     subCategory: '型材类',
     unit: '吨',
     seller: '上海松江周转材料有限公司',
-    types: ['sale', 'rent'],
+    type: 'sale',
     quantity: 80,
-    salePrice: 4100,
-    rentPrice: 8.5,
-    rentDeposit: 2500,
-    months: 12,
+    basePrice: 4100,
     entrustedAt: '2024-10-26',
-    expiresAt: '2025-10-26',
     status: 'pending',
     listings: [],
     updatedAt: '2024-10-26 10:12',
   },
   {
     id: 'E2024100003',
+    code: 'G2024070006',
+    name: 'H 型钢 400×200×8×13',
+    spec: 'Q235B / 12m',
+    subCategory: '型材类',
+    unit: '吨',
+    seller: '上海松江周转材料有限公司',
+    type: 'rent',
+    quantity: 80,
+    basePrice: 8.5,
+    deposit: 2500,
+    entrustedAt: '2024-10-26',
+    status: 'pending',
+    listings: [],
+    updatedAt: '2024-10-26 10:12',
+  },
+  {
+    id: 'E2024100004',
     code: 'G2024090101',
     name: '盘扣式脚手架 横杆 1.2m',
     spec: 'Q355 / 热镀锌',
     subCategory: '脚手架类',
     unit: '根',
     seller: '苏州恒昌建筑器材租赁',
-    types: ['rent'],
+    type: 'rent',
     quantity: 20000,
-    rentPrice: 0.02,
-    rentDeposit: 25,
-    months: 6,
+    basePrice: 0.02,
+    deposit: 25,
     entrustedAt: '2024-10-24',
-    expiresAt: '2025-04-24',
     status: 'accepted',
     listings: [],
     updatedAt: '2024-10-25 09:05',
   },
   {
-    id: 'E2024080004',
+    id: 'E2024080005',
     code: 'G2024060201',
     name: '装配式围挡 2.5m 高 彩钢',
     spec: '2.5m×2.0m / 片',
     subCategory: '拼装类',
     unit: '片',
     seller: '杭州城建临设科技有限公司',
-    types: ['sale'],
+    type: 'sale',
     quantity: 600,
-    salePrice: 320,
-    months: 3,
+    basePrice: 320,
     entrustedAt: '2024-08-02',
-    expiresAt: '2024-11-02',
     status: 'off',
     statusNote: '商家调整供货价，暂停销售',
     listings: [
@@ -144,23 +151,36 @@ const seed: EntrustedGoods[] = [
     updatedAt: '2024-10-02 08:50',
   },
   {
-    id: 'E2024070005',
+    id: 'E2024070006',
     code: 'G2024050301',
     name: '打包箱式活动房 3×6m 标准箱',
     spec: '含门窗 / 不含电',
     subCategory: '房屋建筑类',
     unit: '个',
     seller: '南京鼎立集成房屋有限公司',
-    types: ['sale', 'rent'],
+    type: 'sale',
     quantity: 30,
-    salePrice: 15800,
-    rentPrice: 30,
-    rentDeposit: 5000,
-    months: 6,
+    basePrice: 15800,
     entrustedAt: '2024-07-15',
-    expiresAt: '2025-01-15',
     status: 'returned',
     statusNote: '商家底价高于市场价，暂无法代理',
+    listings: [],
+    updatedAt: '2024-07-16 15:40',
+  },
+  {
+    id: 'E2024070007',
+    code: 'G2024050301',
+    name: '打包箱式活动房 3×6m 标准箱',
+    spec: '含门窗 / 不含电',
+    subCategory: '房屋建筑类',
+    unit: '个',
+    seller: '南京鼎立集成房屋有限公司',
+    type: 'rent',
+    quantity: 30,
+    basePrice: 30,
+    deposit: 5000,
+    entrustedAt: '2024-07-15',
+    status: 'accepted',
     listings: [],
     updatedAt: '2024-07-16 15:40',
   },
@@ -191,8 +211,8 @@ function lockedQty(g: EntrustedGoods) {
   return g.listings.filter((l) => l.status === 'on').reduce((s, l) => s + l.quantity, 0)
 }
 
-function basePriceOf(g: EntrustedGoods, type: BizType) {
-  return type === 'sale' ? g.salePrice ?? 0 : g.rentPrice ?? 0
+function priceSuffix(g: EntrustedGoods) {
+  return g.type === 'sale' ? `/ ${g.unit}` : `/ ${g.unit} / 天`
 }
 
 function round2(n: number) {
@@ -208,6 +228,7 @@ function GoodsSummary({ goods }: { goods: EntrustedGoods }) {
           {goods.code} · {goods.spec} · 委托方：{goods.seller}
         </span>
       </span>
+      <Tag className={bizMeta[goods.type].className}>{bizMeta[goods.type].label}</Tag>
       <span className="shrink-0 text-xs text-muted-foreground">
         受托 <span className="tabular-nums text-foreground">{goods.quantity.toLocaleString()}</span> {goods.unit}
       </span>
@@ -218,18 +239,18 @@ function GoodsSummary({ goods }: { goods: EntrustedGoods }) {
 /** 底价行：展示商家给出的底价，服务商不可修改 */
 function BasePriceRow({ goods }: { goods: EntrustedGoods }) {
   return (
-    <div className="grid gap-2 rounded border border-dashed border-border px-3 py-2 text-xs sm:grid-cols-2">
-      {goods.types.includes('sale') && (
-        <span>
-          <span className="text-muted-foreground">出售底价 </span>
-          <span className="tabular-nums">¥ {fmtPrice(goods.salePrice ?? 0)} / {goods.unit}</span>
+    <div className="flex flex-wrap gap-x-4 gap-y-1 rounded border border-dashed border-border px-3 py-2 text-xs">
+      <span>
+        <span className="text-muted-foreground">{bizMeta[goods.type].label}底价 </span>
+        <span className="tabular-nums">
+          ¥ {fmtPrice(goods.basePrice)} {priceSuffix(goods)}
         </span>
-      )}
-      {goods.types.includes('rent') && (
+      </span>
+      {goods.type === 'rent' && (
         <span>
-          <span className="text-muted-foreground">出租底价 </span>
+          <span className="text-muted-foreground">押金 </span>
           <span className="tabular-nums">
-            ¥ {fmtPrice(goods.rentPrice ?? 0)} / {goods.unit} / 天 · 押金 ¥ {fmtPrice(goods.rentDeposit ?? 0)}
+            ¥ {fmtPrice(goods.deposit ?? 0)} / {goods.unit}
           </span>
         </span>
       )}
@@ -259,7 +280,7 @@ function AcceptDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; on
       <GoodsSummary goods={goods} />
       <BasePriceRow goods={goods} />
       <p className="text-sm leading-relaxed text-muted-foreground">
-        受理后该商品进入「待上架」，可在底价基础上加价上架{goods.types.map((t) => bizMeta[t].label).join('、')}，上架数量合计不得超过受托数量{' '}
+        受理后该商品进入「待上架」，可在底价基础上加价上架{bizMeta[goods.type].label}，上架数量合计不得超过受托数量{' '}
         {goods.quantity.toLocaleString()} {goods.unit}。加价差额为您的服务收益，底价部分结算给委托方。
       </p>
     </Modal>
@@ -307,17 +328,17 @@ function ReturnDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; on
   )
 }
 
-/** 上架：选择租售方式，在商家底价基础上加价后对外上架 */
+/** 上架：按受托的租售方式，在商家底价基础上加价后对外上架 */
 function ListDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; onClose: () => void; onConfirm: (l: ProviderListing) => void }) {
   const available = goods.quantity - lockedQty(goods)
-  const [type, setType] = useState<BizType>(goods.types[0])
+  const type = goods.type
   const [markupMode, setMarkupMode] = useState<MarkupMode>('percent')
   const [markupValue, setMarkupValue] = useState('')
   const [quantity, setQuantity] = useState('')
   const [minOrder, setMinOrder] = useState('')
   const [minDays, setMinDays] = useState('')
 
-  const base = basePriceOf(goods, type)
+  const base = goods.basePrice
   const markup = Number(markupValue)
   const markupOk = markupValue !== '' && markup >= 0
   const price = markupOk ? round2(markupMode === 'percent' ? base * (1 + markup / 100) : base + markup) : base
@@ -341,11 +362,11 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; onCl
     onConfirm(
       type === 'sale'
         ? { ...common, minOrder: minOrder ? Number(minOrder) : undefined }
-        : { ...common, period: '天', deposit: goods.rentDeposit, minDays: Number(minDays) },
+        : { ...common, period: '天', deposit: goods.deposit, minDays: Number(minDays) },
     )
   }
 
-  const unitSuffix = type === 'sale' ? `/ ${goods.unit}` : `/ ${goods.unit} / 天`
+  const unitSuffix = priceSuffix(goods)
 
   return (
     <Modal
@@ -365,32 +386,13 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; onCl
       }
     >
       <GoodsSummary goods={goods} />
-      <DialogField label="租售方式" required hint={goods.types.length === 1 ? `委托方仅授权${bizMeta[goods.types[0]].label}` : undefined}>
-        <div role="radiogroup" aria-label="租售方式" className="grid grid-cols-2 gap-2">
-          {(['sale', 'rent'] as BizType[]).map((t) => {
-            const allowed = goods.types.includes(t)
-            const active = type === t
-            return (
-              <button
-                key={t}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                disabled={!allowed}
-                onClick={() => setType(t)}
-                className={cn(
-                  'flex h-9 items-center justify-center gap-1.5 rounded border text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-                  active ? 'border-[#1890ff] bg-[#1890ff]/5 text-[#1890ff]' : 'border-border hover:border-[#1890ff]/50',
-                )}
-              >
-                {bizMeta[t].label}
-              </button>
-            )
-          })}
-        </div>
-      </DialogField>
 
       <div className="grid gap-4 sm:grid-cols-2">
+        <DialogField label="租售方式" hint="按委托方授权的方式上架，不可更改">
+          <div className="flex h-9 items-center rounded border border-border bg-muted/40 px-3 text-sm">
+            <Tag className={bizMeta[type].className}>{bizMeta[type].label}</Tag>
+          </div>
+        </DialogField>
         <DialogField label="商家底价">
           <div className="flex h-9 items-center rounded border border-border bg-muted/40 px-3 text-sm tabular-nums">
             ¥ {fmtPrice(base)} <span className="ml-1 text-xs text-muted-foreground">{unitSuffix}</span>
@@ -434,13 +436,13 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; onCl
         </DialogField>
         {type === 'sale' ? (
           <DialogField label="起订量">
-            <DialogInput label="起订量" type="number" value={minOrder} onChange={setMinOrder} placeholder="���限" suffix={goods.unit} />
+            <DialogInput label="起订量" type="number" value={minOrder} onChange={setMinOrder} placeholder="不限" suffix={goods.unit} />
           </DialogField>
         ) : (
           <>
             <DialogField label="押金" hint="按委托方约定收取，不参与加价">
               <div className="flex h-9 items-center rounded border border-border bg-muted/40 px-3 text-sm tabular-nums">
-                ¥ {fmtPrice(goods.rentDeposit ?? 0)} <span className="ml-1 text-xs text-muted-foreground">/ {goods.unit}</span>
+                ¥ {fmtPrice(goods.deposit ?? 0)} <span className="ml-1 text-xs text-muted-foreground">/ {goods.unit}</span>
               </div>
             </DialogField>
             <DialogField label="最短租期" required>
@@ -603,7 +605,7 @@ function matches(g: EntrustedGoods, f: Filters) {
   const kw = f.keyword.trim().toLowerCase()
   if (kw && !g.name.toLowerCase().includes(kw) && !g.code.toLowerCase().includes(kw)) return false
   if (f.seller && g.seller !== f.seller) return false
-  if (f.type && !g.types.includes(f.type)) return false
+  if (f.type && g.type !== f.type) return false
   if (f.status && g.status !== f.status) return false
   return true
 }
@@ -782,23 +784,15 @@ export function ProviderGoods() {
                     <span className="truncate text-xs" title={g.seller}>
                       {g.seller}
                     </span>
-                    <span className="flex flex-col items-start gap-1">
-                      {g.types.map((t) => (
-                        <Tag key={t} className={bizMeta[t].className}>
-                          {bizMeta[t].label}
-                        </Tag>
-                      ))}
+                    <span className="flex items-start">
+                      <Tag className={bizMeta[g.type].className}>{bizMeta[g.type].label}</Tag>
                     </span>
                     <span className="flex flex-col text-xs tabular-nums">
-                      {g.salePrice !== undefined && (
-                        <span>
-                          售 ¥ {fmtPrice(g.salePrice)} / {g.unit}
-                        </span>
-                      )}
-                      {g.rentPrice !== undefined && (
-                        <span>
-                          租 ¥ {fmtPrice(g.rentPrice)} / {g.unit} / 天
-                        </span>
+                      <span>
+                        ¥ {fmtPrice(g.basePrice)} {priceSuffix(g)}
+                      </span>
+                      {g.type === 'rent' && g.deposit !== undefined && (
+                        <span className="text-[11px] text-muted-foreground">押金 ¥ {fmtPrice(g.deposit)}</span>
                       )}
                     </span>
                     <span className="font-mono text-xs text-muted-foreground">{g.entrustedAt}</span>
