@@ -393,7 +393,7 @@ function PublishFlow() {
           <span className="flex size-4 items-center justify-center rounded-full bg-red-500 text-white">
             <Ban className="size-2.5" aria-hidden />
           </span>
-          上架后如违规将被�����架，整改后重新提交审核
+          上架后如违规将被强制下架，整改后重新提交审核
         </span>
       </div>
     </section>
@@ -1008,7 +1008,7 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
               <label className="flex items-center gap-2 text-sm">
                 <Switch checked={banEnabled} onChange={setBanEnabled} label="启用区域禁售" />
                 启用区域禁售
-                <span className="text-xs text-muted-foreground">（关闭时全国范围均可���单）</span>
+                <span className="text-xs text-muted-foreground">（关闭时全国范围均可下单）</span>
               </label>
 
               {banEnabled && (

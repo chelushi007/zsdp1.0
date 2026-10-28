@@ -488,7 +488,7 @@ function EntrustDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: (
       }
     >
       <GoodsSummary goods={goods} />
-      <DialogField label="委托方式" required hint="可�����时勾选；服务商受理后按您填写的底价加价上架，差价为服务商收益">
+      <DialogField label="委托方式" required hint="可同时勾选；服务商受理后按您填写的底价加价上架，差价为服务商收益">
         <div role="group" aria-label="委托方式" className="grid grid-cols-2 gap-2">
           {(['sale', 'rent'] as BizType[]).map((t) => {
             const active = types.includes(t)
@@ -858,13 +858,14 @@ function matches(g: Goods, f: Filters) {
 
 const columns = '48px 118px minmax(160px,1.5fr) 120px 90px 100px 72px minmax(170px,1fr)'
 const listingColumns = '120px 72px minmax(160px,1fr) 110px 80px 130px'
-const entrustColumns = '120px 100px minmax(160px,1fr) 100px minmax(160px,1fr) 80px 90px'
+const entrustColumns = '100px 72px minmax(160px,1fr) 100px minmax(170px,1fr) 80px 90px'
 
 const entrustStatusMeta: Record<Entrust['status'], { label: string; className: string }> = {
   pending: { label: '待受理', className: 'bg-amber-50 text-amber-700 ring-amber-200' },
   accepted: { label: '已受理', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
 }
 
+/** 委托记录：一条委托按出售 / 出租拆成多行展示，便于逐项查看底价 */
 function EntrustTable({ goods, onCancel }: { goods: Goods; onCancel: () => void }) {
   const e = goods.entrust
   if (!e) return null
@@ -873,13 +874,13 @@ function EntrustTable({ goods, onCancel }: { goods: Goods; onCancel: () => void 
     <div className="overflow-hidden rounded border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs">
         <span className="font-medium">委托记录</span>
-        <span className="text-muted-foreground">共 1 条</span>
+        <span className="text-muted-foreground">共 {e.types.length} 条</span>
       </div>
       <div
         className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
         style={{ gridTemplateColumns: entrustColumns }}
       >
-        <span>���托日期</span>
+        <span>委托日期</span>
         <span>委托方式</span>
         <span>服务商</span>
         <span>委托数量</span>
@@ -887,47 +888,43 @@ function EntrustTable({ goods, onCancel }: { goods: Goods; onCancel: () => void 
         <span>受理情况</span>
         <span>操作</span>
       </div>
-      <div className="grid items-center gap-3 px-3 py-2 text-sm" style={{ gridTemplateColumns: entrustColumns }}>
-        <span className="flex flex-col">
+      {e.types.map((t, i) => (
+        <div
+          key={t}
+          className={cn('grid items-center gap-3 px-3 py-2 text-sm', i > 0 && 'border-t border-border')}
+          style={{ gridTemplateColumns: entrustColumns }}
+        >
           <span className="font-mono text-xs text-muted-foreground">{e.createdAt}</span>
-          <span className="text-xs text-muted-foreground">期限 {e.months} 个月</span>
-        </span>
-        <span className="flex flex-wrap gap-1">
-          {e.types.map((t) => (
-            <Tag key={t} className={bizMeta[t].className}>
-              {bizMeta[t].label}
-            </Tag>
-          ))}
-        </span>
-        <span className="truncate" title={e.provider}>
-          {e.provider}
-        </span>
-        <span className="tabular-nums">
-          {e.quantity.toLocaleString()} {goods.unit}
-        </span>
-        <span className="flex flex-col text-xs tabular-nums">
-          {e.salePrice !== undefined && (
-            <span>
-              出售 ¥ {fmtPrice(e.salePrice)} / {goods.unit}
-            </span>
-          )}
-          {e.rentPrice !== undefined && (
-            <span>
-              出租 ¥ {fmtPrice(e.rentPrice)} / {goods.unit} / 天
-              {e.rentDeposit !== undefined ? `，押金 ¥ ${fmtPrice(e.rentDeposit)}` : ''}
-            </span>
-          )}
-        </span>
-        <Tag className={meta.className}>{meta.label}</Tag>
-        <span className="flex items-center gap-3">
-          <ActionLink>详情</ActionLink>
-          {e.status === 'pending' && (
-            <ActionLink tone="danger" onClick={onCancel}>
-              撤回
-            </ActionLink>
-          )}
-        </span>
-      </div>
+          <Tag className={bizMeta[t].className}>{bizMeta[t].label}</Tag>
+          <span className="truncate" title={e.provider}>
+            {e.provider}
+          </span>
+          <span className="tabular-nums">
+            {e.quantity.toLocaleString()} {goods.unit}
+          </span>
+          <span className="text-xs tabular-nums">
+            {t === 'sale' ? (
+              <>
+                ¥ {fmtPrice(e.salePrice ?? 0)} / {goods.unit}
+              </>
+            ) : (
+              <>
+                ¥ {fmtPrice(e.rentPrice ?? 0)} / {goods.unit} / 天
+                {e.rentDeposit !== undefined ? `，押金 ¥ ${fmtPrice(e.rentDeposit)}` : ''}
+              </>
+            )}
+          </span>
+          <Tag className={meta.className}>{meta.label}</Tag>
+          <span className="flex items-center gap-3">
+            <ActionLink>详情</ActionLink>
+            {e.status === 'pending' && (
+              <ActionLink tone="danger" onClick={onCancel}>
+                撤回
+              </ActionLink>
+            )}
+          </span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -946,7 +943,7 @@ function ListingTable({ goods }: { goods: Goods }) {
         <span>上架单号</span>
         <span>租售方式</span>
         <span>价格</span>
-        <span>已售 / ��租</span>
+        <span>已售 / 已租</span>
         <span>状态</span>
         <span>操作</span>
       </div>
