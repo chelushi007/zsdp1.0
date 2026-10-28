@@ -494,32 +494,22 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () =
   )
 }
 
-type StockMode = 'in' | 'out' | 'set'
-const stockModes: { value: StockMode; label: string; desc: string }[] = [
-  { value: 'in', label: '入库', desc: '采购 / 归还入库，库存增加' },
-  { value: 'out', label: '出库', desc: '报废 / 调拨出库，库存减少' },
-  { value: 'set', label: '盘点校正', desc: '按盘点结果直接设置库存' },
-]
-const STOCK_REASONS = ['采购入库', '租赁归还', '报废处理', '跨店调拨', '盘点差异', '其他']
-
-/** 调整库存：入库 / 出库 / 盘点校正 */
+/** 调整库存：直接修改总库存数量 */
 function StockDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () => void; onConfirm: (stock: number) => void }) {
   const locked = lockedStock(goods)
-  const [mode, setMode] = useState<StockMode>('in')
-  const [amount, setAmount] = useState('')
-  const [reason, setReason] = useState('')
-  const [note, setNote] = useState('')
+  const [amount, setAmount] = useState(String(goods.stock))
 
-  const n = Number(amount)
-  const next = mode === 'in' ? goods.stock + n : mode === 'out' ? goods.stock - n : n
-  const amountOk = amount !== '' && n >= 0 && (mode === 'set' || n > 0)
-  const belowLocked = next < locked
-  const ok = amountOk && !belowLocked && reason !== ''
+  const next = Number(amount)
+  const amountOk = amount !== '' && Number.isInteger(next) && next >= 0
+  const belowLocked = amountOk && next < locked
+  const changed = next !== goods.stock
+  const ok = amountOk && !belowLocked && changed
 
   return (
     <Modal
       title="调整库存"
       titleId="stock-dialog-title"
+      width="max-w-[440px]"
       onClose={onClose}
       footer={
         <>
@@ -533,54 +523,17 @@ function StockDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () 
       }
     >
       <GoodsSummary goods={goods} />
-      <DialogField label="调整方式" required>
-        <div role="radiogroup" aria-label="调整方式" className="grid gap-2 sm:grid-cols-3">
-          {stockModes.map((m) => {
-            const active = mode === m.value
-            return (
-              <button
-                key={m.value}
-                type="button"
-                role="radio"
-                aria-checked={active}
-                onClick={() => setMode(m.value)}
-                className={cn(
-                  'flex flex-col items-start rounded border px-3 py-2 text-left transition-colors',
-                  active ? 'border-[#1890ff] bg-[#1890ff]/5' : 'border-border hover:border-[#1890ff]/50',
-                )}
-              >
-                <span className={cn('text-sm', active && 'text-[#1890ff]')}>{m.label}</span>
-                <span className="text-xs text-muted-foreground">{m.desc}</span>
-              </button>
-            )
-          })}
-        </div>
+      <DialogField
+        label="总库存"
+        required
+        hint={
+          belowLocked
+            ? `上架中记录已占用 ${locked.toLocaleString()} ${goods.unit}，库存不可低于该值`
+            : `当前 ${goods.stock.toLocaleString()} ${goods.unit}，上架中记录占用 ${locked.toLocaleString()} ${goods.unit}`
+        }
+      >
+        <DialogInput label="总库存" type="number" value={amount} onChange={setAmount} placeholder="0" suffix={goods.unit} />
       </DialogField>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <DialogField
-          label={mode === 'set' ? '盘点后库存' : mode === 'in' ? '入库数量' : '出库数量'}
-          required
-          hint={belowLocked ? `上架中记录已占用 ${locked.toLocaleString()} ${goods.unit}，调整后库存不可低于该值` : undefined}
-        >
-          <DialogInput label="数量" type="number" value={amount} onChange={setAmount} placeholder="0" suffix={goods.unit} />
-        </DialogField>
-        <DialogField label="调整原因" required>
-          <Select label="调整原因" placeholder="请选择原因" value={reason} options={STOCK_REASONS} onChange={setReason} />
-        </DialogField>
-      </div>
-      <DialogField label="备注">
-        <DialogInput label="备注" value={note} onChange={setNote} placeholder="选填，如：入库单号 / 盘点人" />
-      </DialogField>
-      <div className="flex items-center justify-between rounded border border-border px-3 py-2 text-sm">
-        <span className="text-muted-foreground">调整后库存</span>
-        <span className="tabular-nums">
-          {goods.stock.toLocaleString()} {goods.unit}
-          <span className="mx-2 text-muted-foreground">→</span>
-          <span className={cn('font-medium', belowLocked ? 'text-red-600' : 'text-[#1890ff]')}>
-            {amountOk ? next.toLocaleString() : '—'} {goods.unit}
-          </span>
-        </span>
-      </div>
     </Modal>
   )
 }
