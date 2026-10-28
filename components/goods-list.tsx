@@ -157,7 +157,18 @@ const goodsData: Goods[] = [
       { id: 'L240703001', type: 'sale', status: 'on', price: 4280, minOrder: 5, quantity: 95, used: 30 },
       { id: 'L240703002', type: 'rent', status: 'on', price: 9.5, period: '天', deposit: 2500, minDays: 60, quantity: 300, used: 120 },
     ],
-    updatedAt: '2024-10-25 17:05',
+    entrust: {
+      types: ['sale', 'rent'],
+      provider: '中建租赁服务（上海）有限公司',
+      quantity: 60,
+      salePrice: 4100,
+      rentPrice: 9,
+      rentDeposit: 2500,
+      months: 12,
+      status: 'pending',
+      createdAt: '2024-10-26',
+    },
+    updatedAt: '2024-10-26 09:40',
   },
   {
     code: 'G2024080007',
@@ -243,12 +254,16 @@ export function ActionLink({
 type GoodsAction = 'edit' | 'list' | 'stock' | 'off' | 'entrust' | 'cancelEntrust'
 
 function GoodsActions({ goods, onAction }: { goods: Goods; onAction: (a: GoodsAction) => void }) {
-  const entrustLink = goods.entrust ? (
+  const entrustLink = !goods.entrust ? (
+    <ActionLink onClick={() => onAction('entrust')}>委托</ActionLink>
+  ) : goods.entrust.status === 'pending' ? (
     <ActionLink tone="danger" onClick={() => onAction('cancelEntrust')}>
       撤回委托
     </ActionLink>
   ) : (
-    <ActionLink onClick={() => onAction('entrust')}>委托</ActionLink>
+    <span className="cursor-not-allowed text-xs text-muted-foreground/60" title="服务商已受理，委托期内不可撤回">
+      撤回委托
+    </span>
   )
   const actions: Record<GoodsStatus, React.ReactNode> = {
     draft: (
@@ -465,7 +480,7 @@ function EntrustDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: (
       }
     >
       <GoodsSummary goods={goods} />
-      <DialogField label="委托方式" required hint="可���时勾选；服务商受理后按您填写的底价加价上架，差价为服务商收益">
+      <DialogField label="委托方式" required hint="可�����时勾选；服务商受理后按您填写的底价加价上架，差价为服务商收益">
         <div role="group" aria-label="委托方式" className="grid grid-cols-2 gap-2">
           {(['sale', 'rent'] as BizType[]).map((t) => {
             const active = types.includes(t)
@@ -856,7 +871,7 @@ function EntrustTable({ goods, onCancel }: { goods: Goods; onCancel: () => void 
         className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
         style={{ gridTemplateColumns: entrustColumns }}
       >
-        <span>委托日期</span>
+        <span>���托日期</span>
         <span>委托方式</span>
         <span>服务商</span>
         <span>委托数量</span>
@@ -898,10 +913,14 @@ function EntrustTable({ goods, onCancel }: { goods: Goods; onCancel: () => void 
         <Tag className={meta.className}>{meta.label}</Tag>
         <span className="flex items-center gap-3">
           <ActionLink>详情</ActionLink>
-          {e.status === 'pending' && (
+          {e.status === 'pending' ? (
             <ActionLink tone="danger" onClick={onCancel}>
               撤回
             </ActionLink>
+          ) : (
+            <span className="cursor-not-allowed text-xs text-muted-foreground/60" title="服务商已受理，委托期内不可撤回">
+              撤回
+            </span>
           )}
         </span>
       </div>
@@ -983,6 +1002,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
       return
     }
     if (action === 'cancelEntrust') {
+      if (g.entrust?.status !== 'pending') return
       updateGoods(g.code, (x) => ({ ...x, entrust: undefined }), `已撤回委托：${g.name}`)
       return
     }
@@ -1117,11 +1137,11 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
                     <span className="flex flex-col items-start gap-0.5">
                       {g.entrust ? (
                         <>
-                          <Tag className="bg-violet-50 text-violet-700 ring-violet-200">是</Tag>
+                          <Tag className="bg-violet-50 text-violet-700 ring-violet-200">有</Tag>
                           <span className="text-[11px] leading-4 text-muted-foreground">{entrustStatusMeta[g.entrust.status].label}</span>
                         </>
                       ) : (
-                        <Tag className="bg-muted text-muted-foreground ring-border">否</Tag>
+                        <Tag className="bg-muted text-muted-foreground ring-border">无</Tag>
                       )}
                     </span>
                     <GoodsActions goods={g} onAction={(a) => handleAction(g, a)} />
