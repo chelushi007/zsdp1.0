@@ -176,6 +176,16 @@ const statusMeta: Record<EntrustStatus, { label: string; className: string; coun
   returned: { label: '已退回', className: 'bg-red-50 text-red-600 ring-red-200', countClass: 'text-red-600' },
 }
 
+/** 受理状态：待受理 / 已退回 视为未受理，其余均为已受理 */
+function isAccepted(g: EntrustedGoods) {
+  return g.status === 'accepted' || g.status === 'listed' || g.status === 'off'
+}
+
+const acceptMeta = {
+  accepted: { label: '已受理', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+  pending: { label: '未受理', className: 'bg-amber-50 text-amber-700 ring-amber-200' },
+}
+
 /** 上架中记录占用的受托数量 */
 function lockedQty(g: EntrustedGoods) {
   return g.listings.filter((l) => l.status === 'on').reduce((s, l) => s + l.quantity, 0)
@@ -249,8 +259,8 @@ function AcceptDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; on
       <GoodsSummary goods={goods} />
       <BasePriceRow goods={goods} />
       <p className="text-sm leading-relaxed text-muted-foreground">
-        受理后该商品进入「待上架」，可在底价基础上加价上架{goods.types.map((t) => bizMeta[t].label).join('、')}。委托期限{' '}
-        {goods.months} 个月（至 {goods.expiresAt}），期内加价差额为您的服务收益，底价部分结算给委托方。
+        受理后该商品进入「待上架」，可在底价基础上加价上架{goods.types.map((t) => bizMeta[t].label).join('、')}，上架数量合计不得超过受托数量{' '}
+        {goods.quantity.toLocaleString()} {goods.unit}。加价差额为您的服务收益，底价部分结算给委托方。
       </p>
     </Modal>
   )
@@ -315,7 +325,13 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; onCl
   const profitRate = base > 0 ? round2((profit / base) * 100) : 0
 
   const qty = Number(quantity)
-  const qtyOk = qty > 0 && qty <= available
+  const qtyOk = Number.isInteger(qty) && qty > 0 && qty <= available
+  const qtyHint =
+    quantity && !qtyOk
+      ? qty > available
+        ? `超出受托数量：受托 ${goods.quantity.toLocaleString()} ${goods.unit}，上架中已占用 ${lockedQty(goods).toLocaleString()} ${goods.unit}，最多还可上架 ${available.toLocaleString()} ${goods.unit}`
+        : '请输入大于 0 的整数'
+      : `受托 ${goods.quantity.toLocaleString()} ${goods.unit}，上架中 ${lockedQty(goods).toLocaleString()} ${goods.unit}，可上架 ${available.toLocaleString()} ${goods.unit}`
   const ok = markupOk && qtyOk && (type === 'sale' || Number(minDays) > 0)
 
   const submit = () => {
@@ -418,7 +434,7 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; onCl
         </DialogField>
         {type === 'sale' ? (
           <DialogField label="起订量">
-            <DialogInput label="起订量" type="number" value={minOrder} onChange={setMinOrder} placeholder="不限" suffix={goods.unit} />
+            <DialogInput label="起订量" type="number" value={minOrder} onChange={setMinOrder} placeholder="���限" suffix={goods.unit} />
           </DialogField>
         ) : (
           <>
@@ -435,7 +451,7 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; onCl
         <DialogField
           label="上架数量"
           required
-          hint={quantity && !qtyOk ? `不可超过可上架数量 ${available.toLocaleString()} ${goods.unit}` : `可上架 ${available.toLocaleString()} ${goods.unit}（受托数量减去上架中占用）`}
+            hint={qtyHint}
         >
           <DialogInput label="上架数量" type="number" value={quantity} onChange={setQuantity} placeholder="0" suffix={goods.unit} />
         </DialogField>
@@ -519,7 +535,7 @@ function Actions({ goods, onAction }: { goods: EntrustedGoods; onAction: (a: Act
   return <span className="flex flex-wrap items-center gap-x-3 gap-y-1">{map[goods.status]}</span>
 }
 
-const columns = '40px 110px minmax(150px,1.4fr) minmax(120px,1fr) 76px 130px 90px minmax(140px,1fr)'
+const columns = '36px 100px minmax(130px,1.3fr) minmax(100px,1fr) 64px 112px 84px 76px 76px 80px minmax(120px,1fr)'
 const listingColumns = '120px 72px minmax(120px,1fr) minmax(160px,1fr) 100px 80px 120px'
 
 function ListingTable({ goods }: { goods: EntrustedGoods }) {
@@ -712,7 +728,7 @@ export function ProviderGoods() {
         </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[960px]">
+          <div className="min-w-[1080px]">
             <div
               className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-medium text-muted-foreground"
               style={{ gridTemplateColumns: columns }}
@@ -723,8 +739,11 @@ export function ProviderGoods() {
               <span>委托方</span>
               <span>委托方式</span>
               <span>商家底价</span>
+              <span>受托时间</span>
               <span>受托数量</span>
-              <span>状态 / 操作</span>
+              <span>上架数量</span>
+              <span>状态</span>
+              <span>操作</span>
             </div>
 
             {visible.length === 0 && <p className="px-4 py-12 text-center text-sm text-muted-foreground">没有符合筛选条件的受托商品</p>}
@@ -732,6 +751,7 @@ export function ProviderGoods() {
             {visible.map((g) => {
               const open = expanded[g.id] ?? false
               const meta = statusMeta[g.status]
+              const accept = isAccepted(g) ? acceptMeta.accepted : acceptMeta.pending
               return (
                 <Fragment key={g.id}>
                   <div
@@ -760,11 +780,8 @@ export function ProviderGoods() {
                         {g.subCategory} · {g.spec}
                       </span>
                     </span>
-                    <span className="flex min-w-0 flex-col">
-                      <span className="truncate text-xs">{g.seller}</span>
-                      <span className="text-[11px] text-muted-foreground">
-                        {g.entrustedAt} 起 · {g.months} 个月
-                      </span>
+                    <span className="truncate text-xs" title={g.seller}>
+                      {g.seller}
                     </span>
                     <span className="flex flex-wrap gap-1">
                       {g.types.map((t) => (
@@ -785,21 +802,26 @@ export function ProviderGoods() {
                         </span>
                       )}
                     </span>
+                    <span className="font-mono text-xs text-muted-foreground">{g.entrustedAt}</span>
+                    <span className="tabular-nums">
+                      {g.quantity.toLocaleString()} {g.unit}
+                    </span>
                     <span className="flex flex-col tabular-nums">
                       <span>
-                        {g.quantity.toLocaleString()} {g.unit}
+                        {lockedQty(g).toLocaleString()} {g.unit}
                       </span>
-                      {lockedQty(g) > 0 && <span className="text-[11px] text-muted-foreground">上架中 {lockedQty(g).toLocaleString()}</span>}
+                      <span className="text-[11px] text-muted-foreground">剩余 {(g.quantity - lockedQty(g)).toLocaleString()}</span>
                     </span>
-                    <span className="flex min-w-0 flex-col items-start gap-1.5">
-                      <Tag className={meta.className}>{meta.label}</Tag>
+                    <span className="flex min-w-0 flex-col items-start gap-1">
+                      <Tag className={accept.className}>{accept.label}</Tag>
+                      <span className={cn('text-[11px] leading-4', meta.countClass)}>{meta.label}</span>
                       {g.statusNote && (
                         <span className="line-clamp-1 text-[11px] leading-4 text-muted-foreground" title={g.statusNote}>
                           {g.statusNote}
                         </span>
                       )}
-                      <Actions goods={g} onAction={(action) => setDialog({ action, id: g.id })} />
                     </span>
+                    <Actions goods={g} onAction={(action) => setDialog({ action, id: g.id })} />
                   </div>
                   {open && (
                     <div id={`provider-listings-${g.id}`} className="border-b border-border bg-muted/20 px-4 py-3 pl-[84px]">
