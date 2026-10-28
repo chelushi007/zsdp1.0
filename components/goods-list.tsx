@@ -2703,11 +2703,11 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                               <Tag className="bg-violet-50 text-violet-700 ring-violet-200">
                                 有
                               </Tag>
-                              <span className="text-[11px] leading-4 text-muted-foreground">
-                                {single && head.entrust
-                                  ? entrustStatusMeta[head.entrust.status].label
-                                  : `${entrusted} / ${items.length} 规格`}
-                              </span>
+                              {single && head.entrust && (
+                                <span className="text-[11px] leading-4 text-muted-foreground">
+                                  {entrustStatusMeta[head.entrust.status].label}
+                                </span>
+                              )}
                             </>
                           ) : (
                             <Tag className="bg-muted text-muted-foreground ring-border">
@@ -2733,9 +2733,6 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                             >
                               详情
                             </ActionLink>
-                            <span className="text-[11px] text-muted-foreground">
-                              编辑 / 上架等操作请进入详情按规格进行
-                            </span>
                           </span>
                         )}
                       </div>

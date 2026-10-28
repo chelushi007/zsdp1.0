@@ -1455,14 +1455,7 @@ function EntrustDetail({
           )}
           {single && operation && (
             <DescItem label="运营状态">
-              <span className="flex flex-col items-start gap-1">
-                <Tag className={operation.className}>{operation.label}</Tag>
-                {head.statusNote && (
-                  <span className="text-xs text-muted-foreground">
-                    {head.statusNote}
-                  </span>
-                )}
-              </span>
+              <Tag className={operation.className}>{operation.label}</Tag>
             </DescItem>
           )}
           <DescItem label="委托时间">
@@ -1536,14 +1529,6 @@ function EntrustDetail({
                     <Tag className={op.className}>{op.label}</Tag>
                   ) : (
                     <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                  {g.statusNote && (
-                    <span
-                      className="line-clamp-1 text-[11px] leading-4 text-muted-foreground"
-                      title={g.statusNote}
-                    >
-                      {g.statusNote}
-                    </span>
                   )}
                 </span>
                 {accepted ? (
@@ -1925,16 +1910,10 @@ export function ProviderGoods() {
                         </span>
                         <span className="flex flex-col items-start gap-1">
                           <Tag className={accept.className}>{accept.label}</Tag>
-                          {head.status === "returned" ? (
+                          {head.status === "returned" && (
                             <span className="text-[11px] leading-4 text-red-600">
                               已退回
                             </span>
-                          ) : (
-                            !single && (
-                              <span className="text-[11px] leading-4 text-muted-foreground">
-                                按委托单整体受理
-                              </span>
-                            )
                           )}
                         </span>
                         <span className="flex min-w-0 flex-col items-start gap-1">
@@ -1943,14 +1922,6 @@ export function ProviderGoods() {
                             order={statusOrder}
                             meta={statusMeta}
                           />
-                          {single && head.statusNote && (
-                            <span
-                              className="line-clamp-1 text-[11px] leading-4 text-muted-foreground"
-                              title={head.statusNote}
-                            >
-                              {head.statusNote}
-                            </span>
-                          )}
                         </span>
                         {single ? (
                           <Actions
@@ -1978,11 +1949,7 @@ export function ProviderGoods() {
                                   退回
                                 </ActionLink>
                               </>
-                            ) : (
-                              <span className="text-[11px] text-muted-foreground">
-                                上架等操作请进入详情按规格进行
-                              </span>
-                            )}
+                            ) : null}
                           </span>
                         )}
                       </div>
