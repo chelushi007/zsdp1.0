@@ -465,7 +465,7 @@ function EntrustDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: (
       }
     >
       <GoodsSummary goods={goods} />
-      <DialogField label="委托方式" required hint="可同时勾选；服务商受理后按您填写的底价加价上架，差价为服务商收益">
+      <DialogField label="委托方式" required hint="可���时勾选；服务商受理后按您填写的底价加价上架，差价为服务商收益">
         <div role="group" aria-label="委托方式" className="grid grid-cols-2 gap-2">
           {(['sale', 'rent'] as BizType[]).map((t) => {
             const active = types.includes(t)
@@ -833,8 +833,81 @@ function matches(g: Goods, f: Filters) {
   return true
 }
 
-const columns = '48px 118px minmax(160px,1.5fr) 120px 90px 100px minmax(170px,1fr)'
+const columns = '48px 118px minmax(160px,1.5fr) 120px 90px 100px 72px minmax(170px,1fr)'
 const listingColumns = '120px 72px minmax(160px,1fr) 110px 80px 130px'
+const entrustColumns = '120px 100px minmax(160px,1fr) 100px minmax(160px,1fr) 80px 90px'
+
+const entrustStatusMeta: Record<Entrust['status'], { label: string; className: string }> = {
+  pending: { label: '待受理', className: 'bg-amber-50 text-amber-700 ring-amber-200' },
+  accepted: { label: '已受理', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+}
+
+function EntrustTable({ goods, onCancel }: { goods: Goods; onCancel: () => void }) {
+  const e = goods.entrust
+  if (!e) return null
+  const meta = entrustStatusMeta[e.status]
+  return (
+    <div className="overflow-hidden rounded border border-border bg-card">
+      <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs">
+        <span className="font-medium">委托记录</span>
+        <span className="text-muted-foreground">共 1 条</span>
+      </div>
+      <div
+        className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
+        style={{ gridTemplateColumns: entrustColumns }}
+      >
+        <span>委托日期</span>
+        <span>委托方式</span>
+        <span>服务商</span>
+        <span>委托数量</span>
+        <span>底价</span>
+        <span>受理情况</span>
+        <span>操作</span>
+      </div>
+      <div className="grid items-center gap-3 px-3 py-2 text-sm" style={{ gridTemplateColumns: entrustColumns }}>
+        <span className="flex flex-col">
+          <span className="font-mono text-xs text-muted-foreground">{e.createdAt}</span>
+          <span className="text-xs text-muted-foreground">期限 {e.months} 个月</span>
+        </span>
+        <span className="flex flex-wrap gap-1">
+          {e.types.map((t) => (
+            <Tag key={t} className={bizMeta[t].className}>
+              {bizMeta[t].label}
+            </Tag>
+          ))}
+        </span>
+        <span className="truncate" title={e.provider}>
+          {e.provider}
+        </span>
+        <span className="tabular-nums">
+          {e.quantity.toLocaleString()} {goods.unit}
+        </span>
+        <span className="flex flex-col text-xs tabular-nums">
+          {e.salePrice !== undefined && (
+            <span>
+              出售 ¥ {fmtPrice(e.salePrice)} / {goods.unit}
+            </span>
+          )}
+          {e.rentPrice !== undefined && (
+            <span>
+              出租 ¥ {fmtPrice(e.rentPrice)} / {goods.unit} / 天
+              {e.rentDeposit !== undefined ? `，押金 ¥ ${fmtPrice(e.rentDeposit)}` : ''}
+            </span>
+          )}
+        </span>
+        <Tag className={meta.className}>{meta.label}</Tag>
+        <span className="flex items-center gap-3">
+          <ActionLink>详情</ActionLink>
+          {e.status === 'pending' && (
+            <ActionLink tone="danger" onClick={onCancel}>
+              撤回
+            </ActionLink>
+          )}
+        </span>
+      </div>
+    </div>
+  )
+}
 
 function ListingTable({ goods }: { goods: Goods }) {
   return (
@@ -850,7 +923,7 @@ function ListingTable({ goods }: { goods: Goods }) {
         <span>上架单号</span>
         <span>租售方式</span>
         <span>价格</span>
-        <span>已售 / 已租</span>
+        <span>已售 / ��租</span>
         <span>状态</span>
         <span>操作</span>
       </div>
@@ -970,12 +1043,12 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
             )
           })}
           <span className="ml-auto pr-2 text-muted-foreground">
-            {isFiltered ? `筛选结果 ${visible.length} 条 · ` : ''}点击编码前的角标可展开查看上架记录
+            {isFiltered ? `筛选结果 ${visible.length} 条 · ` : ''}点击编码前的角标可展开查看上架 / 委托记录
           </span>
         </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[860px]">
+          <div className="min-w-[940px]">
             <div
               className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-medium text-muted-foreground"
               style={{ gridTemplateColumns: columns }}
@@ -986,6 +1059,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
               <span>品类</span>
               <span>库存</span>
               <span>状态</span>
+              <span>委托情况</span>
               <span>操作</span>
             </div>
 
@@ -1011,7 +1085,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
                         onClick={() => toggle(g.code)}
                         aria-expanded={open}
                         aria-controls={`listings-${g.code}`}
-                        aria-label={open ? `收起 ${g.name} 上架记录` : `展开 ${g.name} 上架记录`}
+                        aria-label={open ? `收起 ${g.name} 记录` : `展开 ${g.name} 记录`}
                         className="relative flex size-6 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:border-[#1890ff] hover:text-[#1890ff]"
                       >
                         <ChevronRight className={cn('size-3.5 transition-transform', open && 'rotate-90')} aria-hidden />
@@ -1034,30 +1108,28 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
                     </span>
                     <span className="flex min-w-0 flex-col items-start gap-1">
                       <Tag className={statusMeta.className}>{statusMeta.label}</Tag>
-                      {g.entrust && (
-                        <span
-                          className="line-clamp-2 text-[11px] leading-4 text-muted-foreground"
-                          title={`委托${g.entrust.types.map((t) => bizMeta[t].label).join('、')}给 ${g.entrust.provider}`}
-                        >
-                          <span className="text-violet-600">
-                            委托{g.entrust.types.map((t) => bizMeta[t].label).join('/')}
-                            {g.entrust.status === 'pending' ? ' · 待受理' : ' · 已受理'}
-                          </span>
-                          {' · '}
-                          {g.entrust.quantity.toLocaleString()} {g.unit}
-                        </span>
-                      )}
                       {g.statusNote && (
                         <span className="line-clamp-2 text-[11px] leading-4 text-muted-foreground" title={g.statusNote}>
                           {g.statusNote}
                         </span>
                       )}
                     </span>
+                    <span className="flex flex-col items-start gap-0.5">
+                      {g.entrust ? (
+                        <>
+                          <Tag className="bg-violet-50 text-violet-700 ring-violet-200">是</Tag>
+                          <span className="text-[11px] leading-4 text-muted-foreground">{entrustStatusMeta[g.entrust.status].label}</span>
+                        </>
+                      ) : (
+                        <Tag className="bg-muted text-muted-foreground ring-border">否</Tag>
+                      )}
+                    </span>
                     <GoodsActions goods={g} onAction={(a) => handleAction(g, a)} />
                   </div>
                   {open && (
-                    <div id={`listings-${g.code}`} className="border-b border-border bg-muted/20 px-4 py-3 pl-[84px]">
+                    <div id={`listings-${g.code}`} className="flex flex-col gap-3 border-b border-border bg-muted/20 px-4 py-3 pl-[84px]">
                       <ListingTable goods={g} />
+                      {g.entrust && <EntrustTable goods={g} onCancel={() => handleAction(g, 'cancelEntrust')} />}
                     </div>
                   )}
                 </Fragment>
