@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { CheckCircle2, Info, Search } from 'lucide-react'
+import { CheckCircle2, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Select } from '@/components/shop-form-fields'
@@ -40,7 +40,6 @@ export type ActionDef<T> = {
   /** 为 true 时不弹窗，直接执行 */
   instant?: boolean
   title?: string
-  desc?: string
   fields?: ActionField[]
   confirmLabel?: string
   apply: (o: T, values: Record<string, string>) => T
@@ -85,12 +84,6 @@ export function ActionDialog<T>({
       }
     >
       {summary}
-      {action.desc && (
-        <p className="flex items-start gap-2 rounded bg-[#1890ff]/5 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-          <Info className="mt-0.5 size-3.5 shrink-0 text-[#1890ff]" aria-hidden />
-          {action.desc}
-        </p>
-      )}
       {fields.map((f) => (
         <DialogField key={f.key} label={f.label} required={f.required}>
           {f.type === 'date' ? (
@@ -133,7 +126,7 @@ export function visibleColumns<T>(cols: Column<T>[], role: OrderRole) {
   return cols.filter((c) => !c.roles || c.roles.includes(role))
 }
 
-export type Kpi = { label: string; value: string; hint?: string; tone?: 'default' | 'warn' | 'good' }
+export type Kpi = { label: string; value: string; tone?: 'default' | 'warn' | 'good' }
 
 export function KpiStrip({ items }: { items: Kpi[] }) {
   return (
@@ -150,19 +143,8 @@ export function KpiStrip({ items }: { items: Kpi[] }) {
           >
             {k.value}
           </span>
-          {k.hint && <span className="text-[11px] text-muted-foreground">{k.hint}</span>}
         </div>
       ))}
-    </div>
-  )
-}
-
-export function RoleBanner({ role, text }: { role: OrderRole; text: string }) {
-  const label = { seller: '商家视角', buyer: '买/租方视角', provider: '服务商视角' }[role]
-  return (
-    <div className="flex items-center gap-3 rounded-md border border-[#1890ff]/20 bg-[#1890ff]/5 px-4 py-2 text-xs">
-      <span className="shrink-0 rounded bg-[#1890ff] px-1.5 py-0.5 font-medium text-white">{label}</span>
-      <span className="text-muted-foreground">{text}</span>
     </div>
   )
 }

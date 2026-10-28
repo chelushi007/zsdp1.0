@@ -19,6 +19,11 @@ export type TimelineItem = { at: string; label: string; by: Actor; note?: string
 
 export type OrderGoods = { code: string; name: string; spec: string; unit: string }
 
+/** 先款后货：对账 → 付款 → 发货；货到付款：发货 → 收货(验收) → 对账 → 付款 */
+export type PayTerm = '先款后货' | '货到付款'
+/** 对账状态：待对账 / 已对账 / 免对账（跳过对账直接付款）；未到对账环节时为空 */
+export type ReconcileState = '待对账' | '已对账' | '免对账'
+
 type OrderBase = {
   id: string
   goods: OrderGoods
@@ -31,6 +36,10 @@ type OrderBase = {
   basePrice?: number
   /** 对买/租方的成交单价 */
   unitPrice: number
+  payTerm: PayTerm
+  reconcile?: ReconcileState
+  /** 已发送的对账单金额 */
+  statementAmount?: number
   contractNo?: string
   remark?: string
   createdAt: string
@@ -38,7 +47,7 @@ type OrderBase = {
   timeline: TimelineItem[]
 }
 
-export type RentStatus = 'unpaid' | 'toShip' | 'shipped' | 'renting' | 'returning' | 'checking' | 'done' | 'cancelled'
+export type RentStatus = 'toReconcile' | 'unpaid' | 'toShip' | 'shipped' | 'renting' | 'returning' | 'checking' | 'done' | 'cancelled'
 
 export type RentOrder = OrderBase & {
   kind: 'rent'
@@ -54,7 +63,7 @@ export type RentOrder = OrderBase & {
   deduction?: number
 }
 
-export type SaleStatus = 'unpaid' | 'toShip' | 'shipped' | 'done' | 'afterSale' | 'cancelled'
+export type SaleStatus = 'toReconcile' | 'unpaid' | 'toShip' | 'shipped' | 'done' | 'afterSale' | 'cancelled'
 export type PayMethod = '对公转账' | '在线支付' | '账期结算'
 export type InvoiceState = '已开票' | '待开票' | '不开票'
 
@@ -110,8 +119,13 @@ const gray = 'bg-muted text-muted-foreground ring-border'
 const red = 'bg-red-50 text-red-700 ring-red-200'
 const rose = 'bg-rose-50 text-rose-700 ring-rose-200'
 
-export const rentStatusOrder: RentStatus[] = ['unpaid', 'toShip', 'shipped', 'renting', 'returning', 'checking', 'done', 'cancelled']
+const teal = 'bg-teal-50 text-teal-700 ring-teal-200'
+
+export const payTermOptions: PayTerm[] = ['先款后货', '货到付款']
+
+export const rentStatusOrder: RentStatus[] = ['toReconcile', 'unpaid', 'toShip', 'shipped', 'renting', 'returning', 'checking', 'done', 'cancelled']
 export const rentStatusMeta: Record<RentStatus, Meta> = {
+  toReconcile: { label: '待对账', className: teal },
   unpaid: { label: '待付款', className: amber },
   toShip: { label: '待发货', className: blue },
   shipped: { label: '待收货', className: sky },
@@ -122,8 +136,9 @@ export const rentStatusMeta: Record<RentStatus, Meta> = {
   cancelled: { label: '已取消', className: gray },
 }
 
-export const saleStatusOrder: SaleStatus[] = ['unpaid', 'toShip', 'shipped', 'done', 'afterSale', 'cancelled']
+export const saleStatusOrder: SaleStatus[] = ['toReconcile', 'unpaid', 'toShip', 'shipped', 'done', 'afterSale', 'cancelled']
 export const saleStatusMeta: Record<SaleStatus, Meta> = {
+  toReconcile: { label: '待对账', className: teal },
   unpaid: { label: '待付款', className: amber },
   toShip: { label: '待发货', className: blue },
   shipped: { label: '待收货', className: sky },
@@ -190,6 +205,22 @@ export function providerGain(o: RentOrder | SaleOrder) {
   return o.kind === 'rent' ? diff * o.quantity * rentDays(o) : diff * o.quantity
 }
 
+/** 应结算总额：租赁为租金 + 押金 − 损耗；销售为货款 + 运费 */
+export function settleAmount(o: RentOrder | SaleOrder) {
+  if (o.kind === 'sale') return saleAmount(o)
+  return o.payTerm === '先款后货' ? rentAmount(o) + depositTotal(o) : rentAmount(o) - (o.deduction ?? 0)
+}
+
+/** 付款完成后的下一状态 */
+export function afterPaid<T extends RentOrder | SaleOrder>(o: T): T['status'] {
+  return o.payTerm === '先款后货' ? 'toShip' : 'done'
+}
+
+/** 货到付款订单在交付(验收)完成后进入对账；先款后货直接完成 */
+export function afterDelivered<T extends RentOrder | SaleOrder>(o: T): T['status'] {
+  return o.payTerm === '货到付款' ? 'toReconcile' : 'done'
+}
+
 export function fmtMoney(n: number) {
   return `¥ ${n.toLocaleString('zh-CN', { maximumFractionDigits: 2 })}`
 }
@@ -235,6 +266,8 @@ export const rentOrdersData: RentOrder[] = [
     kind: 'rent',
     id: 'RO2024102101',
     status: 'renting',
+    payTerm: '先款后货',
+    reconcile: '已对账',
     goods: G.support,
     quantity: 60,
     seller: DEMO.seller,
@@ -262,6 +295,8 @@ export const rentOrdersData: RentOrder[] = [
     kind: 'rent',
     id: 'RO2024102302',
     status: 'toShip',
+    payTerm: '先款后货',
+    reconcile: '免对账',
     goods: G.scaffold,
     quantity: 8000,
     seller: P.hengchang,
@@ -285,6 +320,8 @@ export const rentOrdersData: RentOrder[] = [
     kind: 'rent',
     id: 'RO2024101803',
     status: 'shipped',
+    payTerm: '先款后货',
+    reconcile: '已对账',
     goods: G.hBeam,
     quantity: 40,
     seller: DEMO.seller,
@@ -308,6 +345,8 @@ export const rentOrdersData: RentOrder[] = [
     kind: 'rent',
     id: 'RO2024092004',
     status: 'renting',
+    payTerm: '先款后货',
+    reconcile: '免对账',
     goods: G.box,
     quantity: 12,
     seller: P.dingli,
@@ -331,6 +370,7 @@ export const rentOrdersData: RentOrder[] = [
     kind: 'rent',
     id: 'RO2024081505',
     status: 'returning',
+    payTerm: '货到付款',
     goods: G.fence,
     quantity: 300,
     seller: DEMO.seller,
@@ -345,7 +385,7 @@ export const rentOrdersData: RentOrder[] = [
     updatedAt: '2024-10-26 10:40',
     timeline: [
       { at: '2024-08-15 16:30', label: '买/租方提交订单', by: '买/租方' },
-      { at: '2024-08-16 09:00', label: '支付首期租金与押金', by: '买/租方' },
+      { at: '2024-08-16 09:00', label: '商家发货', by: '商家' },
       { at: '2024-08-18 10:20', label: '买/租方确认收货，开始计租', by: '买/租方' },
       { at: '2024-10-17 00:00', label: '超过约定到期日，进入逾期', by: '系统' },
       { at: '2024-10-26 10:40', label: '买/租方申请归还', by: '买/租方', note: '预计 10-30 分两车送回' },
@@ -355,6 +395,7 @@ export const rentOrdersData: RentOrder[] = [
     kind: 'rent',
     id: 'RO2024070106',
     status: 'checking',
+    payTerm: '货到付款',
     goods: G.formwork,
     quantity: 600,
     seller: DEMO.seller,
@@ -381,6 +422,8 @@ export const rentOrdersData: RentOrder[] = [
     kind: 'rent',
     id: 'RO2024050107',
     status: 'done',
+    payTerm: '先款后货',
+    reconcile: '已对账',
     goods: G.support,
     quantity: 30,
     seller: DEMO.seller,
@@ -405,7 +448,9 @@ export const rentOrdersData: RentOrder[] = [
   {
     kind: 'rent',
     id: 'RO2024102708',
-    status: 'unpaid',
+    status: 'toReconcile',
+    payTerm: '先款后货',
+    reconcile: '待对账',
     goods: G.hoist,
     quantity: 2,
     seller: P.zhongxin,
@@ -417,12 +462,13 @@ export const rentOrdersData: RentOrder[] = [
     address: ADDR.shanghai,
     createdAt: '2024-10-27 15:45',
     updatedAt: '2024-10-27 15:45',
-    timeline: [{ at: '2024-10-27 15:45', label: '买/租方提交订单，待付款', by: '买/租方' }],
+    timeline: [{ at: '2024-10-27 15:45', label: '买/租方提交订单，待对账', by: '买/租方' }],
   },
   {
     kind: 'rent',
     id: 'RO2024101009',
     status: 'cancelled',
+    payTerm: '先款后货',
     goods: G.hBeam,
     quantity: 25,
     seller: DEMO.seller,
@@ -445,6 +491,7 @@ export const rentOrdersData: RentOrder[] = [
     kind: 'rent',
     id: 'RO2024102610',
     status: 'toShip',
+    payTerm: '货到付款',
     goods: G.scaffold,
     quantity: 5000,
     seller: DEMO.seller,
@@ -459,7 +506,7 @@ export const rentOrdersData: RentOrder[] = [
     updatedAt: '2024-10-26 17:45',
     timeline: [
       { at: '2024-10-26 13:10', label: '买/租方提交订单', by: '买/租方' },
-      { at: '2024-10-26 17:45', label: '支付首期租金与押金', by: '买/租方' },
+      { at: '2024-10-26 17:45', label: '商家确认订单，货到付款', by: '商家' },
     ],
   },
 ]
@@ -471,6 +518,7 @@ export const saleOrdersData: SaleOrder[] = [
     kind: 'sale',
     id: 'SO2024102201',
     status: 'shipped',
+    payTerm: '货到付款',
     goods: G.formwork,
     quantity: 400,
     seller: P.hengchang,
@@ -488,7 +536,7 @@ export const saleOrdersData: SaleOrder[] = [
     updatedAt: '2024-10-25 14:00',
     timeline: [
       { at: '2024-10-22 10:30', label: '买方提交订单', by: '买/租方' },
-      { at: '2024-10-23 09:20', label: '对公转账到账', by: '系统' },
+      { at: '2024-10-23 09:20', label: '服务商确认订单，货到付款', by: '服务商' },
       { at: '2024-10-25 14:00', label: '商家发货', by: '商家', note: '德邦物流 DP88120935' },
     ],
   },
@@ -496,6 +544,8 @@ export const saleOrdersData: SaleOrder[] = [
     kind: 'sale',
     id: 'SO2024102502',
     status: 'toShip',
+    payTerm: '先款后货',
+    reconcile: '已对账',
     goods: G.hBeam,
     quantity: 20,
     seller: DEMO.seller,
@@ -517,6 +567,8 @@ export const saleOrdersData: SaleOrder[] = [
     kind: 'sale',
     id: 'SO2024092003',
     status: 'done',
+    payTerm: '货到付款',
+    reconcile: '已对账',
     goods: G.fence,
     quantity: 200,
     seller: DEMO.seller,
@@ -534,7 +586,7 @@ export const saleOrdersData: SaleOrder[] = [
     updatedAt: '2024-09-26 11:30',
     timeline: [
       { at: '2024-09-20 09:00', label: '买方提交订单', by: '买/租方' },
-      { at: '2024-09-21 10:00', label: '对公转账到账', by: '系统' },
+      { at: '2024-09-21 10:00', label: '服务商确认订单，货到付款', by: '服务商' },
       { at: '2024-09-21 15:30', label: '商家发货', by: '商家' },
       { at: '2024-09-24 10:00', label: '买方确认收货', by: '买/租方' },
       { at: '2024-09-26 11:30', label: '商家开具发票', by: '商家' },
@@ -544,6 +596,8 @@ export const saleOrdersData: SaleOrder[] = [
     kind: 'sale',
     id: 'SO2024102704',
     status: 'unpaid',
+    payTerm: '先款后货',
+    reconcile: '免对账',
     goods: G.box,
     quantity: 4,
     seller: P.dingli,
@@ -561,6 +615,8 @@ export const saleOrdersData: SaleOrder[] = [
     kind: 'sale',
     id: 'SO2024101505',
     status: 'done',
+    payTerm: '货到付款',
+    reconcile: '已对账',
     goods: G.support,
     quantity: 15,
     seller: DEMO.seller,
@@ -584,6 +640,8 @@ export const saleOrdersData: SaleOrder[] = [
     kind: 'sale',
     id: 'SO2024100806',
     status: 'afterSale',
+    payTerm: '先款后货',
+    reconcile: '已对账',
     goods: G.scaffold,
     quantity: 12000,
     seller: DEMO.seller,
@@ -601,7 +659,7 @@ export const saleOrdersData: SaleOrder[] = [
     updatedAt: '2024-10-26 15:00',
     timeline: [
       { at: '2024-10-08 09:30', label: '买方提交订单', by: '买/租方' },
-      { at: '2024-10-09 10:00', label: '对公转账到账', by: '系统' },
+      { at: '2024-10-09 10:00', label: '商家确认订单，货到付款', by: '商家' },
       { at: '2024-10-10 14:00', label: '商家发货', by: '商家' },
       { at: '2024-10-14 09:00', label: '买方确认收货', by: '买/租方' },
       { at: '2024-10-26 15:00', label: '买方申请售后（退货退款）', by: '买/租方' },
@@ -610,7 +668,9 @@ export const saleOrdersData: SaleOrder[] = [
   {
     kind: 'sale',
     id: 'SO2024102807',
-    status: 'unpaid',
+    status: 'toReconcile',
+    payTerm: '先款后货',
+    reconcile: '待对账',
     goods: G.formwork,
     quantity: 150,
     seller: DEMO.seller,
@@ -622,12 +682,13 @@ export const saleOrdersData: SaleOrder[] = [
     invoice: '待开票',
     createdAt: '2024-10-28 08:30',
     updatedAt: '2024-10-28 08:30',
-    timeline: [{ at: '2024-10-28 08:30', label: '买方提交订单，待付款', by: '买/租方' }],
+    timeline: [{ at: '2024-10-28 08:30', label: '买方提交订单，待对账', by: '买/租方' }],
   },
   {
     kind: 'sale',
     id: 'SO2024093008',
     status: 'cancelled',
+    payTerm: '先款后货',
     goods: G.fence,
     quantity: 80,
     seller: DEMO.seller,
