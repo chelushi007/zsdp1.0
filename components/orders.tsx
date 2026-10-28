@@ -2,8 +2,7 @@
 
 import { useState } from 'react'
 import { FileText } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { ActionLink, PRIMARY_BTN, bizMeta } from '@/components/goods-list'
+import { ActionLink, bizMeta } from '@/components/goods-list'
 import { Select } from '@/components/shop-form-fields'
 import {
   ActionCell,
@@ -656,7 +655,7 @@ function saleActions(o: SaleOrder, role: OrderRole): ActionDef<SaleOrder>[] {
       list.push({
         id: 'ship',
         group: '发货',
-        label: '物流发货',
+        label: '发货',
         fields: [
           { key: 'company', label: '物流公司 / 车辆', required: true },
           { key: 'no', label: '物流单号', required: true },
@@ -703,115 +702,6 @@ function saleActions(o: SaleOrder, role: OrderRole): ActionDef<SaleOrder>[] {
     if (s === 'shipped') list.push({ id: 'track', group: '发货', label: '跟进物流', instant: true, apply: (x) => withEvent(x, '服务商跟进物流', by), toast: () => '已同步物流' })
   }
   return list
-}
-
-const FULFILL_TABS = ['合同', '对账', '支付', '发货', '退货'] as const
-type FulfillTab = (typeof FULFILL_TABS)[number]
-
-function FulfillRows({ rows }: { rows: [string, React.ReactNode][] }) {
-  return (
-    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
-      {rows.map(([k, v]) => (
-        <div key={k} className="flex flex-col gap-0.5">
-          <dt className="text-xs text-muted-foreground">{k}</dt>
-          <dd className="min-w-0 break-words">{v}</dd>
-        </div>
-      ))}
-    </dl>
-  )
-}
-
-function SaleFulfillModal({
-  order: o,
-  role,
-  actions,
-  onAction,
-  onClose,
-}: {
-  order: SaleOrder
-  role: OrderRole
-  actions: ActionDef<SaleOrder>[]
-  onAction: (a: ActionDef<SaleOrder>) => void
-  onClose: () => void
-}) {
-  const [tab, setTab] = useState<FulfillTab>(() => {
-    const first = actions.find((a) => a.group)?.group as FulfillTab | undefined
-    return first && FULFILL_TABS.includes(first) ? first : '合同'
-  })
-  const unit = (n: number) => `¥ ${n.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} / ${o.goods.unit}`
-  const tabRows: Record<FulfillTab, [string, React.ReactNode][]> = {
-    合同: [
-      ['合同编号', o.contractNo ?? '—'],
-      ['成交单价', unit(o.unitPrice)],
-      ...(o.status === 'negotiating' ? ([['买方出价', <span key="bid" className="font-medium text-violet-700">{unit(o.bidPrice ?? o.unitPrice)}</span>]] as [string, React.ReactNode][]) : []),
-      ['数量', `${o.quantity.toLocaleString()} ${o.goods.unit}`],
-      ['结算方式', o.payTerm],
-      ['买方', o.buyer],
-      ['卖方', o.provider ?? o.seller],
-    ],
-    对账: [
-      ['对账状态', o.reconcile ?? '—'],
-      ['对账单金额', o.statementAmount ? fmtMoney(o.statementAmount) : '—'],
-      ['订单金额', fmtMoney(saleAmount(o))],
-      ['运费', o.freight ? fmtMoney(o.freight) : '免运费'],
-    ],
-    支付: [
-      ['支付方式', o.payMethod],
-      ['应结金额', <span key="amt" className="font-medium">{fmtMoney(o.statementAmount ?? saleAmount(o))}</span>],
-      ['付款状态', o.status === 'toReconcile' || o.status === 'unpaid' || o.status === 'negotiating' ? '未付款' : o.status === 'cancelled' ? '—' : '已付款'],
-      ['发票', o.invoice],
-    ],
-    发货: [
-      ['发货状态', saleStatusMeta[o.status].label],
-      ['收货地址', o.address],
-      ['物流单号', o.logistics ?? '—'],
-      ['提货单号', o.pickupNo ?? '—'],
-    ],
-    退货: [
-      ['售后状态', o.status === 'afterSale' ? '处理中' : '—'],
-      ['可退数量', `${o.quantity.toLocaleString()} ${o.goods.unit}`],
-    ],
-  }
-  const tabActions = actions.filter((a) => a.group === tab)
-  const countFor = (t: FulfillTab) => actions.filter((a) => a.group === t).length
-
-  return (
-    <DetailModal
-      title={`${o.id} · ${o.goods.name}`}
-      status={<Tag className={saleStatusMeta[o.status].className}>{saleStatusMeta[o.status].label}</Tag>}
-      heading="���单履约"
-      sections={[]}
-      timeline={o.timeline}
-      onClose={onClose}
-      body={
-        <div className="flex flex-col gap-4">
-          <div role="tablist" aria-label="履约环节" className="flex gap-1 border-b border-border">
-            {FULFILL_TABS.map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="tab"
-                aria-selected={tab === t}
-                onClick={() => setTab(t)}
-                className={`relative -mb-px flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${tab === t ? 'border-b-2 border-[#1890ff] font-medium text-[#1890ff]' : 'text-muted-foreground hover:text-foreground'}`}
-              >
-                {t}
-                {countFor(t) > 0 && <span className="size-1.5 rounded-full bg-[#1890ff]" aria-hidden />}
-              </button>
-            ))}
-          </div>
-          <FulfillRows rows={tabRows[tab]} />
-          <div className="flex flex-wrap gap-2">
-            {tabActions.map((a) => (
-              <Button key={a.id} size="sm" variant={a.tone === 'danger' ? 'outline' : 'default'} className={a.tone === 'danger' ? 'text-red-600' : PRIMARY_BTN} onClick={() => onAction(a)}>
-                {a.label}
-              </Button>
-            ))}
-          </div>
-        </div>
-      }
-    />
-  )
 }
 
 function SaleOrders({ role }: { role: OrderRole }) {
@@ -908,33 +798,68 @@ function SaleOrders({ role }: { role: OrderRole }) {
           <MoneyCell main={fmtMoney(saleAmount(o))} sub={o.freight ? `含运费 ${fmtMoney(o.freight)}` : '免运费'} />
         ),
     },
-    {
-      key: 'delivery',
-      label: '物流单号 / 提货单号',
-      width: 'minmax(140px,1fr)',
-      render: (o) =>
-        o.logistics || o.pickupNo ? (
-          <span className="flex min-w-0 flex-col text-xs">
-            <span className="truncate font-mono">{o.logistics ?? o.pickupNo}</span>
-            <span className="text-muted-foreground">{o.logistics ? '物流单号' : '提货单号'}</span>
-          </span>
-        ) : (
-          <span className="text-xs text-muted-foreground">—</span>
-        ),
-    },
     { key: 'settle', label: '结算方式', width: '84px', render: (o) => <SettleCell o={o} /> },
     { key: 'status', label: '状态', width: '72px', render: (o) => <Tag className={saleStatusMeta[o.status].className}>{saleStatusMeta[o.status].label}</Tag> },
     { key: 'created', label: '下单时间', width: '92px', render: (o) => <Stamp value={o.createdAt} /> },
     {
       key: 'actions',
       label: '操作',
-      width: '72px',
+      width: 'minmax(140px,1fr)',
       render: (o) => (
-        <span className="flex items-center gap-x-3">
-          <ActionLink onClick={() => setDetailId(o.id)}>履约</ActionLink>
-          {saleActions(o, role).length > 0 && <span className="size-1.5 rounded-full bg-[#1890ff]" aria-label="有待处理操作" />}
-        </span>
+        <ActionCell
+          actions={saleActions(o, role)}
+          onAction={(a) => trigger(o, a)}
+          extra={
+            <>
+              <ActionLink onClick={() => setDetailId(o.id)}>详情</ActionLink>
+              <ContractLink no={o.contractNo} />
+            </>
+          }
+        />
       ),
+    },
+  ]
+
+  const detailSections = (o: SaleOrder): DetailSection[] => [
+    {
+      title: '商品与金额',
+      rows: [
+        ['商品', `${o.goods.name} · ${o.goods.spec}`],
+        ['数量', `${o.quantity.toLocaleString()} ${o.goods.unit}`],
+        ['成交单价', `¥ ${o.unitPrice.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} / ${o.goods.unit}`],
+        ...(o.status === 'negotiating' ? ([['买方出价', <span key="bid" className="font-medium text-violet-700">{`¥ ${(o.bidPrice ?? o.unitPrice).toLocaleString('zh-CN', { maximumFractionDigits: 2 })} / ${o.goods.unit}`}</span>]] as [string, React.ReactNode][]) : []),
+        ...(role === 'provider' ? ([['商家底价', `¥ ${(o.basePrice ?? 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })} / ${o.goods.unit}`]] as [string, React.ReactNode][]) : []),
+        ['运费', o.freight ? fmtMoney(o.freight) : '免运费'],
+        [role === 'provider' ? '服务收益' : '订单金额', <span key="amt" className="font-medium">{fmtMoney(role === 'provider' ? providerGain(o) : saleAmount(o))}</span>],
+        ['发票', o.invoice],
+      ],
+    },
+    {
+      title: '结算',
+      rows: [
+        ['结算方式', o.payTerm],
+        ['支付方式', o.payMethod],
+        ['对账状态', o.reconcile ?? '—'],
+        ['对账单金额', o.statementAmount ? fmtMoney(o.statementAmount) : '—'],
+      ],
+    },
+    {
+      title: '交易方',
+      rows: [
+        ['商家（卖方）', o.seller],
+        ['所属店铺', o.shop],
+        ['买方', o.buyer],
+        ['服务商', o.provider ?? '—'],
+        ['合同编号', o.contractNo ?? '—'],
+      ],
+    },
+    {
+      title: '交付',
+      rows: [
+        ['收货地址', o.address],
+        ['物流单号', o.logistics ?? '—'],
+        ['提货单号', o.pickupNo ?? '—'],
+      ],
     },
   ]
 
@@ -969,10 +894,18 @@ function SaleOrders({ role }: { role: OrderRole }) {
       />
       <div className="overflow-hidden rounded-md border border-border bg-card">
         <StatusTabs order={saleStatusOrder} meta={saleStatusMeta} active={status} countOf={countOf} onSelect={setStatus} ariaLabel="销售订单状态" right={`共 ${visible.length} 条`} />
-        <OrderTable columns={visibleColumns(cols, role)} rows={visible} minWidth="1280px" emptyText="没有符合条件的销售订单" />
+        <OrderTable columns={visibleColumns(cols, role)} rows={visible} minWidth="1320px" emptyText="没有符合条件的销售订单" />
       </div>
 
-      {detailRow && <SaleFulfillModal key={detailRow.id} order={detailRow} role={role} actions={saleActions(detailRow, role)} onAction={(a) => trigger(detailRow, a)} onClose={() => setDetailId(null)} />}
+      {detailRow && (
+        <DetailModal
+          title={`销售订单 ${detailRow.id}`}
+          status={<Tag className={saleStatusMeta[detailRow.status].className}>{saleStatusMeta[detailRow.status].label}</Tag>}
+          sections={detailSections(detailRow)}
+          timeline={detailRow.timeline}
+          onClose={() => setDetailId(null)}
+        />
+      )}
       {dialog && dialogRow && (
         <ActionDialog
           key={dialog.action.id + dialogRow.id}
