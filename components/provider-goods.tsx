@@ -206,6 +206,14 @@ const acceptMeta = {
   pending: { label: '未受理', className: 'bg-amber-50 text-amber-700 ring-amber-200' },
 }
 
+/** 运营状态：仅已受理的商品有运营状态（待上架 / 运营中 / 已下架） */
+function operationMeta(g: EntrustedGoods) {
+  if (g.status === 'listed') return statusMeta.listed
+  if (g.status === 'accepted') return statusMeta.accepted
+  if (g.status === 'off') return statusMeta.off
+  return null
+}
+
 /** 上架中记录占用的受托数量 */
 function lockedQty(g: EntrustedGoods) {
   return g.listings.filter((l) => l.status === 'on').reduce((s, l) => s + l.quantity, 0)
@@ -289,7 +297,7 @@ function AcceptDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; on
 
 const RETURN_REASONS = ['底价高于市场价', '品类不在服务范围', '仓储 / 运力不足', '资料不全', '其他']
 
-/** 退回：拒绝委托并说明原因 */
+/** 退回：拒绝委托并��明原因 */
 function ReturnDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; onClose: () => void; onConfirm: (note: string) => void }) {
   const [reason, setReason] = useState('')
   const [note, setNote] = useState('')
@@ -537,10 +545,12 @@ function Actions({ goods, onAction }: { goods: EntrustedGoods; onAction: (a: Act
   return <span className="flex flex-wrap items-center gap-x-3 gap-y-1">{map[goods.status]}</span>
 }
 
-const columns = '36px 100px minmax(130px,1.3fr) minmax(100px,1fr) 64px 112px 84px 76px 76px 80px minmax(120px,1fr)'
-const listingColumns = '120px 72px minmax(120px,1fr) minmax(160px,1fr) 100px 80px 120px'
+const columns = '36px 100px minmax(130px,1.3fr) minmax(100px,1fr) 64px 112px 84px 76px 76px 72px 96px minmax(120px,1fr)'
+const listingColumns = '120px 72px minmax(140px,1fr) minmax(150px,1fr) 100px 80px 120px'
 
+/** 上架记录：出售行显示起订量，出租行显示押金与最短租期，仅展示对外价格 */
 function ListingTable({ goods }: { goods: EntrustedGoods }) {
+  const isRent = goods.type === 'rent'
   return (
     <div className="overflow-hidden rounded border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs">
@@ -553,9 +563,9 @@ function ListingTable({ goods }: { goods: EntrustedGoods }) {
       >
         <span>上架单号</span>
         <span>租售方式</span>
-        <span>商家底价</span>
-        <span>对外价格 / 加价</span>
-        <span>已售 / 已租</span>
+        <span>{isRent ? '对外租金' : '对外售价'}</span>
+        <span>{isRent ? '押金 / 最短租期' : '起订量'}</span>
+        <span>{isRent ? '已租 / 上架' : '已售 / 上架'}</span>
         <span>状态</span>
         <span>操作</span>
       </div>
@@ -570,16 +580,15 @@ function ListingTable({ goods }: { goods: EntrustedGoods }) {
           >
             <span className="font-mono text-xs text-muted-foreground">{l.id}</span>
             <Tag className={bizMeta[l.type].className}>{bizMeta[l.type].label}</Tag>
-            <span className="tabular-nums text-muted-foreground">
-              ¥ {fmtPrice(l.basePrice)} {suffix}
+            <span className="tabular-nums">
+              ¥ {fmtPrice(l.price)} {suffix}
             </span>
-            <span className="flex flex-col tabular-nums">
-              <span>
-                ¥ {fmtPrice(l.price)} {suffix}
-              </span>
-              <span className="text-[11px] text-emerald-700">
-                加价 {l.markupMode === 'percent' ? `${l.markupValue}%` : `¥ ${fmtPrice(l.markupValue)}`} · 收益 ¥ {fmtPrice(round2(l.price - l.basePrice))} / {goods.unit}
-              </span>
+            <span className="text-xs tabular-nums">
+              {l.type === 'sale'
+                ? l.minOrder
+                  ? `${l.minOrder.toLocaleString()} ${goods.unit} 起订`
+                  : '不限'
+                : `押金 ¥ ${fmtPrice(l.deposit ?? 0)} / ${goods.unit} · ${l.minDays ?? 0} 天起租`}
             </span>
             <span className="tabular-nums">
               {l.used.toLocaleString()} / {l.quantity.toLocaleString()} {goods.unit}
@@ -743,7 +752,8 @@ export function ProviderGoods() {
               <span>受托时间</span>
               <span>受托数量</span>
               <span>上架数量</span>
-              <span>状态</span>
+              <span>受理情况</span>
+              <span>运营状态</span>
               <span>操作</span>
             </div>
 
@@ -751,8 +761,8 @@ export function ProviderGoods() {
 
             {visible.map((g) => {
               const open = expanded[g.id] ?? false
-              const meta = statusMeta[g.status]
               const accept = isAccepted(g) ? acceptMeta.accepted : acceptMeta.pending
+              const operation = operationMeta(g)
               return (
                 <Fragment key={g.id}>
                   <div
@@ -802,9 +812,12 @@ export function ProviderGoods() {
                     <span className="tabular-nums">
                       {lockedQty(g).toLocaleString()} {g.unit}
                     </span>
-                    <span className="flex min-w-0 flex-col items-start gap-1">
+                    <span className="flex flex-col items-start gap-1">
                       <Tag className={accept.className}>{accept.label}</Tag>
-                      <span className={cn('text-[11px] leading-4', meta.countClass)}>{meta.label}</span>
+                      {g.status === 'returned' && <span className="text-[11px] leading-4 text-red-600">已退回</span>}
+                    </span>
+                    <span className="flex min-w-0 flex-col items-start gap-1">
+                      {operation ? <Tag className={operation.className}>{operation.label}</Tag> : <span className="text-xs text-muted-foreground">—</span>}
                       {g.statusNote && (
                         <span className="line-clamp-1 text-[11px] leading-4 text-muted-foreground" title={g.statusNote}>
                           {g.statusNote}
@@ -859,7 +872,7 @@ export function ProviderGoods() {
             update(
               dialogGoods.id,
               (g) => ({ ...g, status: 'listed', statusNote: undefined, listings: [l, ...g.listings] }),
-              `已上架：${dialogGoods.name}（${bizMeta[l.type].label} ¥ ${fmtPrice(l.price)}，加价 ${l.markupMode === 'percent' ? `${l.markupValue}%` : `¥ ${fmtPrice(l.markupValue)}`}）`,
+              `已上架：${dialogGoods.name}（${bizMeta[l.type].label} ¥ ${fmtPrice(l.price)}）`,
             )
           }
         />
