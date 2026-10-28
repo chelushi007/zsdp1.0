@@ -7,7 +7,17 @@ import { ShopCreate, ShopInfo } from '@/components/shop-info'
 import { GoodsList } from '@/components/goods-list'
 import { GoodsPublish } from '@/components/goods-publish'
 import { ProviderGoods } from '@/components/provider-goods'
+import { OrdersPage, type OrdersKind } from '@/components/orders'
+import type { OrderRole } from '@/lib/orders-data'
 import type { MenuNode } from '@/lib/menu'
+
+const ORDER_KINDS: Record<string, OrdersKind> = { rent: 'rent', sale: 'sale', after: 'after' }
+
+/** 解析 `${role}-orders-${kind}` 形式的菜单 id */
+function parseOrdersRoute(id: string): { role: OrderRole; kind: OrdersKind } | null {
+  const m = /^(seller|buyer|provider)-orders-(rent|sale|after)$/.exec(id)
+  return m ? { role: m[1] as OrderRole, kind: ORDER_KINDS[m[2]] } : null
+}
 
 type Props = {
   path: MenuNode[]
@@ -180,6 +190,7 @@ export function PageCanvas({ path, onNavigate }: Props) {
   const isHub = Boolean(node.children?.length)
   const [subTitle, setSubTitle] = useState<string | null>(null)
   const title = node.id === 'seller-shop-info' && subTitle ? subTitle : node.label
+  const ordersRoute = parseOrdersRoute(node.id)
 
   return (
     <div className="flex flex-col gap-4">
@@ -202,6 +213,8 @@ export function PageCanvas({ path, onNavigate }: Props) {
         />
       ) : node.id === 'provider-goods' ? (
         <ProviderGoods key={node.id} />
+      ) : ordersRoute ? (
+        <OrdersPage key={node.id} role={ordersRoute.role} kind={ordersRoute.kind} />
       ) : isHub ? (
         <HubLayout node={node} onNavigate={onNavigate} />
       ) : node.id === 'ops-dashboard' ? (
