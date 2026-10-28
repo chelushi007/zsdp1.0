@@ -547,7 +547,7 @@ function BanTemplateManager({
                   </Button>
                 </div>
               </Field>
-              <Field label="禁售地区" required hint={draft.areas.length ? `共 ${draft.areas.length} 个地区` : '至少���加一个禁售地区'}>
+              <Field label="禁售地区" required hint={draft.areas.length ? `共 ${draft.areas.length} 个地区` : '至少添加一个禁售地区'}>
                 {draft.areas.length === 0 ? (
                   <p className="flex h-9 items-center text-sm text-muted-foreground">尚未添加</p>
                 ) : (

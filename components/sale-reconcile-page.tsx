@@ -289,7 +289,7 @@ function CustomRangeEditor({
         </label>
         <div className="flex items-end">
           <span className="flex h-9 items-center rounded border border-border bg-muted/40 px-3 text-xs tabular-nums text-muted-foreground">
-            {days > 0 ? `共 ${days} 天` : "��"}
+            {days > 0 ? `共 ${days} 天` : "—"}
           </span>
         </div>
       </div>
@@ -330,6 +330,90 @@ function CustomRangeEditor({
         )
       )}
       <PeriodTimeline history={history} current={range} />
+    </div>
+  );
+}
+
+/** 一次性对账：全量对账总览（商品项数、总数量、货款、运费、对账总额） */
+function OneOffOverview({
+  rows,
+  goodsTotal,
+  freight,
+  total,
+  contractNo,
+}: {
+  rows: LineRow[];
+  goodsTotal: number;
+  freight: number;
+  total: number;
+  contractNo?: string;
+}) {
+  const totalQty = rows.reduce((s, r) => s + r.remain, 0);
+  const tiles: [string, string, string?][] = [
+    ["对账商品", `${rows.length} 项`, `合计 ${totalQty} 件`],
+    ["商品货款", fmtMoney(goodsTotal), "按订单单价 × 全部数量"],
+    ["运费", freight ? fmtMoney(freight) : "免运费", freight ? "一并计入本次对账" : undefined],
+    ["对账总额", fmtMoney(total), "发送后买方确认即进入待付款"],
+  ];
+  return (
+    <div className="flex flex-col gap-3 rounded border border-[#1890ff]/30 bg-[#1890ff]/[0.03] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="flex items-center gap-2 text-sm font-medium">
+          <CheckCircle2 className="size-4 text-[#1890ff]" />
+          一次性对账 · 全量核对
+        </span>
+        <span className="text-xs text-muted-foreground">
+          对账依据：{contractNo ? `合同 ${contractNo}` : "订单约定"} · 到场验收签收单
+        </span>
+      </div>
+      <dl className="grid gap-2 sm:grid-cols-4">
+        {tiles.map(([label, value, hint], i) => (
+          <div
+            key={label}
+            className={cn(
+              "flex flex-col gap-0.5 rounded border bg-background px-3 py-2",
+              i === tiles.length - 1
+                ? "border-[#1890ff]/40"
+                : "border-border",
+            )}
+          >
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd
+              className={cn(
+                "text-base font-semibold tabular-nums",
+                i === tiles.length - 1 && "text-[#1890ff]",
+              )}
+            >
+              {value}
+            </dd>
+            {hint && (
+              <dd className="text-[11px] leading-4 text-muted-foreground">
+                {hint}
+              </dd>
+            )}
+          </div>
+        ))}
+      </dl>
+      <ol className="flex flex-wrap items-center gap-x-1 gap-y-1 text-xs text-muted-foreground">
+        {["商家发送对账单", "买方核对确认", "订单转待付款", "买方付款"].map(
+          (step, i, arr) => (
+            <li key={step} className="flex items-center gap-1">
+              <span
+                className={cn(
+                  "flex size-4 items-center justify-center rounded-full text-[10px] tabular-nums",
+                  i === 0
+                    ? "bg-[#1890ff] text-white"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {i + 1}
+              </span>
+              <span className={cn(i === 0 && "text-foreground")}>{step}</span>
+              {i < arr.length - 1 && <span className="px-1">→</span>}
+            </li>
+          ),
+        )}
+      </ol>
     </div>
   );
 }
@@ -937,7 +1021,7 @@ export function SaleReconcilePage({
                 {oneOff && (
                   <DialogField
                     label="对账范围"
-                    hint="一次性对账覆盖���单全部商品数量，无需分期"
+                    hint="一次性对账覆盖订单全部商品数量，无需分期"
                   >
                     <div className="flex h-9 items-center justify-between rounded border border-border bg-muted/40 px-3 text-sm">
                       <span className="text-xs text-muted-foreground">
@@ -1024,6 +1108,16 @@ export function SaleReconcilePage({
                     onChange={setRange}
                   />
                 </DialogField>
+              )}
+
+              {oneOff && (
+                <OneOffOverview
+                  rows={rows}
+                  goodsTotal={goodsTotal}
+                  freight={o.freight}
+                  total={amountNum}
+                  contractNo={o.contractNo}
+                />
               )}
 
               <div className="flex flex-col gap-2">
