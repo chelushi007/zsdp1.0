@@ -157,18 +157,30 @@ const goodsData: Goods[] = [
       { id: 'L240703001', type: 'sale', status: 'on', price: 4280, minOrder: 5, quantity: 95, used: 30 },
       { id: 'L240703002', type: 'rent', status: 'on', price: 9.5, period: '天', deposit: 2500, minDays: 60, quantity: 300, used: 120 },
     ],
+    updatedAt: '2024-10-25 17:05',
+  },
+  {
+    code: 'G2024100009',
+    name: '组合式钢模板 300×1500 平模',
+    spec: 'Q235 / 5mm 面板',
+    category: '循环物资',
+    subCategory: '模板类',
+    unit: '块',
+    stock: 2400,
+    status: 'active',
+    listings: [{ id: 'L241022001', type: 'sale', status: 'on', price: 186, minOrder: 100, quantity: 1200, used: 160 }],
     entrust: {
       types: ['sale', 'rent'],
       provider: '中建租赁服务（上海）有限公司',
-      quantity: 60,
-      salePrice: 4100,
-      rentPrice: 9,
-      rentDeposit: 2500,
+      quantity: 800,
+      salePrice: 175,
+      rentPrice: 0.35,
+      rentDeposit: 150,
       months: 12,
       status: 'pending',
-      createdAt: '2024-10-26',
+      createdAt: '2024-10-27',
     },
-    updatedAt: '2024-10-26 09:40',
+    updatedAt: '2024-10-27 10:15',
   },
   {
     code: 'G2024080007',
@@ -260,11 +272,7 @@ function GoodsActions({ goods, onAction }: { goods: Goods; onAction: (a: GoodsAc
     <ActionLink tone="danger" onClick={() => onAction('cancelEntrust')}>
       撤回委托
     </ActionLink>
-  ) : (
-    <span className="cursor-not-allowed text-xs text-muted-foreground/60" title="服务商已受理，委托期内不可撤回">
-      撤回委托
-    </span>
-  )
+  ) : null
   const actions: Record<GoodsStatus, React.ReactNode> = {
     draft: (
       <>
@@ -913,14 +921,10 @@ function EntrustTable({ goods, onCancel }: { goods: Goods; onCancel: () => void 
         <Tag className={meta.className}>{meta.label}</Tag>
         <span className="flex items-center gap-3">
           <ActionLink>详情</ActionLink>
-          {e.status === 'pending' ? (
+          {e.status === 'pending' && (
             <ActionLink tone="danger" onClick={onCancel}>
               撤回
             </ActionLink>
-          ) : (
-            <span className="cursor-not-allowed text-xs text-muted-foreground/60" title="服务商已受理，委托期内不可撤回">
-              撤回
-            </span>
           )}
         </span>
       </div>
