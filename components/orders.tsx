@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { FileText } from 'lucide-react'
-import { ActionLink, bizMeta } from '@/components/goods-list'
+import { Button } from '@/components/ui/button'
+import { ActionLink, PRIMARY_BTN, bizMeta } from '@/components/goods-list'
 import { Select } from '@/components/shop-form-fields'
 import {
   ActionCell,
@@ -128,6 +129,7 @@ function settleActions<T extends RentOrder | SaleOrder>(o: T, role: OrderRole): 
     if (role === 'buyer') {
       list.push({
         id: 'reconcile',
+        group: '对账',
         label: '确认对账',
         title: '确认对账',
         fields: [{ key: 'note', label: '对账说明' }],
@@ -136,6 +138,7 @@ function settleActions<T extends RentOrder | SaleOrder>(o: T, role: OrderRole): 
       })
       list.push({
         id: 'payDirect',
+        group: '支付',
         label: '直接付款',
         title: '直接付款',
         confirmLabel: `确认支付 ${fmtMoney(amount)}`,
@@ -144,6 +147,7 @@ function settleActions<T extends RentOrder | SaleOrder>(o: T, role: OrderRole): 
       })
       list.push({
         id: 'dispute',
+        group: '对账',
         label: '对账有异议',
         tone: 'danger',
         fields: [{ key: 'reason', label: '异议内容', required: true }],
@@ -153,6 +157,7 @@ function settleActions<T extends RentOrder | SaleOrder>(o: T, role: OrderRole): 
     } else {
       list.push({
         id: 'statement',
+        group: '对账',
         label: o.statementAmount ? '重发对账单' : '发送对账单',
         title: '发送对账单',
         fields: [
@@ -169,13 +174,14 @@ function settleActions<T extends RentOrder | SaleOrder>(o: T, role: OrderRole): 
     if (role === 'buyer')
       list.push({
         id: 'pay',
+        group: '支付',
         label: '去支付',
         title: payLabel,
         confirmLabel: `确认支付 ${fmtMoney(o.statementAmount ?? amount)}`,
         apply: (x) => withEvent({ ...x, status: afterPaid(x) }, `${payLabel} ${fmtMoney(x.statementAmount ?? amount)}`, by),
         toast: () => '付款成功',
       })
-    else list.push({ id: 'urgePay', label: '催付款', instant: true, apply: (x) => withEvent(x, `${by}催促付款`, by), toast: () => '已发送付款提醒' })
+    else list.push({ id: 'urgePay', group: '支付', label: '催付款', instant: true, apply: (x) => withEvent(x, `${by}催促付款`, by), toast: () => '已发送付款提醒' })
   }
   return list
 }
@@ -562,20 +568,72 @@ function saleActions(o: SaleOrder, role: OrderRole): ActionDef<SaleOrder>[] {
   const list: ActionDef<SaleOrder>[] = [...settleActions(o, role)]
   const cancel: ActionDef<SaleOrder> = {
     id: 'cancel',
+    group: '合同',
     label: '取消订单',
     tone: 'danger',
     fields: [{ key: 'reason', label: '取消原因', required: true }],
     apply: (x, v) => withEvent({ ...x, status: 'cancelled' }, `${by}取消订单`, by, v.reason),
     toast: () => '订单已取消',
   }
-  const beforeDelivery = (s === 'toReconcile' || s === 'unpaid') && o.payTerm === '先款后货'
+  const afterNegotiated = (x: SaleOrder): SaleStatus => (x.payTerm === '先款后货' ? 'toReconcile' : 'toShip')
+  const beforeDelivery = (s === 'negotiating' || s === 'toReconcile' || s === 'unpaid') && o.payTerm === '先款后货'
   if (beforeDelivery) list.push(cancel)
 
+  if (s === 'negotiating') {
+    if (role === 'buyer')
+      list.push({
+        id: 'bid',
+        group: '合同',
+        label: '修改出价',
+        fields: [{ key: 'price', label: `出价（¥/${o.goods.unit}）`, type: 'number', prefix: '¥', required: true, initial: String(o.bidPrice ?? o.unitPrice) }],
+        apply: (x, v) => withEvent({ ...x, bidPrice: Number(v.price) || x.bidPrice }, `买方出价 ¥${v.price}/${x.goods.unit}`, by),
+        toast: () => '出价已更新',
+      })
+    else {
+      list.push({
+        id: 'acceptBid',
+        group: '合同',
+        label: '接受出价',
+        confirmLabel: `按 ¥${o.bidPrice ?? o.unitPrice}/${o.goods.unit} 成交`,
+        apply: (x) => withEvent({ ...x, status: afterNegotiated(x), unitPrice: x.bidPrice ?? x.unitPrice, reconcile: x.payTerm === '先款后货' ? '待对账' : x.reconcile }, `${by}接受出价，按 ¥${x.bidPrice ?? x.unitPrice}/${x.goods.unit} 成交`, by),
+        toast: () => '已成交',
+      })
+      list.push({
+        id: 'counter',
+        group: '合同',
+        label: '还价',
+        fields: [{ key: 'price', label: `还价（¥/${o.goods.unit}）`, type: 'number', prefix: '¥', required: true, initial: String(o.unitPrice) }],
+        apply: (x, v) => withEvent({ ...x, unitPrice: Number(v.price) || x.unitPrice }, `${by}还价 ¥${v.price}/${x.goods.unit}`, by),
+        toast: () => '还价已发送',
+      })
+      list.push({
+        id: 'rejectBid',
+        group: '合同',
+        label: '拒绝议价',
+        tone: 'danger',
+        fields: [{ key: 'reason', label: '拒绝原因', required: true }],
+        apply: (x, v) => withEvent({ ...x, status: 'cancelled' }, `${by}拒绝议价`, by, v.reason),
+        toast: () => '已拒绝议价',
+      })
+    }
+  }
+
+  if (!o.contractNo && s !== 'negotiating' && s !== 'cancelled')
+    list.push({
+      id: 'sign',
+      group: '合同',
+      label: role === 'buyer' ? '签署合同' : '发起合同',
+      fields: [{ key: 'no', label: '合同编号', required: true, initial: `HT${o.id.slice(2)}` }],
+      apply: (x, v) => withEvent({ ...x, contractNo: v.no }, `${by}${role === 'buyer' ? '签署' : '发起'}合同`, by, v.no),
+      toast: () => '合同已更新',
+    })
+
   if (role === 'buyer') {
-    if (s === 'toShip') list.push({ id: 'urge', label: '催发货', instant: true, apply: (x) => withEvent(x, '催促发货', by), toast: () => '已发送发货提醒' })
+    if (s === 'toShip') list.push({ id: 'urge', group: '发货', label: '催发货', instant: true, apply: (x) => withEvent(x, '催促发货', by), toast: () => '已发送发货提醒' })
     if (s === 'shipped')
       list.push({
         id: 'receive',
+        group: '发货',
         label: '确认收货',
         confirmLabel: '确认收货',
         apply: (x) => withEvent({ ...x, status: afterDelivered(x), reconcile: x.payTerm === '货到付款' ? '待对账' : x.reconcile }, '买方确认收货', by),
@@ -584,32 +642,53 @@ function saleActions(o: SaleOrder, role: OrderRole): ActionDef<SaleOrder>[] {
     if (s === 'done') {
       list.push({
         id: 'after',
-        label: '申请售后',
+        group: '退货',
+        label: '申请退货 / 售后',
         fields: [{ key: 'reason', label: '售后原因', required: true }],
         apply: (x, v) => withEvent({ ...x, status: 'afterSale' }, '买方申请售后', by, v.reason),
         toast: () => '售后申请已提交',
       })
-      if (o.invoice === '已开票') list.push({ id: 'invoice', label: '查看发票', instant: true, apply: (x) => x, toast: () => '已打开电子发票' })
+      if (o.invoice === '已开票') list.push({ id: 'invoice', group: '支付', label: '查看发票', instant: true, apply: (x) => x, toast: () => '已打开电子发票' })
     }
   }
   if (role === 'seller') {
-    if (s === 'toShip')
+    if (s === 'toShip') {
       list.push({
         id: 'ship',
-        label: '发货',
+        group: '发货',
+        label: '物流发货',
         fields: [
           { key: 'company', label: '物流公司 / 车辆', required: true },
-          { key: 'no', label: '运单号' },
+          { key: 'no', label: '物流单号', required: true },
         ],
-        apply: (x, v) => {
-          const logistics = [v.company, v.no].filter(Boolean).join(' ')
-          return withEvent({ ...x, status: 'shipped', logistics }, '商家发货', by, logistics)
-        },
+        apply: (x, v) => withEvent({ ...x, status: 'shipped', logistics: v.no, pickupNo: undefined }, '商家发货', by, `${v.company} ${v.no}`),
         toast: () => '已发货',
+      })
+      list.push({
+        id: 'pickup',
+        group: '发货',
+        label: '生成提货单',
+        fields: [{ key: 'no', label: '提货单号', required: true, initial: `TH${o.id.slice(2)}` }],
+        apply: (x, v) => withEvent({ ...x, status: 'shipped', pickupNo: v.no, logistics: undefined }, '商家生成提货单', by, v.no),
+        toast: () => '提货单已生成',
+      })
+    }
+    if (s === 'afterSale')
+      list.push({
+        id: 'returnDone',
+        group: '退货',
+        label: '完成退货处理',
+        fields: [
+          { key: 'refund', label: '退款金额', type: 'number', prefix: '¥', initial: '0' },
+          { key: 'note', label: '处理结果', required: true },
+        ],
+        apply: (x, v) => withEvent({ ...x, status: 'done' }, Number(v.refund) ? `退货处理完成，退款 ${fmtMoney(Number(v.refund))}` : '退货处理完成', by, v.note),
+        toast: () => '退货处理已完成',
       })
     if (s === 'done' && o.invoice === '待开票')
       list.push({
         id: 'invoice',
+        group: '支付',
         label: '开票',
         fields: [
           { key: 'title', label: '发票抬头', required: true, initial: o.buyer },
@@ -620,10 +699,119 @@ function saleActions(o: SaleOrder, role: OrderRole): ActionDef<SaleOrder>[] {
       })
   }
   if (role === 'provider') {
-    if (s === 'toShip') list.push({ id: 'notify', label: '通知商家发货', instant: true, apply: (x) => withEvent(x, '服务商通知商家发货', by), toast: () => '已通知商家发货' })
-    if (s === 'shipped') list.push({ id: 'track', label: '跟进物流', instant: true, apply: (x) => withEvent(x, '服务商跟进物流', by), toast: () => '已同步物流' })
+    if (s === 'toShip') list.push({ id: 'notify', group: '发货', label: '通知商家发货', instant: true, apply: (x) => withEvent(x, '服务商通知商家发货', by), toast: () => '已通知商家发货' })
+    if (s === 'shipped') list.push({ id: 'track', group: '发货', label: '跟进物流', instant: true, apply: (x) => withEvent(x, '服务商跟进物流', by), toast: () => '已同步物流' })
   }
   return list
+}
+
+const FULFILL_TABS = ['合同', '对账', '支付', '发货', '退货'] as const
+type FulfillTab = (typeof FULFILL_TABS)[number]
+
+function FulfillRows({ rows }: { rows: [string, React.ReactNode][] }) {
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+      {rows.map(([k, v]) => (
+        <div key={k} className="flex flex-col gap-0.5">
+          <dt className="text-xs text-muted-foreground">{k}</dt>
+          <dd className="min-w-0 break-words">{v}</dd>
+        </div>
+      ))}
+    </dl>
+  )
+}
+
+function SaleFulfillModal({
+  order: o,
+  role,
+  actions,
+  onAction,
+  onClose,
+}: {
+  order: SaleOrder
+  role: OrderRole
+  actions: ActionDef<SaleOrder>[]
+  onAction: (a: ActionDef<SaleOrder>) => void
+  onClose: () => void
+}) {
+  const [tab, setTab] = useState<FulfillTab>(() => {
+    const first = actions.find((a) => a.group)?.group as FulfillTab | undefined
+    return first && FULFILL_TABS.includes(first) ? first : '合同'
+  })
+  const unit = (n: number) => `¥ ${n.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} / ${o.goods.unit}`
+  const tabRows: Record<FulfillTab, [string, React.ReactNode][]> = {
+    合同: [
+      ['合同编号', o.contractNo ?? '—'],
+      ['成交单价', unit(o.unitPrice)],
+      ...(o.status === 'negotiating' ? ([['买方出价', <span key="bid" className="font-medium text-violet-700">{unit(o.bidPrice ?? o.unitPrice)}</span>]] as [string, React.ReactNode][]) : []),
+      ['数量', `${o.quantity.toLocaleString()} ${o.goods.unit}`],
+      ['结算方式', o.payTerm],
+      ['买方', o.buyer],
+      ['卖方', o.provider ?? o.seller],
+    ],
+    对账: [
+      ['对账状态', o.reconcile ?? '—'],
+      ['对账单金额', o.statementAmount ? fmtMoney(o.statementAmount) : '—'],
+      ['订单金额', fmtMoney(saleAmount(o))],
+      ['运费', o.freight ? fmtMoney(o.freight) : '免运费'],
+    ],
+    支付: [
+      ['支付方式', o.payMethod],
+      ['应结金额', <span key="amt" className="font-medium">{fmtMoney(o.statementAmount ?? saleAmount(o))}</span>],
+      ['付款状态', o.status === 'toReconcile' || o.status === 'unpaid' || o.status === 'negotiating' ? '未付款' : o.status === 'cancelled' ? '—' : '已付款'],
+      ['发票', o.invoice],
+    ],
+    发货: [
+      ['发货状态', saleStatusMeta[o.status].label],
+      ['收货地址', o.address],
+      ['物流单号', o.logistics ?? '—'],
+      ['提货单号', o.pickupNo ?? '—'],
+    ],
+    退货: [
+      ['售后状态', o.status === 'afterSale' ? '处理中' : '—'],
+      ['可退数量', `${o.quantity.toLocaleString()} ${o.goods.unit}`],
+    ],
+  }
+  const tabActions = actions.filter((a) => a.group === tab)
+  const countFor = (t: FulfillTab) => actions.filter((a) => a.group === t).length
+
+  return (
+    <DetailModal
+      title={`${o.id} · ${o.goods.name}`}
+      status={<Tag className={saleStatusMeta[o.status].className}>{saleStatusMeta[o.status].label}</Tag>}
+      heading="���单履约"
+      sections={[]}
+      timeline={o.timeline}
+      onClose={onClose}
+      body={
+        <div className="flex flex-col gap-4">
+          <div role="tablist" aria-label="履约环节" className="flex gap-1 border-b border-border">
+            {FULFILL_TABS.map((t) => (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={tab === t}
+                onClick={() => setTab(t)}
+                className={`relative -mb-px flex items-center gap-1.5 px-3 py-2 text-sm transition-colors ${tab === t ? 'border-b-2 border-[#1890ff] font-medium text-[#1890ff]' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                {t}
+                {countFor(t) > 0 && <span className="size-1.5 rounded-full bg-[#1890ff]" aria-hidden />}
+              </button>
+            ))}
+          </div>
+          <FulfillRows rows={tabRows[tab]} />
+          <div className="flex flex-wrap gap-2">
+            {tabActions.map((a) => (
+              <Button key={a.id} size="sm" variant={a.tone === 'danger' ? 'outline' : 'default'} className={a.tone === 'danger' ? 'text-red-600' : PRIMARY_BTN} onClick={() => onAction(a)}>
+                {a.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+      }
+    />
+  )
 }
 
 function SaleOrders({ role }: { role: OrderRole }) {
@@ -637,7 +825,7 @@ function SaleOrders({ role }: { role: OrderRole }) {
 
   const match = (o: SaleOrder, f: BaseFilters, term: string) => {
     const kw = f.keyword.trim().toLowerCase()
-    if (kw && !o.id.toLowerCase().includes(kw) && !o.goods.name.toLowerCase().includes(kw) && !(o.logistics ?? '').toLowerCase().includes(kw)) return false
+    if (kw && ![o.id, o.goods.name, o.logistics ?? '', o.pickupNo ?? '', o.shop].some((v) => v.toLowerCase().includes(kw))) return false
     if (f.party && counterpart(o, role) !== f.party) return false
     if (f.source && sourceOf(o) !== f.source) return false
     if (term && o.payTerm !== term) return false
@@ -654,10 +842,10 @@ function SaleOrders({ role }: { role: OrderRole }) {
   const owed = rows.filter((o) => o.status === 'toReconcile' || o.status === 'unpaid').reduce((s, o) => s + (o.statementAmount ?? saleAmount(o)), 0)
   const kpis: Record<OrderRole, Kpi[]> = {
     seller: [
+      { label: '议价中', value: String(n('negotiating')), tone: n('negotiating') ? 'warn' : 'default' },
       { label: '待对账 / 待收款', value: String(n('toReconcile', 'unpaid')), tone: n('toReconcile', 'unpaid') ? 'warn' : 'default' },
       { label: '待发货', value: String(n('toShip')) },
-      { label: '售后中', value: String(n('afterSale')), tone: n('afterSale') ? 'warn' : 'default' },
-      { label: '本月成交额', value: fmtMoney(month.reduce((s, o) => s + saleAmount(o), 0)) },
+      { label: '本月成交额', value: fmtMoney(month.filter((o) => o.status !== 'negotiating').reduce((s, o) => s + saleAmount(o), 0)) },
     ],
     buyer: [
       { label: '待对账', value: String(n('toReconcile')) },
@@ -687,6 +875,7 @@ function SaleOrders({ role }: { role: OrderRole }) {
       roles: ['seller'],
       render: (o) => <PartyCell name={o.buyer} sub={o.provider ? `代理：${o.provider}` : '自营'} subTone={o.provider ? 'primary' : 'muted'} />,
     },
+    { key: 'shop', label: '所属店铺', width: 'minmax(130px,1fr)', roles: ['seller'], render: (o) => <PartyCell name={o.shop} /> },
     {
       key: 'sellerParty',
       label: '卖方',
@@ -721,88 +910,31 @@ function SaleOrders({ role }: { role: OrderRole }) {
     },
     {
       key: 'delivery',
-      label: '收货 / 物流',
-      width: 'minmax(160px,1fr)',
-      render: (o) => (
-        <span className="flex min-w-0 flex-col text-xs">
-          <span className="truncate" title={o.address}>
-            {o.address}
+      label: '物流单号 / 提货单号',
+      width: 'minmax(140px,1fr)',
+      render: (o) =>
+        o.logistics || o.pickupNo ? (
+          <span className="flex min-w-0 flex-col text-xs">
+            <span className="truncate font-mono">{o.logistics ?? o.pickupNo}</span>
+            <span className="text-muted-foreground">{o.logistics ? '物流单号' : '提货单号'}</span>
           </span>
-          <span className="truncate font-mono text-muted-foreground">{o.logistics ?? '—'}</span>
-        </span>
-      ),
+        ) : (
+          <span className="text-xs text-muted-foreground">—</span>
+        ),
     },
     { key: 'settle', label: '结算方式', width: '84px', render: (o) => <SettleCell o={o} /> },
-    {
-      key: 'pay',
-      label: '支付 / 发票',
-      width: '84px',
-      roles: ['seller', 'buyer'],
-      render: (o) => (
-        <span className="flex flex-col text-xs">
-          <span>{o.payMethod}</span>
-          <span className={o.invoice === '待开票' ? 'text-amber-600' : 'text-muted-foreground'}>{o.invoice}</span>
-        </span>
-      ),
-    },
     { key: 'status', label: '状态', width: '72px', render: (o) => <Tag className={saleStatusMeta[o.status].className}>{saleStatusMeta[o.status].label}</Tag> },
     { key: 'created', label: '下单时间', width: '92px', render: (o) => <Stamp value={o.createdAt} /> },
     {
       key: 'actions',
       label: '操作',
-      width: 'minmax(140px,1fr)',
+      width: '72px',
       render: (o) => (
-        <ActionCell
-          actions={saleActions(o, role)}
-          onAction={(a) => trigger(o, a)}
-          extra={
-            <>
-              <ActionLink onClick={() => setDetailId(o.id)}>详情</ActionLink>
-              <ContractLink no={o.contractNo} />
-            </>
-          }
-        />
+        <span className="flex items-center gap-x-3">
+          <ActionLink onClick={() => setDetailId(o.id)}>履约</ActionLink>
+          {saleActions(o, role).length > 0 && <span className="size-1.5 rounded-full bg-[#1890ff]" aria-label="有待处理操作" />}
+        </span>
       ),
-    },
-  ]
-
-  const detailSections = (o: SaleOrder): DetailSection[] => [
-    {
-      title: '商品与金额',
-      rows: [
-        ['商品', `${o.goods.name} · ${o.goods.spec}`],
-        ['数量', `${o.quantity.toLocaleString()} ${o.goods.unit}`],
-        ['成交单价', `¥ ${o.unitPrice.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} / ${o.goods.unit}`],
-        ...(role === 'provider' ? ([['商家底价', `¥ ${(o.basePrice ?? 0).toLocaleString('zh-CN', { maximumFractionDigits: 2 })} / ${o.goods.unit}`]] as [string, React.ReactNode][]) : []),
-        ['运费', o.freight ? fmtMoney(o.freight) : '免运费'],
-        [role === 'provider' ? '服务收益' : '订单金额', <span key="amt" className="font-medium">{fmtMoney(role === 'provider' ? providerGain(o) : saleAmount(o))}</span>],
-        ['发票', o.invoice],
-      ],
-    },
-    {
-      title: '结算',
-      rows: [
-        ['结算方式', o.payTerm],
-        ['支付方式', o.payMethod],
-        ['对账状态', o.reconcile ?? '—'],
-        ['对账单金额', o.statementAmount ? fmtMoney(o.statementAmount) : '—'],
-      ],
-    },
-    {
-      title: '交易方',
-      rows: [
-        ['商家（卖方）', o.seller],
-        ['买方', o.buyer],
-        ['服务商', o.provider ?? '—'],
-        ['合同编号', o.contractNo ?? '—'],
-      ],
-    },
-    {
-      title: '交付',
-      rows: [
-        ['收货地址', o.address],
-        ['物流信息', o.logistics ?? '—'],
-      ],
     },
   ]
 
@@ -824,7 +956,7 @@ function SaleOrders({ role }: { role: OrderRole }) {
           setStatus('')
         }}
         keywordLabel="订单"
-        keywordPlaceholder="订单号 / 商品名称 / 运单号"
+        keywordPlaceholder="订单号 / 商品名称 / 物流单号 / 提货单号"
         partyLabel={role === 'buyer' ? '卖方' : '买方'}
         partyOptions={parties}
         showSource={role === 'seller'}
@@ -837,9 +969,10 @@ function SaleOrders({ role }: { role: OrderRole }) {
       />
       <div className="overflow-hidden rounded-md border border-border bg-card">
         <StatusTabs order={saleStatusOrder} meta={saleStatusMeta} active={status} countOf={countOf} onSelect={setStatus} ariaLabel="销售订单状态" right={`共 ${visible.length} 条`} />
-        <OrderTable columns={visibleColumns(cols, role)} rows={visible} minWidth="1320px" emptyText="没有符合条件的销售订单" />
+        <OrderTable columns={visibleColumns(cols, role)} rows={visible} minWidth="1280px" emptyText="没有符合条件的销售订单" />
       </div>
 
+      {detailRow && <SaleFulfillModal key={detailRow.id} order={detailRow} role={role} actions={saleActions(detailRow, role)} onAction={(a) => trigger(detailRow, a)} onClose={() => setDetailId(null)} />}
       {dialog && dialogRow && (
         <ActionDialog
           key={dialog.action.id + dialogRow.id}
@@ -852,15 +985,6 @@ function SaleOrders({ role }: { role: OrderRole }) {
           }
           onClose={() => setDialog(null)}
           onConfirm={(v) => run(dialogRow, dialog.action, v)}
-        />
-      )}
-      {detailRow && (
-        <DetailModal
-          title={`销售订单 ${detailRow.id}`}
-          status={<Tag className={saleStatusMeta[detailRow.status].className}>{saleStatusMeta[detailRow.status].label}</Tag>}
-          sections={detailSections(detailRow)}
-          timeline={detailRow.timeline}
-          onClose={() => setDetailId(null)}
         />
       )}
       <Toast message={toast} />

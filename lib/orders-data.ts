@@ -63,7 +63,7 @@ export type RentOrder = OrderBase & {
   deduction?: number
 }
 
-export type SaleStatus = 'toReconcile' | 'unpaid' | 'toShip' | 'shipped' | 'done' | 'afterSale' | 'cancelled'
+export type SaleStatus = 'negotiating' | 'toReconcile' | 'unpaid' | 'toShip' | 'shipped' | 'done' | 'afterSale' | 'cancelled'
 export type PayMethod = '对公转账' | '在线支付' | '账期结算'
 export type InvoiceState = '已开票' | '待开票' | '不开票'
 
@@ -72,7 +72,14 @@ export type SaleOrder = OrderBase & {
   status: SaleStatus
   freight: number
   address: string
+  /** 商家所属店铺 */
+  shop: string
+  /** 物流单号 */
   logistics?: string
+  /** 自提时的提货单号 */
+  pickupNo?: string
+  /** 买方议价出价 */
+  bidPrice?: number
   payMethod: PayMethod
   invoice: InvoiceState
 }
@@ -136,8 +143,9 @@ export const rentStatusMeta: Record<RentStatus, Meta> = {
   cancelled: { label: '已取消', className: gray },
 }
 
-export const saleStatusOrder: SaleStatus[] = ['toReconcile', 'unpaid', 'toShip', 'shipped', 'done', 'afterSale', 'cancelled']
+export const saleStatusOrder: SaleStatus[] = ['negotiating', 'toReconcile', 'unpaid', 'toShip', 'shipped', 'done', 'afterSale', 'cancelled']
 export const saleStatusMeta: Record<SaleStatus, Meta> = {
+  negotiating: { label: '议价中', className: 'bg-violet-50 text-violet-700 ring-violet-200' },
   toReconcile: { label: '待对账', className: teal },
   unpaid: { label: '待付款', className: amber },
   toShip: { label: '待发货', className: blue },
@@ -516,7 +524,30 @@ export const rentOrdersData: RentOrder[] = [
 export const saleOrdersData: SaleOrder[] = [
   {
     kind: 'sale',
+    id: 'SO2024102809',
+    status: 'negotiating',
+    payTerm: '货到付款',
+    shop: '苏州分公司模板租赁店',
+    goods: G.formwork,
+    quantity: 600,
+    seller: DEMO.seller,
+    buyer: DEMO.buyer,
+    unitPrice: 186,
+    bidPrice: 172,
+    freight: 1800,
+    address: ADDR.shanghai,
+    payMethod: '对公转账',
+    invoice: '待开票',
+    createdAt: '2024-10-28 10:12',
+    updatedAt: '2024-10-28 10:12',
+    timeline: [
+      { at: '2024-10-28 10:12', label: '买方提交订单并出价 ¥172/块', by: '买/租方' },
+    ],
+  },
+  {
+    kind: 'sale',
     id: 'SO2024102201',
+    shop: '华东建设工程有限公司周转材料店',
     status: 'shipped',
     payTerm: '货到付款',
     goods: G.formwork,
@@ -543,6 +574,7 @@ export const saleOrdersData: SaleOrder[] = [
   {
     kind: 'sale',
     id: 'SO2024102502',
+    shop: '苏州分公司模板租赁店',
     status: 'toShip',
     payTerm: '先款后货',
     reconcile: '已对账',
@@ -566,6 +598,7 @@ export const saleOrdersData: SaleOrder[] = [
   {
     kind: 'sale',
     id: 'SO2024092003',
+    shop: '华东建设工程有限公司周转材料店',
     status: 'done',
     payTerm: '货到付款',
     reconcile: '已对账',
@@ -595,6 +628,7 @@ export const saleOrdersData: SaleOrder[] = [
   {
     kind: 'sale',
     id: 'SO2024102704',
+    shop: '杭州分公司脚手架专营店',
     status: 'unpaid',
     payTerm: '先款后货',
     reconcile: '免对账',
@@ -614,6 +648,7 @@ export const saleOrdersData: SaleOrder[] = [
   {
     kind: 'sale',
     id: 'SO2024101505',
+    shop: '华东建设工程有限公司周转材料店',
     status: 'done',
     payTerm: '货到付款',
     reconcile: '已对账',
@@ -622,9 +657,9 @@ export const saleOrdersData: SaleOrder[] = [
     seller: DEMO.seller,
     buyer: P.crec12,
     unitPrice: 4300,
-    freight: 900,
+    freight: 0,
     address: ADDR.suzhou,
-    logistics: '沪A·D1286 / 王师傅',
+    pickupNo: 'TH20241016001',
     payMethod: '账期结算',
     invoice: '待开票',
     contractNo: 'MM-2024-1015-01',
@@ -639,6 +674,7 @@ export const saleOrdersData: SaleOrder[] = [
   {
     kind: 'sale',
     id: 'SO2024100806',
+    shop: '苏州分公司模板租赁店',
     status: 'afterSale',
     payTerm: '先款后货',
     reconcile: '已对账',
@@ -668,6 +704,7 @@ export const saleOrdersData: SaleOrder[] = [
   {
     kind: 'sale',
     id: 'SO2024102807',
+    shop: '华东建设工程有限公司周转材料店',
     status: 'toReconcile',
     payTerm: '先款后货',
     reconcile: '待对账',
@@ -687,6 +724,7 @@ export const saleOrdersData: SaleOrder[] = [
   {
     kind: 'sale',
     id: 'SO2024093008',
+    shop: '杭州分公司脚手架专营店',
     status: 'cancelled',
     payTerm: '先款后货',
     goods: G.fence,

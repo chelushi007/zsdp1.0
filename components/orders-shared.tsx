@@ -40,6 +40,8 @@ export type ActionDef<T> = {
   /** 为 true 时不弹窗，直接执行 */
   instant?: boolean
   title?: string
+  /** 履约环节分组 */
+  group?: string
   fields?: ActionField[]
   confirmLabel?: string
   apply: (o: T, values: Record<string, string>) => T
@@ -454,6 +456,8 @@ export function DetailModal({
   timeline,
   onClose,
   actions,
+  heading = '订单详情',
+  body,
 }: {
   title: React.ReactNode
   status: React.ReactNode
@@ -461,10 +465,12 @@ export function DetailModal({
   timeline: TimelineItem[]
   onClose: () => void
   actions?: React.ReactNode
+  heading?: string
+  body?: React.ReactNode
 }) {
   return (
     <Modal
-      title="订单详情"
+      title={heading}
       titleId="order-detail-title"
       width="max-w-[860px]"
       onClose={onClose}
@@ -483,6 +489,7 @@ export function DetailModal({
       </div>
       <div className="grid gap-5 md:grid-cols-[1fr_280px]">
         <div className="flex flex-col gap-4">
+          {body}
           {sections.map((s) => (
             <section key={s.title} className="flex flex-col gap-2">
               <h4 className="text-xs font-medium text-muted-foreground">{s.title}</h4>
