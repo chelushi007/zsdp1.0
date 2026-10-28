@@ -80,8 +80,13 @@ export type SaleOrder = OrderBase & {
   pickupNo?: string
   /** 买方议价出价 */
   bidPrice?: number
+  /** 物流公司 / 车辆 */
+  shipCompany?: string
   payMethod: PayMethod
   invoice: InvoiceState
+  invoiceNo?: string
+  /** 商家已结束订单（归档） */
+  closed?: boolean
 }
 
 export type AfterType = 'refund' | 'return' | 'exchange' | 'repair' | 'deposit'
@@ -559,7 +564,8 @@ export const saleOrdersData: SaleOrder[] = [
     unitPrice: 196,
     freight: 1800,
     address: ADDR.shanghai,
-    logistics: '德邦物流 DP88120935',
+    shipCompany: '德邦物流',
+    logistics: 'DP88120935',
     payMethod: '对公转账',
     invoice: '待开票',
     contractNo: 'MM-2024-1022-04',
@@ -611,9 +617,11 @@ export const saleOrdersData: SaleOrder[] = [
     unitPrice: 365,
     freight: 1200,
     address: ADDR.nanjing,
-    logistics: '安能物流 AN20240921887',
+    shipCompany: '安能物流',
+    logistics: 'AN20240921887',
     payMethod: '对公转账',
     invoice: '已开票',
+    invoiceNo: 'FP2024092003',
     contractNo: 'MM-2024-0920-06',
     createdAt: '2024-09-20 09:00',
     updatedAt: '2024-09-26 11:30',
@@ -687,7 +695,8 @@ export const saleOrdersData: SaleOrder[] = [
     unitPrice: 7.5,
     freight: 2600,
     address: ADDR.hangzhou,
-    logistics: '跨越速运 KY1008223',
+    shipCompany: '跨越速运',
+    logistics: 'KY1008223',
     payMethod: '对公转账',
     invoice: '待开票',
     contractNo: 'MM-2024-1008-03',
