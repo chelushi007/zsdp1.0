@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useState } from 'react'
-import { ChevronRight, Plus, Search } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronRight, Plus, Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Select, categoryTree } from '@/components/shop-form-fields'
@@ -9,7 +9,7 @@ import { Select, categoryTree } from '@/components/shop-form-fields'
 type BizType = 'sale' | 'rent'
 type ListingStatus = 'on' | 'off'
 
-/** 上架记录：一个商品可多次上架，每条记录对应一种业务类型 */
+/** 上架记录：一个商品可多次上架，每条记录对应一种租售方式 */
 type Listing = {
   id: string
   type: BizType
@@ -164,9 +164,9 @@ const goodsData: Goods[] = [
   },
 ]
 
-const bizMeta: Record<BizType, { label: string; status: string; className: string }> = {
-  sale: { label: '出售', status: '在售', className: 'bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/30' },
-  rent: { label: '出租', status: '在租', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
+const bizMeta: Record<BizType, { label: string; className: string }> = {
+  sale: { label: '出售', className: 'bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/30' },
+  rent: { label: '出租', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
 }
 
 const listingStatusMeta: Record<ListingStatus, { label: string; className: string }> = {
@@ -184,13 +184,6 @@ const goodsStatusMeta: Record<GoodsStatus, { label: string; className: string; c
   rejected: { label: '审核驳回', className: 'bg-amber-50 text-amber-700 ring-amber-200', countClass: 'text-amber-700' },
 }
 
-/** 运营中商品的业务类型，由上架中的记录推导：有出售记录为「在售」，有出租记录为「在租」 */
-function activeBizTypes(g: Goods): BizType[] {
-  if (g.status !== 'active') return []
-  const active = g.listings.filter((l) => l.status === 'on')
-  return (['sale', 'rent'] as BizType[]).filter((t) => active.some((l) => l.type === t))
-}
-
 function Tag({ className, children }: { className: string; children: React.ReactNode }) {
   return (
     <span className={cn('inline-flex h-5 items-center rounded px-1.5 text-xs ring-1 ring-inset', className)}>{children}</span>
@@ -204,13 +197,16 @@ function fmtPrice(n: number) {
 function ActionLink({
   children,
   tone = 'primary',
+  onClick,
 }: {
   children: React.ReactNode
   tone?: 'primary' | 'danger'
+  onClick?: () => void
 }) {
   return (
     <button
       type="button"
+      onClick={onClick}
       className={cn('text-xs hover:underline', tone === 'primary' ? 'text-[#1890ff]' : 'text-red-600')}
     >
       {children}
@@ -218,11 +214,13 @@ function ActionLink({
   )
 }
 
-function GoodsActions({ status }: { status: GoodsStatus }) {
+type GoodsAction = 'edit' | 'list' | 'stock' | 'off'
+
+function GoodsActions({ status, onAction }: { status: GoodsStatus; onAction: (a: GoodsAction) => void }) {
   const actions: Record<GoodsStatus, React.ReactNode> = {
     draft: (
       <>
-        <ActionLink>编辑</ActionLink>
+        <ActionLink onClick={() => onAction('edit')}>编辑</ActionLink>
         <ActionLink>提交审核</ActionLink>
         <ActionLink tone="danger">删除</ActionLink>
       </>
@@ -230,17 +228,19 @@ function GoodsActions({ status }: { status: GoodsStatus }) {
     active: (
       <>
         <ActionLink>详情</ActionLink>
-        <ActionLink>编辑</ActionLink>
-        <ActionLink>上架</ActionLink>
-        <ActionLink>调整库存</ActionLink>
-        <ActionLink tone="danger">下架</ActionLink>
+        <ActionLink onClick={() => onAction('edit')}>编辑</ActionLink>
+        <ActionLink onClick={() => onAction('list')}>上架</ActionLink>
+        <ActionLink onClick={() => onAction('stock')}>调整库存</ActionLink>
+        <ActionLink tone="danger" onClick={() => onAction('off')}>
+          下架
+        </ActionLink>
       </>
     ),
     off: (
       <>
         <ActionLink>详情</ActionLink>
-        <ActionLink>编辑</ActionLink>
-        <ActionLink>重新上架</ActionLink>
+        <ActionLink onClick={() => onAction('edit')}>编辑</ActionLink>
+        <ActionLink onClick={() => onAction('list')}>重新上架</ActionLink>
       </>
     ),
     violation: (
@@ -259,6 +259,374 @@ function GoodsActions({ status }: { status: GoodsStatus }) {
     ),
   }
   return <span className="flex flex-wrap items-center gap-x-3 gap-y-1">{actions[status]}</span>
+}
+
+/* ---------- 操作弹窗 ---------- */
+
+/** 上架中记录占用的库存，调整库存时不可低于该值 */
+function lockedStock(g: Goods) {
+  return g.listings.filter((l) => l.status === 'on').reduce((s, l) => s + l.quantity, 0)
+}
+
+function Modal({
+  title,
+  titleId,
+  width = 'max-w-[520px]',
+  children,
+  footer,
+  onClose,
+}: {
+  title: string
+  titleId: string
+  width?: string
+  children: React.ReactNode
+  footer: React.ReactNode
+  onClose: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation">
+      <div role="dialog" aria-modal="true" aria-labelledby={titleId} className={cn('flex w-full flex-col rounded-md bg-card shadow-xl', width)}>
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h3 id={titleId} className="text-base font-semibold">
+            {title}
+          </h3>
+          <button type="button" aria-label="关闭" onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-muted">
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
+        <div className="flex flex-col gap-4 p-5">{children}</div>
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">{footer}</div>
+      </div>
+    </div>
+  )
+}
+
+function DialogField({
+  label,
+  required,
+  hint,
+  children,
+}: {
+  label: string
+  required?: boolean
+  hint?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm">
+        {required && <span className="mr-0.5 text-red-500">*</span>}
+        {label}
+      </span>
+      {children}
+      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+    </div>
+  )
+}
+
+function DialogInput({
+  label,
+  value,
+  onChange,
+  placeholder,
+  prefix,
+  suffix,
+  type = 'text',
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  prefix?: string
+  suffix?: string
+  type?: 'text' | 'number'
+}) {
+  return (
+    <div className="flex h-9 items-center rounded border border-border bg-background text-sm focus-within:border-[#1890ff]">
+      {prefix && <span className="pl-3 text-muted-foreground">{prefix}</span>}
+      <input
+        aria-label={label}
+        type={type}
+        min={type === 'number' ? 0 : undefined}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-full min-w-0 flex-1 bg-transparent px-3 outline-none placeholder:text-xs placeholder:text-muted-foreground/60"
+      />
+      {suffix && <span className="pr-3 text-xs text-muted-foreground">{suffix}</span>}
+    </div>
+  )
+}
+
+function GoodsSummary({ goods }: { goods: Goods }) {
+  return (
+    <div className="flex items-center gap-3 rounded bg-muted/40 px-3 py-2 text-sm">
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate font-medium">{goods.name}</span>
+        <span className="truncate text-xs text-muted-foreground">
+          {goods.code} · {goods.spec}
+        </span>
+      </span>
+      <span className="shrink-0 text-xs text-muted-foreground">
+        总库存 <span className="tabular-nums text-foreground">{goods.stock.toLocaleString()}</span> {goods.unit}
+      </span>
+    </div>
+  )
+}
+
+const PRIMARY_BTN = 'bg-[#1890ff] hover:bg-[#1890ff]/90'
+
+/** 上架：为商品新增一条上架记录 */
+function ListDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () => void; onConfirm: (l: Listing) => void }) {
+  const available = goods.stock - lockedStock(goods)
+  const [type, setType] = useState<BizType>('sale')
+  const [price, setPrice] = useState('')
+  const [quantity, setQuantity] = useState('')
+  const [minOrder, setMinOrder] = useState('')
+  const [period, setPeriod] = useState<'天' | '月'>('天')
+  const [deposit, setDeposit] = useState('')
+  const [minDays, setMinDays] = useState('')
+
+  const qty = Number(quantity)
+  const qtyOk = qty > 0 && qty <= available
+  const ok = Number(price) > 0 && qtyOk && (type === 'sale' || (Number(deposit) >= 0 && deposit !== '' && Number(minDays) > 0))
+
+  const submit = () => {
+    if (!ok) return
+    const id = `L${new Date().toISOString().slice(2, 10).replace(/-/g, '')}${String(goods.listings.length + 1).padStart(3, '0')}`
+    onConfirm(
+      type === 'sale'
+        ? { id, type, status: 'on', price: Number(price), minOrder: minOrder ? Number(minOrder) : undefined, quantity: qty, used: 0 }
+        : { id, type, status: 'on', price: Number(price), period, deposit: Number(deposit), minDays: Number(minDays), quantity: qty, used: 0 },
+    )
+  }
+
+  return (
+    <Modal
+      title={goods.status === 'off' ? '重新上架' : '新增上架'}
+      titleId="list-dialog-title"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            取消
+          </Button>
+          <Button size="sm" className={PRIMARY_BTN} disabled={!ok} onClick={submit}>
+            确认上架
+          </Button>
+        </>
+      }
+    >
+      <GoodsSummary goods={goods} />
+      <DialogField label="租售方式" required>
+        <div role="radiogroup" aria-label="租售方式" className="grid grid-cols-2 gap-2">
+          {(['sale', 'rent'] as BizType[]).map((t) => {
+            const active = type === t
+            return (
+              <button
+                key={t}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setType(t)}
+                className={cn(
+                  'flex h-9 items-center justify-center gap-1.5 rounded border text-sm transition-colors',
+                  active ? 'border-[#1890ff] bg-[#1890ff]/5 text-[#1890ff]' : 'border-border hover:border-[#1890ff]/50',
+                )}
+              >
+                {bizMeta[t].label}
+              </button>
+            )
+          })}
+        </div>
+      </DialogField>
+      <div className="grid gap-4 sm:grid-cols-2">
+        {type === 'rent' && (
+          <DialogField label="计租周期" required>
+            <div role="radiogroup" aria-label="计租周期" className="flex h-9 items-center gap-4 text-sm">
+              {(['天', '月'] as const).map((p) => (
+                <label key={p} className="flex items-center gap-1.5">
+                  <input type="radio" name="list-period" checked={period === p} onChange={() => setPeriod(p)} className="accent-[#1890ff]" />
+                  按{p}
+                </label>
+              ))}
+            </div>
+          </DialogField>
+        )}
+        <DialogField label={type === 'sale' ? '销售单价' : '租金单价'} required>
+          <DialogInput
+            label="单价"
+            type="number"
+            value={price}
+            onChange={setPrice}
+            placeholder="0.00"
+            prefix="¥"
+            suffix={type === 'sale' ? `/ ${goods.unit}` : `/ ${goods.unit} / ${period}`}
+          />
+        </DialogField>
+        {type === 'sale' ? (
+          <DialogField label="起订量">
+            <DialogInput label="起订量" type="number" value={minOrder} onChange={setMinOrder} placeholder="不限" suffix={goods.unit} />
+          </DialogField>
+        ) : (
+          <>
+            <DialogField label="押金" required>
+              <DialogInput label="押金" type="number" value={deposit} onChange={setDeposit} placeholder="0.00" prefix="¥" suffix={`/ ${goods.unit}`} />
+            </DialogField>
+            <DialogField label="最短租期" required>
+              <DialogInput label="最短租期" type="number" value={minDays} onChange={setMinDays} placeholder="0" suffix={period} />
+            </DialogField>
+          </>
+        )}
+        <DialogField
+          label="上架数量"
+          required
+          hint={
+            quantity && !qtyOk
+              ? `不可超过可上架库存 ${available.toLocaleString()} ${goods.unit}`
+              : `可上架库存 ${available.toLocaleString()} ${goods.unit}（总库存减去上架中记录占用）`
+          }
+        >
+          <DialogInput label="上架数量" type="number" value={quantity} onChange={setQuantity} placeholder="0" suffix={goods.unit} />
+        </DialogField>
+      </div>
+    </Modal>
+  )
+}
+
+type StockMode = 'in' | 'out' | 'set'
+const stockModes: { value: StockMode; label: string; desc: string }[] = [
+  { value: 'in', label: '入库', desc: '采购 / 归还入库，库存增加' },
+  { value: 'out', label: '出库', desc: '报废 / 调拨出库，库存减少' },
+  { value: 'set', label: '盘点校正', desc: '按盘点结果直接设置库存' },
+]
+const STOCK_REASONS = ['采购入库', '租赁归还', '报废处理', '跨店调拨', '盘点差异', '其他']
+
+/** 调整库存：入库 / 出库 / 盘点校正 */
+function StockDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () => void; onConfirm: (stock: number) => void }) {
+  const locked = lockedStock(goods)
+  const [mode, setMode] = useState<StockMode>('in')
+  const [amount, setAmount] = useState('')
+  const [reason, setReason] = useState('')
+  const [note, setNote] = useState('')
+
+  const n = Number(amount)
+  const next = mode === 'in' ? goods.stock + n : mode === 'out' ? goods.stock - n : n
+  const amountOk = amount !== '' && n >= 0 && (mode === 'set' || n > 0)
+  const belowLocked = next < locked
+  const ok = amountOk && !belowLocked && reason !== ''
+
+  return (
+    <Modal
+      title="调整库存"
+      titleId="stock-dialog-title"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            取消
+          </Button>
+          <Button size="sm" className={PRIMARY_BTN} disabled={!ok} onClick={() => onConfirm(next)}>
+            确认调整
+          </Button>
+        </>
+      }
+    >
+      <GoodsSummary goods={goods} />
+      <DialogField label="调整方式" required>
+        <div role="radiogroup" aria-label="调整方式" className="grid gap-2 sm:grid-cols-3">
+          {stockModes.map((m) => {
+            const active = mode === m.value
+            return (
+              <button
+                key={m.value}
+                type="button"
+                role="radio"
+                aria-checked={active}
+                onClick={() => setMode(m.value)}
+                className={cn(
+                  'flex flex-col items-start rounded border px-3 py-2 text-left transition-colors',
+                  active ? 'border-[#1890ff] bg-[#1890ff]/5' : 'border-border hover:border-[#1890ff]/50',
+                )}
+              >
+                <span className={cn('text-sm', active && 'text-[#1890ff]')}>{m.label}</span>
+                <span className="text-xs text-muted-foreground">{m.desc}</span>
+              </button>
+            )
+          })}
+        </div>
+      </DialogField>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <DialogField
+          label={mode === 'set' ? '盘点后库存' : mode === 'in' ? '入库数量' : '出库数量'}
+          required
+          hint={belowLocked ? `上架中记录已占用 ${locked.toLocaleString()} ${goods.unit}，调整后库存不可低于该值` : undefined}
+        >
+          <DialogInput label="数量" type="number" value={amount} onChange={setAmount} placeholder="0" suffix={goods.unit} />
+        </DialogField>
+        <DialogField label="调整原因" required>
+          <Select label="调整原因" placeholder="请选择原因" value={reason} options={STOCK_REASONS} onChange={setReason} />
+        </DialogField>
+      </div>
+      <DialogField label="备注">
+        <DialogInput label="备注" value={note} onChange={setNote} placeholder="选填，如：入库单号 / 盘点人" />
+      </DialogField>
+      <div className="flex items-center justify-between rounded border border-border px-3 py-2 text-sm">
+        <span className="text-muted-foreground">调整后库存</span>
+        <span className="tabular-nums">
+          {goods.stock.toLocaleString()} {goods.unit}
+          <span className="mx-2 text-muted-foreground">→</span>
+          <span className={cn('font-medium', belowLocked ? 'text-red-600' : 'text-[#1890ff]')}>
+            {amountOk ? next.toLocaleString() : '—'} {goods.unit}
+          </span>
+        </span>
+      </div>
+    </Modal>
+  )
+}
+
+const OFF_REASONS = ['库存不足', '价格调整', '暂停经营', '商品信息变更', '其他']
+
+/** 下架：商品整体下架，所有上架中记录同步下架 */
+function OffDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () => void; onConfirm: (note: string) => void }) {
+  const [reason, setReason] = useState('')
+  const [note, setNote] = useState('')
+  const onCount = goods.listings.filter((l) => l.status === 'on').length
+  const ok = reason !== ''
+
+  return (
+    <Modal
+      title="确认下架商品？"
+      titleId="off-dialog-title"
+      width="max-w-[460px]"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            取消
+          </Button>
+          <Button size="sm" className="bg-red-600 text-white hover:bg-red-600/90" disabled={!ok} onClick={() => onConfirm(note ? `${reason}：${note}` : reason)}>
+            确认下架
+          </Button>
+        </>
+      }
+    >
+      <div className="flex items-start gap-3">
+        <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-600">
+          <AlertTriangle className="size-4" aria-hidden />
+        </span>
+        <p className="text-sm leading-relaxed text-muted-foreground">
+          下架后「{goods.name}」将从门户隐藏，{onCount} 条上架中记录同步下架，买/租方无法浏览和下单；进行中的订单与合同不受影响。下架后可在列表中重新上架。
+        </p>
+      </div>
+      <DialogField label="下架原因" required>
+        <Select label="下架原因" placeholder="请选择原因" value={reason} options={OFF_REASONS} onChange={setReason} />
+      </DialogField>
+      <DialogField label="补充说明">
+        <DialogInput label="补充说明" value={note} onChange={setNote} placeholder="选填" />
+      </DialogField>
+    </Modal>
+  )
 }
 
 type Filters = { code: string; name: string; category: string; status: GoodsStatus | '' }
@@ -381,7 +749,7 @@ function ListingTable({ goods }: { goods: Goods }) {
         style={{ gridTemplateColumns: listingColumns }}
       >
         <span>上架单号</span>
-        <span>业务类型</span>
+        <span>租售方式</span>
         <span>价格</span>
         <span>已售 / 已租</span>
         <span>状态</span>
@@ -416,17 +784,41 @@ function ListingTable({ goods }: { goods: Goods }) {
   )
 }
 
-export function GoodsList({ onCreate }: { onCreate: () => void }) {
+export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?: (code: string) => void }) {
+  const [goods, setGoods] = useState<Goods[]>(goodsData)
   const [draft, setDraft] = useState<Filters>(emptyFilters)
   const [applied, setApplied] = useState<Filters>(emptyFilters)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const [dialog, setDialog] = useState<{ action: Exclude<GoodsAction, 'edit'>; code: string } | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
-  const visible = goodsData.filter((g) => matches(g, applied))
+  const dialogGoods = dialog ? goods.find((g) => g.code === dialog.code) : undefined
+
+  const now = () => {
+    const d = new Date()
+    const p = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+  }
+  const updateGoods = (code: string, patch: (g: Goods) => Goods, message: string) => {
+    setGoods((list) => list.map((g) => (g.code === code ? { ...patch(g), updatedAt: now() } : g)))
+    setDialog(null)
+    setToast(message)
+    window.setTimeout(() => setToast(null), 2500)
+  }
+  const handleAction = (g: Goods, action: GoodsAction) => {
+    if (action === 'edit') {
+      onEdit?.(g.code)
+      return
+    }
+    setDialog({ action, code: g.code })
+  }
+
+  const visible = goods.filter((g) => matches(g, applied))
   const isFiltered = Object.values(applied).some(Boolean)
 
   /** 各状态数量按除状态以外的其他条件统计，便于在页签间切换时看到全貌 */
   const baseFilters: Filters = { ...applied, status: '' }
-  const base = goodsData.filter((g) => matches(g, baseFilters))
+  const base = goods.filter((g) => matches(g, baseFilters))
   const countOf = (s: GoodsStatus | '') => (s ? base.filter((g) => g.status === s).length : base.length)
 
   const selectStatus = (s: GoodsStatus | '') => {
@@ -500,7 +892,6 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
 
             {visible.map((g) => {
               const open = expanded[g.code] ?? false
-              const bizTypes = activeBizTypes(g)
               const statusMeta = goodsStatusMeta[g.status]
               return (
                 <Fragment key={g.code}>
@@ -540,18 +931,13 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                     </span>
                     <span className="flex min-w-0 flex-col items-start gap-1">
                       <Tag className={statusMeta.className}>{statusMeta.label}</Tag>
-                      {bizTypes.length > 0 && (
-                        <span className="text-[11px] text-muted-foreground">
-                          {bizTypes.map((t) => bizMeta[t].status).join(' · ')}
-                        </span>
-                      )}
                       {g.statusNote && (
                         <span className="line-clamp-2 text-[11px] leading-4 text-muted-foreground" title={g.statusNote}>
                           {g.statusNote}
                         </span>
                       )}
                     </span>
-                    <GoodsActions status={g.status} />
+                    <GoodsActions status={g.status} onAction={(a) => handleAction(g, a)} />
                   </div>
                   {open && (
                     <div id={`listings-${g.code}`} className="border-b border-border bg-muted/20 px-4 py-3 pl-[84px]">
@@ -569,6 +955,52 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
           <span>最近更新：{visible[0]?.updatedAt ?? '—'}</span>
         </div>
       </div>
+
+      {dialog?.action === 'list' && dialogGoods && (
+        <ListDialog
+          goods={dialogGoods}
+          onClose={() => setDialog(null)}
+          onConfirm={(l) =>
+            updateGoods(
+              dialogGoods.code,
+              (g) => ({ ...g, status: 'active', listings: [l, ...g.listings] }),
+              `已上架：${dialogGoods.name}（${bizMeta[l.type].label} ${l.quantity.toLocaleString()} ${dialogGoods.unit}）`,
+            )
+          }
+        />
+      )}
+      {dialog?.action === 'stock' && dialogGoods && (
+        <StockDialog
+          goods={dialogGoods}
+          onClose={() => setDialog(null)}
+          onConfirm={(stock) =>
+            updateGoods(dialogGoods.code, (g) => ({ ...g, stock }), `库存已调整为 ${stock.toLocaleString()} ${dialogGoods.unit}`)
+          }
+        />
+      )}
+      {dialog?.action === 'off' && dialogGoods && (
+        <OffDialog
+          goods={dialogGoods}
+          onClose={() => setDialog(null)}
+          onConfirm={(note) =>
+            updateGoods(
+              dialogGoods.code,
+              (g) => ({ ...g, status: 'off', statusNote: note, listings: g.listings.map((l) => ({ ...l, status: 'off' as const })) }),
+              `已下架：${dialogGoods.name}`,
+            )
+          }
+        />
+      )}
+
+      {toast && (
+        <div
+          role="status"
+          className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-md bg-foreground px-4 py-2 text-sm text-background shadow-lg"
+        >
+          <CheckCircle2 className="size-4 text-emerald-400" aria-hidden />
+          {toast}
+        </div>
+      )}
     </div>
   )
 }

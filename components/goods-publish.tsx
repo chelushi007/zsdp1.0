@@ -9,7 +9,6 @@ import {
   ChevronDown,
   ChevronRight,
   FileText,
-  History,
   ImagePlus,
   Info,
   Plus,
@@ -48,22 +47,25 @@ function banAreaLabel(a: BanArea) {
   return a.city ? `${a.province} · ${a.city}` : `${a.province}（全省）`
 }
 
+type BanTemplate = { id: string; name: string; desc: string; areas: BanArea[]; updatedAt: string }
+
 /** 区域禁售模板：引用后带入禁售地区，可继续自定义增减 */
-const BAN_TEMPLATES: { name: string; desc: string; areas: BanArea[] }[] = [
-  { name: '仅限华东', desc: '北京、广东全省禁售', areas: [{ province: '北京市' }, { province: '广东省' }] },
+const INITIAL_BAN_TEMPLATES: BanTemplate[] = [
+  { id: 'T1', name: '仅限华东', desc: '北京、广东全省禁售', areas: [{ province: '北京市' }, { province: '广东省' }], updatedAt: '2024-09-12' },
   {
+    id: 'T2',
     name: '仅限本市',
     desc: '除上海外其余省份全部禁售',
     areas: [{ province: '北京市' }, { province: '浙江省' }, { province: '江苏省' }, { province: '广东省' }],
+    updatedAt: '2024-08-03',
   },
-  { name: '华南限售', desc: '广州、深圳禁售', areas: [{ province: '广东省', city: '广州市' }, { province: '广东省', city: '深圳市' }] },
-]
-
-/** 历史记录：商家之前发布商品时使用过的禁售设置 */
-const BAN_HISTORY: { goods: string; date: string; areas: BanArea[] }[] = [
-  { goods: '建筑模板 915×1830×15mm', date: '2024-09-12', areas: [{ province: '广东省' }, { province: '北京市', city: '北京市' }] },
-  { goods: '盘扣式脚手架 Φ48×3.2', date: '2024-08-03', areas: [{ province: '北京市' }] },
-  { goods: '钢支撑 Φ609×16', date: '2024-07-21', areas: [{ province: '浙江省', city: '宁波市' }, { province: '江苏省', city: '南京市' }] },
+  {
+    id: 'T3',
+    name: '华南限售',
+    desc: '广州、深圳禁售',
+    areas: [{ province: '广东省', city: '广州市' }, { province: '广东省', city: '深圳市' }],
+    updatedAt: '2024-07-21',
+  },
 ]
 
 type FreightMode = '包邮' | '固定运费' | '按数量计费' | '按距离计费' | '到付'
@@ -326,7 +328,7 @@ function Attachments({ files, onChange }: { files: Attachment[]; onChange: (f: A
 type FlowNode = { key: string; title: string; desc: string; icon: React.ComponentType<{ className?: string }>; tone: 'current' | 'default' | 'success' | 'warn' }
 
 const FLOW_NODES: FlowNode[] = [
-  { key: 'fill', title: '填写商品信息', desc: '基本信息、库存、租售方式、运费', icon: FileText, tone: 'current' },
+  { key: 'fill', title: '填写商品信息', desc: '基本信息、库存、运营方式、运费', icon: FileText, tone: 'current' },
   { key: 'draft', title: '保存草稿', desc: '可随时修改，不对外展示', icon: Save, tone: 'default' },
   { key: 'review', title: '提交平台审核', desc: '1 个工作日内完成', icon: ShieldCheck, tone: 'default' },
   { key: 'live', title: '审核通过 · 自动上架', desc: '状态变为「运营中」', icon: CheckCircle2, tone: 'success' },
@@ -391,10 +393,243 @@ function PublishFlow() {
           <span className="flex size-4 items-center justify-center rounded-full bg-red-500 text-white">
             <Ban className="size-2.5" aria-hidden />
           </span>
-          上架后如违规将被下架，整改后重新提交审核
+          上架后如违规将被�����架，整改后重新提交审核
         </span>
       </div>
     </section>
+  )
+}
+
+/* ---------- 禁售模板管理 ---------- */
+
+function BanTemplateManager({
+  templates,
+  currentAreas,
+  onChange,
+  onApply,
+  onClose,
+}: {
+  templates: BanTemplate[]
+  currentAreas: BanArea[]
+  onChange: (list: BanTemplate[]) => void
+  onApply: (id: string) => void
+  onClose: () => void
+}) {
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState<{ name: string; desc: string; areas: BanArea[] }>({ name: '', desc: '', areas: [] })
+  const [pick, setPick] = useState<{ province: string; city: string }>({ province: '', city: '' })
+  const [creating, setCreating] = useState(false)
+
+  const startCreate = (fromCurrent: boolean) => {
+    setCreating(true)
+    setEditingId(null)
+    setDraft({ name: '', desc: '', areas: fromCurrent ? currentAreas : [] })
+  }
+  const startEdit = (t: BanTemplate) => {
+    setCreating(false)
+    setEditingId(t.id)
+    setDraft({ name: t.name, desc: t.desc, areas: t.areas })
+  }
+  const cancelEdit = () => {
+    setCreating(false)
+    setEditingId(null)
+  }
+  const addArea = () => {
+    if (!pick.province) return
+    const area: BanArea = pick.city ? { province: pick.province, city: pick.city } : { province: pick.province }
+    setDraft((d) => {
+      const key = banAreaKey(area)
+      if (d.areas.some((a) => banAreaKey(a) === key || (!a.city && a.province === area.province))) return d
+      const rest = area.city ? d.areas : d.areas.filter((a) => a.province !== area.province)
+      return { ...d, areas: [...rest, area] }
+    })
+    setPick({ province: '', city: '' })
+  }
+  const removeArea = (key: string) => setDraft((d) => ({ ...d, areas: d.areas.filter((a) => banAreaKey(a) !== key) }))
+
+  const nameTaken = templates.some((t) => t.name === draft.name.trim() && t.id !== editingId)
+  const draftOk = draft.name.trim().length > 0 && draft.areas.length > 0 && !nameTaken
+
+  const save = () => {
+    if (!draftOk) return
+    const today = new Date().toISOString().slice(0, 10)
+    const record = { name: draft.name.trim(), desc: draft.desc.trim(), areas: draft.areas, updatedAt: today }
+    if (editingId) {
+      onChange(templates.map((t) => (t.id === editingId ? { ...t, ...record } : t)))
+    } else {
+      onChange([...templates, { id: `T${Date.now()}`, ...record }])
+    }
+    cancelEdit()
+  }
+  const remove = (id: string) => {
+    onChange(templates.filter((t) => t.id !== id))
+    if (editingId === id) cancelEdit()
+  }
+
+  const editing = creating || editingId !== null
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="presentation">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ban-template-title"
+        className="flex max-h-[85vh] w-full max-w-[760px] flex-col rounded-md bg-card shadow-xl"
+      >
+        <div className="flex items-center justify-between border-b border-border px-5 py-3">
+          <h3 id="ban-template-title" className="text-base font-semibold">
+            管理禁售模板
+          </h3>
+          <button type="button" aria-label="关闭" onClick={onClose} className="rounded p-1 text-muted-foreground hover:bg-muted">
+            <X className="size-4" aria-hidden />
+          </button>
+        </div>
+
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-5">
+          {!editing && (
+            <>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">共 {templates.length} 个模板，发布商品时可直接引用</span>
+                <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={() => startCreate(false)}>
+                  <Plus data-icon="inline-start" />
+                  新建模板
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="bg-[#1890ff] hover:bg-[#1890ff]/90"
+                  disabled={currentAreas.length === 0}
+                  onClick={() => startCreate(true)}
+                >
+                  将当前禁售地区存为模板
+                </Button>
+              </div>
+
+              {templates.length === 0 ? (
+                <p className="rounded border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
+                  暂无模板，点击「新建模板」创建
+                </p>
+              ) : (
+                <ul className="divide-y divide-border rounded border border-border">
+                  {templates.map((t) => (
+                    <li key={t.id} className="flex items-start gap-3 px-4 py-3">
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="flex items-center gap-2 text-sm">
+                          <span className="font-medium">{t.name}</span>
+                          <span className="text-xs text-muted-foreground">更新于 {t.updatedAt}</span>
+                        </span>
+                        {t.desc && <span className="text-xs text-muted-foreground">{t.desc}</span>}
+                        <span className="flex flex-wrap gap-1">
+                          {t.areas.map((a) => (
+                            <span key={banAreaKey(a)} className="rounded bg-red-50 px-1.5 text-[11px] leading-5 text-red-600 ring-1 ring-inset ring-red-200">
+                              {banAreaLabel(a)}
+                            </span>
+                          ))}
+                        </span>
+                      </span>
+                      <span className="flex shrink-0 items-center gap-3 pt-0.5 text-xs">
+                        <button type="button" onClick={() => onApply(t.id)} className="text-[#1890ff] hover:underline">
+                          引用
+                        </button>
+                        <button type="button" onClick={() => startEdit(t)} className="text-[#1890ff] hover:underline">
+                          编辑
+                        </button>
+                        <button type="button" onClick={() => remove(t.id)} className="text-red-600 hover:underline">
+                          删除
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+
+          {editing && (
+            <div className="flex flex-col gap-4">
+              <p className="text-sm font-medium">{editingId ? '编辑模板' : '新建模板'}</p>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="模板名称" required hint={nameTaken ? '名称已存在' : undefined}>
+                  <TextInput value={draft.name} onChange={(name) => setDraft((d) => ({ ...d, name }))} placeholder="如：仅限华东" />
+                </Field>
+                <Field label="说明">
+                  <TextInput value={draft.desc} onChange={(desc) => setDraft((d) => ({ ...d, desc }))} placeholder="选填，便于识别模板用途" />
+                </Field>
+              </div>
+              <Field label="添加禁售地区" hint="可选择整省禁售，或精确到地级市">
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex w-40">
+                    <Select
+                      label="模板省份"
+                      placeholder="选择省份"
+                      value={pick.province}
+                      options={Object.keys(regionTree)}
+                      onChange={(province) => setPick({ province, city: '' })}
+                    />
+                  </div>
+                  <div className="flex w-40">
+                    <Select
+                      label="模板城市"
+                      placeholder={pick.province ? '全省' : '先选择省份'}
+                      value={pick.city}
+                      options={pick.province ? Object.keys(regionTree[pick.province]) : []}
+                      onChange={(city) => setPick((p) => ({ ...p, city }))}
+                      disabled={!pick.province}
+                    />
+                  </div>
+                  <Button type="button" variant="outline" size="sm" onClick={addArea} disabled={!pick.province}>
+                    <Plus data-icon="inline-start" />
+                    添加
+                  </Button>
+                </div>
+              </Field>
+              <Field label="禁售地区" required hint={draft.areas.length ? `共 ${draft.areas.length} 个地区` : '至少添加一个禁售地区'}>
+                {draft.areas.length === 0 ? (
+                  <p className="flex h-9 items-center text-sm text-muted-foreground">尚未添加</p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {draft.areas.map((a) => {
+                      const key = banAreaKey(a)
+                      return (
+                        <span key={key} className="flex h-8 items-center gap-1 rounded border border-red-200 bg-red-50 pl-2.5 pr-1 text-xs text-red-600">
+                          <Ban className="size-3" aria-hidden />
+                          {banAreaLabel(a)}
+                          <button
+                            type="button"
+                            aria-label={`移除 ${banAreaLabel(a)}`}
+                            onClick={() => removeArea(key)}
+                            className="ml-0.5 flex size-5 items-center justify-center rounded hover:bg-red-100"
+                          >
+                            <X className="size-3" aria-hidden />
+                          </button>
+                        </span>
+                      )
+                    })}
+                  </div>
+                )}
+              </Field>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+          {editing ? (
+            <>
+              <Button type="button" variant="outline" size="sm" onClick={cancelEdit}>
+                取消
+              </Button>
+              <Button type="button" size="sm" className="bg-[#1890ff] hover:bg-[#1890ff]/90" disabled={!draftOk} onClick={save}>
+                保存模板
+              </Button>
+            </>
+          ) : (
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+              关闭
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -446,7 +681,7 @@ function TemplatePicker({
   )
 }
 
-/* ---------- 租售方式 ---------- */
+/* ---------- 运营方式 ---------- */
 
 function BizCard({
   enabled,
@@ -498,7 +733,6 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
 
   const [stock, setStock] = useState('')
   const [warnStock, setWarnStock] = useState('')
-  const [location, setLocation] = useState('')
 
   const [saleOn, setSaleOn] = useState(true)
   const [salePrice, setSalePrice] = useState('')
@@ -519,8 +753,10 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const [banEnabled, setBanEnabled] = useState(false)
   const [banAreas, setBanAreas] = useState<BanArea[]>([])
   const [banSource, setBanSource] = useState<string | null>(null)
-  const [banRef, setBanRef] = useState<'template' | 'history' | null>(null)
   const [banPick, setBanPick] = useState<{ province: string; city: string }>({ province: '', city: '' })
+  const [banTemplates, setBanTemplates] = useState<BanTemplate[]>(INITIAL_BAN_TEMPLATES)
+  const [banTemplateId, setBanTemplateId] = useState('')
+  const [banManagerOpen, setBanManagerOpen] = useState(false)
 
   const [freightTemplate, setFreightTemplate] = useState(FREIGHT_TEMPLATES[0].name)
   const [freight, setFreight] = useState<FreightRule>(FREIGHT_TEMPLATES[0].rule)
@@ -529,11 +765,12 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const [files, setFiles] = useState<Attachment[]>([])
   const [agreed, setAgreed] = useState(false)
 
-  const importBanAreas = (areas: BanArea[], source: string) => {
-    setBanAreas(areas)
-    setBanSource(source)
-    setBanRef(null)
-    setBanEnabled(true)
+  const applyBanTemplate = (id: string) => {
+    setBanTemplateId(id)
+    const t = banTemplates.find((x) => x.id === id)
+    if (!t) return
+    setBanAreas(t.areas)
+    setBanSource(t.name)
   }
   const addBanArea = () => {
     if (!banPick.province) return
@@ -582,7 +819,7 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
       ? '请选择商品所在地并填写具体地址'
       : '请完善基本信息（名称、品类、规格、单位、主图、库存）'
     : !bizSelected
-      ? '请至少启用一种租售方式'
+      ? '请至少启用一种运营方式'
       : !saleOk
         ? '请填写出售单价'
         : !rentOk
@@ -609,6 +846,23 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
 
       <PublishFlow />
 
+      {banManagerOpen && (
+        <BanTemplateManager
+          templates={banTemplates}
+          currentAreas={banAreas}
+          onChange={(list) => {
+            setBanTemplates(list)
+            if (!list.some((t) => t.id === banTemplateId)) setBanTemplateId('')
+          }}
+          onApply={(id) => {
+            applyBanTemplate(id)
+            setBanEnabled(true)
+            setBanManagerOpen(false)
+          }}
+          onClose={() => setBanManagerOpen(false)}
+        />
+      )}
+
       <div className="flex flex-col gap-4">
         <div className="flex min-w-0 flex-col gap-4">
           <Section title="基本信息">
@@ -617,18 +871,13 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
                 <TextInput value={name} onChange={setName} placeholder="请输入商品名称，如：建筑模板 915×1830×15mm 覆膜板，不超过 60 字" />
               </Field>
               <Field label="品类" required>
-                <div className="flex gap-2">
-                  <span className="flex h-9 items-center rounded border border-border bg-muted/40 px-3 text-sm text-muted-foreground">
-                    {categoryTree[0].name}
-                  </span>
-                  <Select
-                    label="二级品类"
-                    placeholder="请选择二级品类"
-                    value={subCategory}
-                    options={categoryTree[0].children}
-                    onChange={setSubCategory}
-                  />
-                </div>
+                <Select
+                  label="品类"
+                  placeholder="请选择品类"
+                  value={subCategory}
+                  options={categoryTree[0].children}
+                  onChange={setSubCategory}
+                />
               </Field>
               <Field label="所属店铺" required>
                 <Select label="所属店铺" placeholder="请选择店铺" value={shop} options={SHOPS} onChange={setShop} />
@@ -655,21 +904,18 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
           </Section>
 
           <Section title="库存信息">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-2">
               <Field label="总库存" required hint="商品实物数量，出售与出租共用">
                 <TextInput type="number" value={stock} onChange={setStock} placeholder="0" suffix={unitLabel} />
               </Field>
               <Field label="库存预警值" hint="低于该值时列表标记为紧张">
                 <TextInput type="number" value={warnStock} onChange={setWarnStock} placeholder="选填" suffix={unitLabel} />
               </Field>
-              <Field label="存放地点">
-                <TextInput value={location} onChange={setLocation} placeholder="如：上海松江周转材料仓" />
-              </Field>
             </div>
           </Section>
 
           <Section
-            title="租售方式"
+            title="运营方式"
             extra={<span className="text-xs text-muted-foreground">可同时启用，每种方式提交后生成一条上架记录</span>}
           >
             <div className="flex flex-col gap-3">
@@ -746,14 +992,14 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
                 </Field>
               </BizCard>
 
-              {!bizSelected && <Tip tone="warn">请至少启用一种租售方式，否则商品无法上架。</Tip>}
+              {!bizSelected && <Tip tone="warn">请至少启用一种运营方式，否则商品无法上架。</Tip>}
             </div>
           </Section>
 
           <Section
             title="区域禁售"
             extra={
-              <button type="button" className="text-xs text-[#1890ff] hover:underline">
+              <button type="button" onClick={() => setBanManagerOpen(true)} className="text-xs text-[#1890ff] hover:underline">
                 管理禁售模板
               </button>
             }
@@ -762,95 +1008,34 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
               <label className="flex items-center gap-2 text-sm">
                 <Switch checked={banEnabled} onChange={setBanEnabled} label="启用区域禁售" />
                 启用区域禁售
-                <span className="text-xs text-muted-foreground">（关闭时全国范围均可下单）</span>
+                <span className="text-xs text-muted-foreground">（关闭时全国范围均可���单）</span>
               </label>
 
               {banEnabled && (
                 <>
-                  <Field label="快捷引用" hint="引用后会替换当前禁售地区，可继续自定义增减">
-                    <div className="flex flex-col gap-2">
-                      <div className="flex flex-wrap gap-2">
-                        <button
-                          type="button"
-                          aria-expanded={banRef === 'template'}
-                          onClick={() => setBanRef(banRef === 'template' ? null : 'template')}
-                          className={cn(
-                            'flex h-8 items-center gap-1.5 rounded border px-3 text-xs transition-colors',
-                            banRef === 'template' ? 'border-[#1890ff] bg-[#1890ff]/5 text-[#1890ff]' : 'border-border hover:border-[#1890ff] hover:text-[#1890ff]',
-                          )}
-                        >
-                          <FileText className="size-3.5" aria-hidden />
-                          引用模板
-                        </button>
-                        <button
-                          type="button"
-                          aria-expanded={banRef === 'history'}
-                          onClick={() => setBanRef(banRef === 'history' ? null : 'history')}
-                          className={cn(
-                            'flex h-8 items-center gap-1.5 rounded border px-3 text-xs transition-colors',
-                            banRef === 'history' ? 'border-[#1890ff] bg-[#1890ff]/5 text-[#1890ff]' : 'border-border hover:border-[#1890ff] hover:text-[#1890ff]',
-                          )}
-                        >
-                          <History className="size-3.5" aria-hidden />
-                          引用历史记录
-                        </button>
-                        {banSource && (
-                          <span className="flex h-8 items-center text-xs text-muted-foreground">
-                            当前来源：{banSource}
-                            {banAreas.length > 0 && '（可继续调整）'}
-                          </span>
-                        )}
+                  <Field label="引用模板" hint="引用后会替换当前禁售地区，可继续自定义增减；修改不影响模板本身">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex w-64">
+                        <Select
+                          label="禁售模板"
+                          placeholder={banTemplates.length ? '选择禁售模板' : '暂无模板，请先创建'}
+                          value={banTemplates.find((t) => t.id === banTemplateId)?.name ?? ''}
+                          options={banTemplates.map((t) => t.name)}
+                          onChange={(n) => applyBanTemplate(banTemplates.find((t) => t.name === n)?.id ?? '')}
+                          disabled={banTemplates.length === 0}
+                        />
                       </div>
-
-                      {banRef === 'template' && (
-                        <ul className="divide-y divide-border rounded border border-border">
-                          {BAN_TEMPLATES.map((t) => (
-                            <li key={t.name} className="flex items-center gap-3 px-3 py-2 text-sm">
-                              <span className="flex min-w-0 flex-1 flex-col">
-                                <span>{t.name}</span>
-                                <span className="truncate text-xs text-muted-foreground">
-                                  {t.desc} · {t.areas.map(banAreaLabel).join('、')}
-                                </span>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => importBanAreas(t.areas, `模板「${t.name}」`)}
-                                className="shrink-0 text-xs text-[#1890ff] hover:underline"
-                              >
-                                引用
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-
-                      {banRef === 'history' && (
-                        <ul className="divide-y divide-border rounded border border-border">
-                          {BAN_HISTORY.map((h) => (
-                            <li key={h.goods} className="flex items-center gap-3 px-3 py-2 text-sm">
-                              <span className="flex min-w-0 flex-1 flex-col">
-                                <span className="truncate">{h.goods}</span>
-                                <span className="truncate text-xs text-muted-foreground">
-                                  {h.date} 发布 · {h.areas.map(banAreaLabel).join('、')}
-                                </span>
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => importBanAreas(h.areas, `历史记录「${h.goods}」`)}
-                                className="shrink-0 text-xs text-[#1890ff] hover:underline"
-                              >
-                                引用
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
+                      {banSource && (
+                        <span className="text-xs text-muted-foreground">
+                          当前来源：模板「{banSource}」{banAreas.length > 0 && '（可继续调整）'}
+                        </span>
                       )}
                     </div>
                   </Field>
 
                   <Field label="自定义添加" hint="可选择整省禁售，或精确到地级市">
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="w-40">
+                      <div className="flex w-40">
                         <Select
                           label="禁售省份"
                           placeholder="选择省份"
@@ -859,7 +1044,7 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
                           onChange={(province) => setBanPick({ province, city: '' })}
                         />
                       </div>
-                      <div className="w-40">
+                      <div className="flex w-40">
                         <Select
                           label="禁售城市"
                           placeholder={banPick.province ? '全省' : '先选择省份'}
@@ -906,9 +1091,17 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
                         })}
                         <button
                           type="button"
+                          onClick={() => setBanManagerOpen(true)}
+                          className="h-8 px-2 text-xs text-[#1890ff] hover:underline"
+                        >
+                          存为模板
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => {
                             setBanAreas([])
                             setBanSource(null)
+                            setBanTemplateId('')
                           }}
                           className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
                         >

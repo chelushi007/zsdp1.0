@@ -61,8 +61,7 @@ export const menuTree: MenuNode[] = [
         description: '租赁与销售商品的发布、上下架与库存',
         children: [
           { id: 'seller-goods-list', label: '商品列表', description: '全部商品的查询、上下架与批量操作' },
-          { id: 'seller-goods-publish', label: '发布商品', description: '新增商品，设置租售方式、价格与押金' },
-          { id: 'seller-goods-stock', label: '库存管理', description: '可租/可售库存、在租数量与归还记录' },
+        { id: 'seller-goods-publish', label: '发布商品', description: '新增商品，设置运营方式、价格与押金' },
         ],
       },
       ...workbenchCommon('seller', '商家'),

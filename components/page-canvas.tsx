@@ -192,7 +192,7 @@ export function PageCanvas({ path, onNavigate }: Props) {
       ) : node.id === 'seller-shop-create' ? (
         <ShopCreate key={node.id} onDone={() => onNavigate('seller-shop-info')} />
       ) : node.id === 'seller-goods-list' ? (
-        <GoodsList key={node.id} onCreate={() => onNavigate('seller-goods-publish')} />
+        <GoodsList key={node.id} onCreate={() => onNavigate('seller-goods-publish')} onEdit={() => onNavigate('seller-goods-publish')} />
       ) : node.id === 'seller-goods-publish' ? (
         <GoodsPublish
           key={node.id}
