@@ -11,9 +11,11 @@ import {
   DialogInput,
   Modal,
   PRIMARY_BTN,
+  GroupedName,
   Tag,
   bizMeta,
   fmtPrice,
+  groupBySpec,
   type BizType,
 } from '@/components/goods-list'
 
@@ -76,7 +78,7 @@ const seed: EntrustedGoods[] = [
     id: 'E2024090001',
     code: 'G2024040003',
     name: '钢支撑 Φ609×16 基坑内支撑',
-    spec: '9m / 12m 标准节',
+    spec: '9m 标准节',
     subCategory: '支护类',
     unit: '吨',
     seller: '上海松江周转材料有限公司',
@@ -91,6 +93,43 @@ const seed: EntrustedGoods[] = [
       { id: 'PL240920001', listedAt: '2024-09-20 10:30', type: 'rent', status: 'on', basePrice: 10, markupMode: 'percent', markupValue: 15, price: 11.5, period: '天', deposit: 3000, minDays: 180, quantity: 100, used: 62 },
     ],
     updatedAt: '2024-10-21 14:30',
+  },
+  {
+    id: 'E2024090011',
+    code: 'G2024040010',
+    name: '钢支撑 Φ609×16 基坑内支撑',
+    spec: '12m 标准节',
+    subCategory: '支护类',
+    unit: '吨',
+    seller: '上海松江周转材料有限公司',
+    type: 'rent',
+    quantity: 80,
+    basePrice: 10,
+    deposit: 3000,
+    entrustedAt: '2024-09-18',
+    acceptedAt: '2024-09-19 09:40',
+    status: 'listed',
+    listings: [
+      { id: 'PL240920002', listedAt: '2024-09-20 10:35', type: 'rent', status: 'on', basePrice: 10, markupMode: 'percent', markupValue: 15, price: 11.5, period: '天', deposit: 3000, minDays: 180, quantity: 80, used: 40 },
+    ],
+    updatedAt: '2024-10-21 14:30',
+  },
+  {
+    id: 'E2024090012',
+    code: 'G2024040011',
+    name: '钢支撑 Φ609×16 基坑内支撑',
+    spec: '6m 调节节',
+    subCategory: '支护类',
+    unit: '吨',
+    seller: '上海松江周转材料有限公司',
+    type: 'rent',
+    quantity: 30,
+    basePrice: 10,
+    deposit: 3000,
+    entrustedAt: '2024-10-12',
+    status: 'pending',
+    listings: [],
+    updatedAt: '2024-10-12 09:20',
   },
   {
     id: 'E2024090002',
@@ -330,7 +369,7 @@ function AcceptDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; on
 
 const RETURN_REASONS = ['底价高于市场价', '品类不在服务范围', '仓储 / 运力不足', '资料不全', '其他']
 
-/** 退回：拒绝委托并��明原因 */
+/** 退回：拒绝委托并说明原因 */
 function ReturnDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; onClose: () => void; onConfirm: (note: string) => void }) {
   const [reason, setReason] = useState('')
   const [note, setNote] = useState('')
@@ -578,7 +617,7 @@ function Actions({ goods, onAction }: { goods: EntrustedGoods; onAction: (a: Act
   return <span className="flex flex-wrap items-center gap-x-3 gap-y-1">{map[goods.status]}</span>
 }
 
-const columns = '36px 100px minmax(130px,1.3fr) minmax(100px,1fr) 64px 112px 84px 84px 76px 76px 72px 96px minmax(120px,1fr)'
+const columns = '36px 100px minmax(150px,1.3fr) minmax(100px,1fr) minmax(100px,1fr) 64px 112px 84px 84px 76px 76px 72px 96px minmax(120px,1fr)'
 const listingColumns = '120px 128px 72px minmax(140px,1fr) minmax(150px,1fr) 100px 80px 120px'
 
 /** 上架记录：出售行显示起订量，出租行显示押金与最短租期，仅展示对外价格 */
@@ -782,7 +821,7 @@ export function ProviderGoods() {
         </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[1180px]">
+          <div className="min-w-[1320px]">
             <div
               className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-medium text-muted-foreground"
               style={{ gridTemplateColumns: columns }}
@@ -790,6 +829,7 @@ export function ProviderGoods() {
               <span className="text-center">展开</span>
               <span>商品编码</span>
               <span>商品名称</span>
+              <span>商品规格</span>
               <span>委托方</span>
               <span>委托方式</span>
               <span>商家底价</span>
@@ -804,14 +844,14 @@ export function ProviderGoods() {
 
             {visible.length === 0 && <p className="px-4 py-12 text-center text-sm text-muted-foreground">没有符合筛选条件的受托商品</p>}
 
-            {visible.map((g) => {
+            {groupBySpec(visible).map(({ item: g, first, size }) => {
               const open = expanded[g.id] ?? false
               const accept = isAccepted(g) ? acceptMeta.accepted : acceptMeta.pending
               const operation = operationMeta(g)
               return (
                 <Fragment key={g.id}>
                   <div
-                    className={cn('grid items-center gap-3 border-b border-border px-4 py-3 text-sm hover:bg-muted/30', open && 'bg-muted/20')}
+                    className={cn('grid items-center gap-3 border-b border-border px-4 py-3 text-sm hover:bg-muted/30', open && 'bg-muted/20', !first && 'border-dashed')}
                     style={{ gridTemplateColumns: columns }}
                   >
                     <span className="flex justify-center">
@@ -830,11 +870,12 @@ export function ProviderGoods() {
                       </button>
                     </span>
                     <span className="font-mono text-xs text-muted-foreground">{g.code}</span>
-                    <span className="flex min-w-0 flex-col">
-                      <span className="truncate font-medium">{g.name}</span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        {g.subCategory} · {g.spec}
-                      </span>
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <GroupedName name={g.name} first={first} size={size} />
+                      {first && <span className="truncate text-[11px] leading-4 text-muted-foreground">{g.subCategory}</span>}
+                    </span>
+                    <span className={cn('truncate text-xs', size > 1 && 'font-medium')} title={g.spec}>
+                      {g.spec}
                     </span>
                     <span className="truncate text-xs" title={g.seller}>
                       {g.seller}

@@ -115,7 +115,7 @@ const goodsData: Goods[] = [
     code: 'G2024040003',
     shop: '华东建设工程有限公司周转材料店',
     name: '钢支撑 Φ609×16 基坑内支撑',
-    spec: '9m / 12m 标准节',
+    spec: '9m 标准节',
     category: '循环物资',
     subCategory: '支护类',
     unit: '吨',
@@ -135,6 +135,34 @@ const goodsData: Goods[] = [
       status: 'accepted',
       createdAt: '2024-09-18',
     },
+    createdAt: '2024-04-02 09:05',
+    updatedAt: '2024-09-30 11:10',
+  },
+  {
+    code: 'G2024040010',
+    shop: '华东建设工程有限公司周转材料店',
+    name: '钢支撑 Φ609×16 基坑内支撑',
+    spec: '12m 标准节',
+    category: '循环物资',
+    subCategory: '支护类',
+    unit: '吨',
+    stock: 260,
+    status: 'active',
+    listings: [{ id: 'L240408003', type: 'rent', status: 'on', price: 12, period: '天', deposit: 3000, minDays: 180, quantity: 260, used: 180 }],
+    createdAt: '2024-04-02 09:05',
+    updatedAt: '2024-09-30 11:10',
+  },
+  {
+    code: 'G2024040011',
+    shop: '华东建设工程有限公司周转材料店',
+    name: '钢支撑 Φ609×16 基坑内支撑',
+    spec: '6m 调节节',
+    category: '循环物资',
+    subCategory: '支护类',
+    unit: '吨',
+    stock: 80,
+    status: 'active',
+    listings: [{ id: 'L240408004', type: 'sale', status: 'on', price: 5600, minOrder: 5, quantity: 80, used: 12 }],
     createdAt: '2024-04-02 09:05',
     updatedAt: '2024-09-30 11:10',
   },
@@ -261,6 +289,45 @@ const goodsStatusMeta: Record<GoodsStatus, { label: string; className: string; c
   off: { label: '已下架', className: 'bg-gray-100 text-gray-600 ring-gray-200', countClass: 'text-gray-600' },
   violation: { label: '违规下架', className: 'bg-red-50 text-red-600 ring-red-200', countClass: 'text-red-600' },
   rejected: { label: '审核驳回', className: 'bg-amber-50 text-amber-700 ring-amber-200', countClass: 'text-amber-700' },
+}
+
+/**
+ * 同名商品的多个规格相邻排列（保持首次出现顺序），并标出每行在分组中的位置，
+ * 列表据此只在首行显示商品名称、其余行显示规格归属。
+ */
+export function groupBySpec<T extends { name: string }>(list: T[]): { item: T; first: boolean; size: number }[] {
+  const order: string[] = []
+  const buckets = new Map<string, T[]>()
+  for (const item of list) {
+    if (!buckets.has(item.name)) {
+      buckets.set(item.name, [])
+      order.push(item.name)
+    }
+    buckets.get(item.name)!.push(item)
+  }
+  return order.flatMap((name) => {
+    const items = buckets.get(name)!
+    return items.map((item, i) => ({ item, first: i === 0, size: items.length }))
+  })
+}
+
+/** 商品名称单元格：首行显示名称与规格数，同名后续行显示归属提示 */
+export function GroupedName({ name, first, size }: { name: string; first: boolean; size: number }) {
+  if (!first)
+    return (
+      <span className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground" title={name}>
+        <span aria-hidden className="font-mono">└</span>
+        <span className="truncate">同名规格</span>
+      </span>
+    )
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="truncate font-medium" title={name}>
+        {name}
+      </span>
+      {size > 1 && <Tag className="shrink-0 bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/20">{size} 规格</Tag>}
+    </span>
+  )
 }
 
 export function Tag({ className, children }: { className: string; children: React.ReactNode }) {
@@ -1222,7 +1289,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
             )
           })}
           <span className="ml-auto pr-2 text-muted-foreground">
-            {isFiltered ? `筛选结��� ${visible.length} 条 · ` : ''}点击编码前的角标可展开查看上架 / 委托记录
+            {isFiltered ? `筛选结果 ${visible.length} 条 · ` : ''}同一商品名称下的多个规格相邻显示，点击编码前的角标可展开查看上架 / 委托记录
           </span>
         </div>
 
@@ -1249,7 +1316,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
               <p className="px-4 py-12 text-center text-sm text-muted-foreground">没有符合筛选条件的商品</p>
             )}
 
-            {visible.map((g) => {
+            {groupBySpec(visible).map(({ item: g, first, size }) => {
               const open = expanded[g.code] ?? false
               const statusMeta = goodsStatusMeta[g.status]
               return (
@@ -1258,6 +1325,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
                     className={cn(
                       'grid items-center gap-3 border-b border-border px-4 py-3 text-sm hover:bg-muted/30',
                       open && 'bg-muted/20',
+                      !first && 'border-dashed',
                     )}
                     style={{ gridTemplateColumns: columns }}
                   >
@@ -1277,10 +1345,8 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
                       </button>
                     </span>
                     <span className="font-mono text-xs text-muted-foreground">{g.code}</span>
-                    <span className="truncate font-medium" title={g.name}>
-                      {g.name}
-                    </span>
-                    <span className="truncate text-xs" title={g.spec}>
+                    <GroupedName name={g.name} first={first} size={size} />
+                    <span className={cn('truncate text-xs', size > 1 && 'font-medium text-foreground')} title={g.spec}>
                       {g.spec}
                     </span>
                     <span className="truncate text-xs" title={g.shop}>
