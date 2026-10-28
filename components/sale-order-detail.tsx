@@ -109,11 +109,13 @@ function GoodsTab({ o, role }: { o: SaleOrder; role: OrderRole }) {
 
 function ContractTab({ o }: { o: SaleOrder }) {
   if (!o.contractNo) return <Empty text={o.status === 'negotiating' ? '议价成交后可发起合同' : '尚未发起合同'} />
+  const pending = o.contractState === '待签署'
   return (
-    <DocCard title="购销合同" no={o.contractNo} state="已签署" stateTone="good">
+    <DocCard title="购销合同" no={o.contractNo} state={pending ? '待买方签署' : '已签署'} stateTone={pending ? 'warn' : 'good'}>
       <Rows
         rows={[
-          ['签署时间', stampOf(o, '合同') ?? o.createdAt],
+          ['签署方式', o.contractSign ? (o.contractSign === '线上' ? '线上电子签' : '线下纸质签') : '线上电子签'],
+          [pending ? '发起时间' : '签署时间', stampOf(o, '合同') ?? stampOf(o, '签署') ?? o.createdAt],
           ['合同金额', fmtMoney(saleAmount(o))],
           ['甲方（买方）', o.buyer],
           ['乙方（卖方）', o.seller],

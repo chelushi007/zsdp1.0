@@ -5,6 +5,7 @@ import { FileText } from 'lucide-react'
 import { ActionLink, bizMeta } from '@/components/goods-list'
 import { Select } from '@/components/shop-form-fields'
 import { SaleDetailModal } from '@/components/sale-order-detail'
+import { SaleContractPage } from '@/components/sale-contract-page'
 import {
   ActionCell,
   ActionDialog,
@@ -88,9 +89,14 @@ function useOrderList<T extends Listed>(initial: T[]) {
     if (action.instant) run(row, action)
     else setDialog({ id: row.id, action })
   }
+  const commit = (next: T, message: string) => {
+    setRows((list) => list.map((r) => (r.id === next.id ? next : r)))
+    setToast(message)
+    window.setTimeout(() => setToast(null), 2600)
+  }
   const dialogRow = dialog ? rows.find((r) => r.id === dialog.id) : undefined
   const detailRow = detailId ? rows.find((r) => r.id === detailId) : undefined
-  return { rows, dialog, dialogRow, detailRow, toast, run, trigger, setDialog, setDetailId }
+  return { rows, dialog, dialogRow, detailRow, toast, run, trigger, commit, setDialog, setDetailId }
 }
 
 function inRange(date: string, from: string, to: string) {
@@ -630,15 +636,26 @@ function saleActions(o: SaleOrder, role: OrderRole): ActionDef<SaleOrder>[] {
     }
   }
 
-  if (!o.contractNo && s !== 'negotiating' && s !== 'cancelled')
-    list.push({
-      id: 'sign',
-      group: '合同',
-      label: role === 'buyer' ? '签署合同' : '发起合同',
-      fields: [{ key: 'no', label: '合同编号', required: true, initial: `HT${o.id.slice(2)}` }],
-      apply: (x, v) => withEvent({ ...x, contractNo: v.no }, `${by}${role === 'buyer' ? '签署' : '发起'}合同`, by, v.no),
-      toast: () => '合同已更新',
-    })
+  if (s !== 'negotiating' && s !== 'cancelled') {
+    if (!o.contractNo && role !== 'buyer')
+      list.push({
+        id: 'contract',
+        group: '合同',
+        label: '发起合同',
+        instant: true,
+        apply: (x) => x,
+        toast: () => '',
+      })
+    if (o.contractNo && o.contractState === '待签署' && role === 'buyer')
+      list.push({
+        id: 'sign',
+        group: '合同',
+        label: '签署合同',
+        confirmLabel: '确认电子签署',
+        apply: (x) => withEvent({ ...x, contractState: '已签署' }, '买方完成电子签署', by, x.contractNo),
+        toast: () => '合同已签署',
+      })
+  }
   list.push(...settleActions(o, role))
 
   if (role === 'buyer') {
@@ -728,7 +745,9 @@ function saleActions(o: SaleOrder, role: OrderRole): ActionDef<SaleOrder>[] {
 
 function SaleOrders({ role }: { role: OrderRole }) {
   const own = saleOrdersData.filter((o) => ownsOrder(o, role))
-  const { rows, dialog, dialogRow, detailRow, toast, run, trigger, setDialog, setDetailId } = useOrderList(own)
+  const { rows, dialog, dialogRow, detailRow, toast, run, trigger, commit, setDialog, setDetailId } = useOrderList(own)
+  const [contractId, setContractId] = useState<string | null>(null)
+  const contractRow = contractId ? rows.find((o) => o.id === contractId) : undefined
   const [draft, setDraft] = useState<BaseFilters>(emptyBaseFilters)
   const [applied, setApplied] = useState<BaseFilters>(emptyBaseFilters)
   const [termDraft, setTermDraft] = useState('')
@@ -827,9 +846,33 @@ function SaleOrders({ role }: { role: OrderRole }) {
       key: 'actions',
       label: '操作',
       width: 'minmax(220px,1.4fr)',
-      render: (o) => <ActionCell actions={saleActions(o, role)} onAction={(a) => trigger(o, a)} extra={<ActionLink onClick={() => setDetailId(o.id)}>详情</ActionLink>} />,
+      render: (o) => <ActionCell actions={saleActions(o, role)} onAction={(a) => (a.id === 'contract' ? setContractId(o.id) : trigger(o, a))} extra={<ActionLink onClick={() => setDetailId(o.id)}>详情</ActionLink>} />,
     },
   ]
+
+  if (contractRow)
+    return (
+      <>
+        <SaleContractPage
+          key={contractRow.id}
+          order={contractRow}
+          onBack={() => setContractId(null)}
+          onSubmit={(v) => {
+            const by = actorOf[role]
+            const online = v.mode === '线上'
+            const next = withEvent(
+              { ...contractRow, contractNo: v.no, contractSign: v.mode, contractState: online ? ('待签署' as const) : ('已签署' as const) },
+              online ? `商家发起线上合同，待 ${v.signer} 电子签署` : '商家登记线下签署合同',
+              by,
+              online ? v.no : `${v.no} · ${v.signedAt}`,
+            )
+            commit(next, online ? '线上合同已发起，等待买方签署' : '线下合同已登记')
+            setContractId(null)
+          }}
+        />
+        <Toast message={toast} />
+      </>
+    )
 
   return (
     <div className="flex flex-col gap-4">

@@ -80,6 +80,10 @@ export type SaleOrder = OrderBase & {
   pickupNo?: string
   /** 买方议价出价 */
   bidPrice?: number
+  /** 合同签署方式 */
+  contractSign?: '线上' | '线下'
+  /** 合同签署状态 */
+  contractState?: '待签署' | '已签署'
   /** 物流公司 / 车辆 */
   shipCompany?: string
   payMethod: PayMethod
