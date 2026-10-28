@@ -166,8 +166,9 @@ const seed: EntrustedGoods[] = [
     quantity: 30,
     basePrice: 10,
     deposit: 3000,
-    entrustedAt: "2024-10-12",
-    status: "pending",
+    entrustedAt: "2024-09-18",
+    acceptedAt: "2024-09-19 09:40",
+    status: "accepted",
     listings: [],
     updatedAt: "2024-10-12 09:20",
   },
@@ -315,8 +316,8 @@ const seed: EntrustedGoods[] = [
     basePrice: 30,
     deposit: 5000,
     entrustedAt: "2024-07-15",
-    acceptedAt: "2024-07-16 15:40",
-    status: "accepted",
+    status: "returned",
+    statusNote: "商家底价高于市场价，暂无法代理",
     listings: [],
     updatedAt: "2024-07-16 15:40",
   },
@@ -765,6 +766,227 @@ function ListDialog({
   );
 }
 
+type ListingEditPatch = Pick<
+  ProviderListing,
+  "markupMode" | "markupValue" | "price" | "quantity" | "minOrder" | "minDays"
+>;
+
+/** 编辑：带入商品与委托信息（不可改），调整当前上架中记录的加价、交易条件与上架数量 */
+function EditDialog({
+  goods,
+  onClose,
+  onConfirm,
+}: {
+  goods: EntrustedGoods;
+  onClose: () => void;
+  onConfirm: (listingId: string, patch: ListingEditPatch) => void;
+}) {
+  const listing =
+    goods.listings.find((l) => l.status === "on") ?? goods.listings[0];
+  const type = goods.type;
+  const base = goods.basePrice;
+  const unitSuffix = priceSuffix(goods);
+  const [markupMode, setMarkupMode] = useState<MarkupMode>(
+    listing?.markupMode ?? "percent",
+  );
+  const [markupValue, setMarkupValue] = useState(
+    listing ? String(listing.markupValue) : "",
+  );
+  const [quantity, setQuantity] = useState(
+    listing ? String(listing.quantity) : "",
+  );
+  const [minOrder, setMinOrder] = useState(
+    listing?.minOrder ? String(listing.minOrder) : "",
+  );
+  const [minDays, setMinDays] = useState(
+    listing?.minDays ? String(listing.minDays) : "",
+  );
+
+  if (!listing) return null;
+
+  const otherLocked = lockedQty(goods) - (listing.status === "on" ? listing.quantity : 0);
+  const available = goods.quantity - otherLocked;
+  const markup = Number(markupValue);
+  const markupOk = markupValue !== "" && markup >= 0;
+  const price = markupOk
+    ? round2(markupMode === "percent" ? base * (1 + markup / 100) : base + markup)
+    : base;
+  const profit = round2(price - base);
+  const profitRate = base > 0 ? round2((profit / base) * 100) : 0;
+  const qty = Number(quantity);
+  const qtyOk =
+    Number.isInteger(qty) && qty > 0 && qty <= available && qty >= listing.used;
+  const qtyHint =
+    quantity && !qtyOk
+      ? qty > available
+        ? `受托 ${goods.quantity.toLocaleString()} ${goods.unit}，其他上架中记录占用 ${otherLocked.toLocaleString()} ${goods.unit}，本条最多 ${available.toLocaleString()} ${goods.unit}`
+        : qty < listing.used
+          ? `本条已成交 ${listing.used.toLocaleString()} ${goods.unit}，上架数量不可低于该值`
+          : "请输入大于 0 的整数"
+      : `已成交 ${listing.used.toLocaleString()} ${goods.unit} · 本条最多可上架 ${available.toLocaleString()} ${goods.unit}`;
+  const nextMinOrder = minOrder ? Number(minOrder) : undefined;
+  const nextMinDays = Number(minDays);
+  const changed =
+    markupMode !== listing.markupMode ||
+    markup !== listing.markupValue ||
+    qty !== listing.quantity ||
+    (type === "sale"
+      ? nextMinOrder !== listing.minOrder
+      : nextMinDays !== listing.minDays);
+  const ok =
+    markupOk && qtyOk && (type === "sale" || nextMinDays > 0) && changed;
+
+  return (
+    <Modal
+      title="编辑上架信息"
+      titleId="provider-edit-dialog-title"
+      width="max-w-[600px]"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            取消
+          </Button>
+          <Button
+            size="sm"
+            className={PRIMARY_BTN}
+            disabled={!ok}
+            onClick={() =>
+              onConfirm(listing.id, {
+                markupMode,
+                markupValue: markup,
+                price,
+                quantity: qty,
+                minOrder: type === "sale" ? nextMinOrder : listing.minOrder,
+                minDays: type === "rent" ? nextMinDays : listing.minDays,
+              })
+            }
+          >
+            保存修改
+          </Button>
+        </>
+      }
+    >
+      <GoodsSummary goods={goods} />
+      <div className="grid gap-3 rounded border border-dashed border-border px-3 py-2 text-xs sm:grid-cols-3">
+        <span className="flex flex-col gap-0.5">
+          <span className="text-muted-foreground">上架单号</span>
+          <span className="font-mono">{listing.id}</span>
+        </span>
+        <span className="flex flex-col gap-0.5">
+          <span className="text-muted-foreground">
+            {bizMeta[type].label}底价
+          </span>
+          <span className="tabular-nums">
+            ¥ {fmtPrice(base)} {unitSuffix}
+          </span>
+        </span>
+        <span className="flex flex-col gap-0.5">
+          <span className="text-muted-foreground">
+            {type === "rent" ? "押金" : "上架时间"}
+          </span>
+          <span className="tabular-nums">
+            {type === "rent"
+              ? `¥ ${fmtPrice(goods.deposit ?? 0)} / ${goods.unit}`
+              : listing.listedAt}
+          </span>
+        </span>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <DialogField label="加价方式" required>
+          <div
+            role="radiogroup"
+            aria-label="加价方式"
+            className="flex h-9 items-center gap-4 text-sm"
+          >
+            {(
+              [
+                ["percent", "按比例"],
+                ["fixed", "固定金额"],
+              ] as [MarkupMode, string][]
+            ).map(([m, label]) => (
+              <label key={m} className="flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="edit-markup-mode"
+                  checked={markupMode === m}
+                  onChange={() => setMarkupMode(m)}
+                  className="accent-[#1890ff]"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+        </DialogField>
+        <DialogField
+          label={markupMode === "percent" ? "加价比例" : "加价金额"}
+          required
+          hint="商家底价由委托方给定，服务商只能调整加价"
+        >
+          <DialogInput
+            label="加价"
+            type="number"
+            value={markupValue}
+            onChange={setMarkupValue}
+            placeholder="0"
+            prefix={markupMode === "fixed" ? "+ ¥" : "+"}
+            suffix={markupMode === "percent" ? "%" : unitSuffix}
+          />
+        </DialogField>
+        <DialogField label={type === "sale" ? "对外售价" : "对外租金"}>
+          <div className="flex h-9 items-center justify-between rounded border border-[#1890ff]/40 bg-[#1890ff]/5 px-3 text-sm tabular-nums">
+            <span className="font-medium text-[#1890ff]">
+              ¥ {fmtPrice(price)}{" "}
+              <span className="text-xs font-normal text-muted-foreground">
+                {unitSuffix}
+              </span>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              收益 ¥ {fmtPrice(profit)}（{profitRate}%）
+            </span>
+          </div>
+        </DialogField>
+        {type === "sale" ? (
+          <DialogField label="起订量">
+            <DialogInput
+              label="起订量"
+              type="number"
+              value={minOrder}
+              onChange={setMinOrder}
+              placeholder="不限"
+              suffix={goods.unit}
+            />
+          </DialogField>
+        ) : (
+          <DialogField label="最短租期" required>
+            <DialogInput
+              label="最短租期"
+              type="number"
+              value={minDays}
+              onChange={setMinDays}
+              placeholder="0"
+              suffix="天"
+            />
+          </DialogField>
+        )}
+        <div className="sm:col-span-2">
+          <DialogField label="上架数量" required hint={qtyHint}>
+            <DialogInput
+              label="上架数量"
+              type="number"
+              value={quantity}
+              onChange={setQuantity}
+              placeholder="0"
+              suffix={goods.unit}
+            />
+          </DialogField>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 const OFF_REASONS = [
   "商家调整底价",
   "库存不足",
@@ -823,7 +1045,7 @@ function OffDialog({
   );
 }
 
-type Action = "detail" | "accept" | "return" | "list" | "off";
+type Action = "detail" | "edit" | "accept" | "return" | "list" | "off";
 
 function Actions({
   goods,
@@ -859,6 +1081,7 @@ function Actions({
     listed: (
       <>
         {detailLink}
+        <ActionLink onClick={() => onAction("edit")}>编辑</ActionLink>
         <ActionLink onClick={() => onAction("list")}>上架</ActionLink>
         <ActionLink tone="danger" onClick={() => onAction("off")}>
           下架
@@ -887,73 +1110,99 @@ function Actions({
 
 const columns =
   "36px 100px minmax(170px,1.4fr) minmax(110px,1fr) 72px 112px 84px 84px 80px 80px 88px 100px minmax(130px,1fr)";
-const specColumns =
-  "40px 108px minmax(150px,1.2fr) 64px 120px 90px 90px 80px 96px minmax(170px,1fr)";
+const specSummaryColumns =
+  "108px minmax(150px,1.2fr) 64px 120px 90px 90px 96px minmax(170px,1fr)";
 const listingColumns =
   "120px 128px 72px minmax(140px,1fr) minmax(150px,1fr) 100px 80px 120px";
+const groupListingColumns =
+  "120px minmax(130px,1fr) 128px 72px minmax(140px,1fr) minmax(150px,1fr) 100px 80px 120px";
 
-/** 上架记录：出售行显示起订量，出租行显示押金与最短租期，仅展示对外价格 */
-function ListingTable({ goods }: { goods: EntrustedGoods }) {
-  const isRent = goods.type === "rent";
+/** 一组同名受托商品的全部上架记录：多规格时在行内标注编码与规格，仅展示对外价格 */
+function GroupListingTable({ items }: { items: EntrustedGoods[] }) {
+  const rows = items.flatMap((g) => g.listings.map((l) => ({ g, l })));
+  const multi = items.length > 1;
+  const cols = multi ? groupListingColumns : listingColumns;
+  const types = new Set(rows.map((r) => r.l.type));
+  const onlyRent = types.size === 1 && types.has("rent");
+  const onlySale = types.size === 1 && types.has("sale");
+  if (rows.length === 0)
+    return (
+      <div className="rounded border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+        尚未上架，受理后可在操作列点击「上架」加价上架
+      </div>
+    );
   return (
     <div className="overflow-hidden rounded border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs">
         <span className="font-medium">上架记录</span>
         <span className="text-muted-foreground">
-          共 {goods.listings.length} 条
+          共 {rows.length} 条{multi ? ` · ${items.length} 个规格` : ""}
         </span>
       </div>
       <div
         className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
-        style={{ gridTemplateColumns: listingColumns }}
+        style={{ gridTemplateColumns: cols }}
       >
         <span>上架单号</span>
+        {multi && <span>商品编码 / 规格</span>}
         <span>上架时间</span>
         <span>租售方式</span>
-        <span>{isRent ? "对外租金" : "对外售价"}</span>
-        <span>{isRent ? "押金 / 最短租期" : "起订量"}</span>
-        <span>{isRent ? "已租 / 上架" : "已售 / 上架"}</span>
+        <span>{onlyRent ? "对外租金" : onlySale ? "对外售价" : "对外价格"}</span>
+        <span>
+          {onlyRent ? "押金 / 最短租期" : onlySale ? "起订量" : "交易条件"}
+        </span>
+        <span>{onlyRent ? "已租 / 上架" : onlySale ? "已售 / 上架" : "成交 / 上架"}</span>
         <span>状态</span>
         <span>操作</span>
       </div>
-      {goods.listings.length === 0 && (
-        <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-          尚未上架
-        </p>
-      )}
-      {goods.listings.map((l) => {
+      {rows.map(({ g, l }) => {
         const suffix =
-          l.type === "sale"
-            ? `/ ${goods.unit}`
-            : `/ ${goods.unit} / ${l.period}`;
+          l.type === "sale" ? `/ ${g.unit}` : `/ ${g.unit} / ${l.period}`;
         return (
           <div
             key={l.id}
             className="grid items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-0"
-            style={{ gridTemplateColumns: listingColumns }}
+            style={{ gridTemplateColumns: cols }}
           >
             <span className="font-mono text-xs text-muted-foreground">
               {l.id}
             </span>
+            {multi && (
+              <span className="flex min-w-0 flex-col leading-4">
+                <span className="font-mono text-xs text-muted-foreground">
+                  {g.code}
+                </span>
+                <span className="truncate text-xs" title={g.spec}>
+                  {g.spec}
+                </span>
+              </span>
+            )}
             <span className="font-mono text-xs text-muted-foreground">
               {l.listedAt}
             </span>
             <Tag className={bizMeta[l.type].className}>
               {bizMeta[l.type].label}
             </Tag>
-            <span className="tabular-nums">
-              ¥ {fmtPrice(l.price)} {suffix}
+            <span className="flex flex-col leading-tight">
+              <span className="tabular-nums">
+                ¥ {fmtPrice(l.price)} {suffix}
+              </span>
+              <span className="text-[11px] text-muted-foreground tabular-nums">
+                底价 ¥ {fmtPrice(l.basePrice)} ·{" "}
+                {l.markupMode === "percent"
+                  ? `加价 ${l.markupValue}%`
+                  : `加价 ¥ ${fmtPrice(l.markupValue)}`}
+              </span>
             </span>
             <span className="text-xs tabular-nums">
               {l.type === "sale"
                 ? l.minOrder
-                  ? `${l.minOrder.toLocaleString()} ${goods.unit} 起订`
+                  ? `${l.minOrder.toLocaleString()} ${g.unit} 起订`
                   : "不限"
-                : `押金 ¥ ${fmtPrice(l.deposit ?? 0)} / ${goods.unit} · ${l.minDays ?? 0} 天起租`}
+                : `押金 ¥ ${fmtPrice(l.deposit ?? 0)} / ${g.unit} · ${l.minDays ?? 0} 天起租`}
             </span>
             <span className="tabular-nums">
-              {l.used.toLocaleString()} / {l.quantity.toLocaleString()}{" "}
-              {goods.unit}
+              {l.used.toLocaleString()} / {l.quantity.toLocaleString()} {g.unit}
             </span>
             <Tag
               className={
@@ -1032,122 +1281,7 @@ function FilterRow({
 }
 
 /** 规格明细：同名受托商品下各规格的委托方式、底价、数量与受理 / 运营状态，可带出上架记录 */
-function SpecTable({
-  items,
-  onAction,
-  withRecords,
-  hideDetail,
-}: {
-  items: EntrustedGoods[];
-  onAction: (g: EntrustedGoods, a: Action) => void;
-  withRecords?: boolean;
-  hideDetail?: boolean;
-}) {
-  return (
-    <div className="overflow-hidden rounded border border-border bg-card">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs">
-        <span className="font-medium">规格明细</span>
-        <span className="text-muted-foreground">共 {items.length} 个规格</span>
-      </div>
-      <div
-        className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
-        style={{ gridTemplateColumns: specColumns }}
-      >
-        <span>序号</span>
-        <span>商品编码</span>
-        <span>规格型号</span>
-        <span>方式</span>
-        <span>商家底价</span>
-        <span>受托数量</span>
-        <span>上架数量</span>
-        <span>受理情况</span>
-        <span>运营状态</span>
-        <span>操作</span>
-      </div>
-      {items.map((g, i) => {
-        const accept = isAccepted(g) ? acceptMeta.accepted : acceptMeta.pending;
-        const operation = operationMeta(g);
-        return (
-          <Fragment key={g.id}>
-            <div
-              className={cn(
-                "grid items-center gap-3 border-b border-border px-3 py-2.5 text-sm",
-                !withRecords && "last:border-0",
-              )}
-              style={{ gridTemplateColumns: specColumns }}
-            >
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {i + 1}
-              </span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {g.code}
-              </span>
-              <span className="truncate font-medium" title={g.spec}>
-                {g.spec}
-              </span>
-              <span className="flex">
-                <Tag className={bizMeta[g.type].className}>
-                  {bizMeta[g.type].label}
-                </Tag>
-              </span>
-              <span className="flex flex-col text-xs tabular-nums">
-                <span>
-                  ¥ {fmtPrice(g.basePrice)} {priceSuffix(g)}
-                </span>
-                {g.type === "rent" && g.deposit !== undefined && (
-                  <span className="text-[11px] text-muted-foreground">
-                    押金 ¥ {fmtPrice(g.deposit)}
-                  </span>
-                )}
-              </span>
-              <span className="tabular-nums">
-                {g.quantity.toLocaleString()} {g.unit}
-              </span>
-              <span className="tabular-nums">
-                {lockedQty(g).toLocaleString()} {g.unit}
-              </span>
-              <span className="flex flex-col items-start gap-1">
-                <Tag className={accept.className}>{accept.label}</Tag>
-                {g.status === "returned" && (
-                  <span className="text-[11px] leading-4 text-red-600">
-                    已退回
-                  </span>
-                )}
-              </span>
-              <span className="flex min-w-0 flex-col items-start gap-1">
-                {operation ? (
-                  <Tag className={operation.className}>{operation.label}</Tag>
-                ) : (
-                  <span className="text-xs text-muted-foreground">—</span>
-                )}
-                {g.statusNote && (
-                  <span
-                    className="line-clamp-1 text-[11px] leading-4 text-muted-foreground"
-                    title={g.statusNote}
-                  >
-                    {g.statusNote}
-                  </span>
-                )}
-              </span>
-              <Actions
-                goods={g}
-                hideDetail={hideDetail}
-                onAction={(a) => onAction(g, a)}
-              />
-            </div>
-            {withRecords && (
-              <div className="border-b border-border bg-muted/20 px-3 py-3 pl-[52px] last:border-0">
-                <ListingTable goods={g} />
-              </div>
-            )}
-          </Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-/** 受托商品详情页：汇总同名规格的委托信息、规格明细与各规格上架记录 */
+/** 受托商品详情页：委托单信息、规格与数量、全部上架记录；受理 / 退回按委托单整体操作 */
 function EntrustDetail({
   group,
   onBack,
@@ -1159,24 +1293,25 @@ function EntrustDetail({
 }) {
   const items = group.items;
   const head = items[0];
+  const single = items.length === 1;
+  const allListings = items.flatMap((g) => g.listings);
   const totalQty = items.reduce((s, g) => s + g.quantity, 0);
   const listedQty = items.reduce((s, g) => s + lockedQty(g), 0);
-  const onListings = items
-    .flatMap((g) => g.listings)
-    .filter((l) => l.status === "on");
-  const used = items.flatMap((g) => g.listings).reduce((s, l) => s + l.used, 0);
-  const acceptedCount = items.filter(isAccepted).length;
+  const onListings = allListings.filter((l) => l.status === "on");
+  const used = allListings.reduce((s, l) => s + l.used, 0);
+  const accepted = isAccepted(head);
+  const accept = accepted ? acceptMeta.accepted : acceptMeta.pending;
   const types = Array.from(new Set(items.map((g) => g.type)));
   const entrustedAt = items.map((g) => g.entrustedAt).sort()[0];
   const acceptedAt = items
     .map((g) => g.acceptedAt)
     .filter(Boolean)
-    .sort()
-    .at(-1);
+    .sort()[0];
   const updatedAt = items
     .map((g) => g.updatedAt)
     .sort()
     .at(-1);
+  const operation = operationMeta(head);
 
   return (
     <div className="flex flex-col gap-4">
@@ -1185,7 +1320,7 @@ function EntrustDetail({
         onBack={onBack}
         tags={
           <>
-            {items.length > 1 && (
+            {!single && (
               <Tag className="bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/20">
                 {items.length} 规格
               </Tag>
@@ -1195,42 +1330,49 @@ function EntrustDetail({
                 委托{bizMeta[t].label}
               </Tag>
             ))}
-            <StatusSummary
-              statuses={items.map((g) => g.status)}
-              order={statusOrder}
-              meta={statusMeta}
-            />
+            <Tag className={accept.className}>{accept.label}</Tag>
+            {head.status === "returned" && (
+              <Tag className={statusMeta.returned.className}>已退回</Tag>
+            )}
           </>
         }
         subtitle={
           <span className="flex flex-wrap gap-x-3 gap-y-1">
+            <span className="font-mono">委托单 {head.id}</span>
             <span>委托方：{head.seller}</span>
             <span>{head.subCategory}</span>
             <span>计量单位：{head.unit}</span>
           </span>
         }
         actions={
-          items.length === 1 ? (
-            head.status === "pending" ? (
-              <>
+          head.status === "pending" ? (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onAction(head, "return")}
+              >
+                退回委托
+              </Button>
+              <Button
+                size="sm"
+                className={PRIMARY_BTN}
+                onClick={() => onAction(head, "accept")}
+              >
+                受理委托
+              </Button>
+            </>
+          ) : single && accepted ? (
+            <>
+              {head.status === "listed" && (
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => onAction(head, "return")}
+                  onClick={() => onAction(head, "edit")}
                 >
-                  退回
+                  编辑
                 </Button>
-                <Button
-                  size="sm"
-                  className={PRIMARY_BTN}
-                  onClick={() => onAction(head, "accept")}
-                >
-                  受理
-                </Button>
-              </>
-            ) : head.status === "accepted" ||
-              head.status === "listed" ||
-              head.status === "off" ? (
+              )}
               <Button
                 size="sm"
                 className={PRIMARY_BTN}
@@ -1238,7 +1380,11 @@ function EntrustDetail({
               >
                 {head.status === "off" ? "重新上架" : "上架"}
               </Button>
-            ) : null
+            </>
+          ) : !single && accepted ? (
+            <span className="text-xs text-muted-foreground">
+              上架 / 编辑 / 下架请在下方「规格与数量」中按规格进行
+            </span>
           ) : null
         }
       />
@@ -1248,13 +1394,17 @@ function EntrustDetail({
           label="受托数量"
           value={totalQty}
           unit={head.unit}
-          hint={`${items.length} 个规格合计`}
+          hint={
+            single
+              ? `可上架 ${(totalQty - listedQty).toLocaleString()} ${head.unit}`
+              : `${items.length} 个规格合计 · 可上架 ${(totalQty - listedQty).toLocaleString()} ${head.unit}`
+          }
         />
         <StatCard
           label="上架数量"
           value={listedQty}
           unit={head.unit}
-          hint={`${onListings.length} 条上架中记录`}
+          hint={`${onListings.length} 条上架中记录 · 共 ${allListings.length} 条`}
         />
         <StatCard
           label="累计成交"
@@ -1263,47 +1413,163 @@ function EntrustDetail({
           hint="已售出 / 已租出合计"
         />
         <StatCard
-          label="受理进度"
-          value={`${acceptedCount} / ${items.length}`}
-          unit="个规格"
+          label="受理情况"
+          value={accept.label}
           hint={
-            acceptedCount === items.length ? "全部已受理" : "仍有规格待受理"
+            head.status === "returned"
+              ? `已退回 · ${head.statusNote ?? ""}`
+              : acceptedAt
+                ? `受理于 ${acceptedAt}`
+                : "委托单整体受理，受理后可加价上架"
           }
         />
       </div>
 
       <DetailSection title="委托信息">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <DescItem label="委托单号">
+            <span className="font-mono text-xs">{head.id}</span>
+          </DescItem>
           <DescItem label="商品名称">{group.name}</DescItem>
+          {single && <DescItem label="规格型号">{head.spec}</DescItem>}
+          <DescItem label="商品编码">
+            <span className="font-mono text-xs">
+              {Array.from(new Set(items.map((g) => g.code))).join("、")}
+            </span>
+          </DescItem>
           <DescItem label="委托方">{head.seller}</DescItem>
           <DescItem label="品类">{head.subCategory}</DescItem>
           <DescItem label="计量单位">{head.unit}</DescItem>
-          <DescItem label="商品编码">
-            <span className="font-mono text-xs">
-              {items.map((g) => g.code).join("、")}
-            </span>
-          </DescItem>
           <DescItem label="委托方式">
             {types.map((t) => bizMeta[t].label).join(" / ")}
           </DescItem>
+          {single && (
+            <DescItem label="商家底价">
+              <span className="tabular-nums">
+                ¥ {fmtPrice(head.basePrice)} {priceSuffix(head)}
+                {head.type === "rent" && head.deposit !== undefined
+                  ? ` · 押金 ¥ ${fmtPrice(head.deposit)} / ${head.unit}`
+                  : ""}
+              </span>
+            </DescItem>
+          )}
+          {single && operation && (
+            <DescItem label="运营状态">
+              <span className="flex flex-col items-start gap-1">
+                <Tag className={operation.className}>{operation.label}</Tag>
+                {head.statusNote && (
+                  <span className="text-xs text-muted-foreground">
+                    {head.statusNote}
+                  </span>
+                )}
+              </span>
+            </DescItem>
+          )}
           <DescItem label="委托时间">
             <span className="font-mono text-xs">{entrustedAt}</span>
           </DescItem>
-          <DescItem label="最近受托 / 更新">
-            <span className="font-mono text-xs">
-              {acceptedAt ?? "—"} / {updatedAt}
-            </span>
+          <DescItem label="受托时间">
+            <span className="font-mono text-xs">{acceptedAt ?? "—"}</span>
+          </DescItem>
+          <DescItem label="最近更新">
+            <span className="font-mono text-xs">{updatedAt}</span>
           </DescItem>
         </div>
       </DetailSection>
 
+      {!single && (
+        <DetailSection
+          title="规格与数量"
+          extra="受理 / 退回按委托单整体操作；上架、编辑、下架按规格操作"
+          flush
+        >
+          <div
+            className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground"
+            style={{ gridTemplateColumns: specSummaryColumns }}
+          >
+            <span>商品编码</span>
+            <span>规格型号</span>
+            <span>方式</span>
+            <span>商家底价</span>
+            <span>受托数量</span>
+            <span>上架数量</span>
+            <span>运营状态</span>
+            <span>操作</span>
+          </div>
+          {items.map((g) => {
+            const op = operationMeta(g);
+            return (
+              <div
+                key={g.id}
+                className="grid items-center gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0"
+                style={{ gridTemplateColumns: specSummaryColumns }}
+              >
+                <span className="font-mono text-xs text-muted-foreground">
+                  {g.code}
+                </span>
+                <span className="truncate font-medium" title={g.spec}>
+                  {g.spec}
+                </span>
+                <span className="flex">
+                  <Tag className={bizMeta[g.type].className}>
+                    {bizMeta[g.type].label}
+                  </Tag>
+                </span>
+                <span className="flex flex-col text-xs tabular-nums">
+                  <span>
+                    ¥ {fmtPrice(g.basePrice)} {priceSuffix(g)}
+                  </span>
+                  {g.type === "rent" && g.deposit !== undefined && (
+                    <span className="text-[11px] text-muted-foreground">
+                      押金 ¥ {fmtPrice(g.deposit)}
+                    </span>
+                  )}
+                </span>
+                <span className="tabular-nums">
+                  {g.quantity.toLocaleString()} {g.unit}
+                </span>
+                <span className="tabular-nums">
+                  {lockedQty(g).toLocaleString()} {g.unit}
+                </span>
+                <span className="flex min-w-0 flex-col items-start gap-1">
+                  {op ? (
+                    <Tag className={op.className}>{op.label}</Tag>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">—</span>
+                  )}
+                  {g.statusNote && (
+                    <span
+                      className="line-clamp-1 text-[11px] leading-4 text-muted-foreground"
+                      title={g.statusNote}
+                    >
+                      {g.statusNote}
+                    </span>
+                  )}
+                </span>
+                {accepted ? (
+                  <Actions
+                    goods={g}
+                    hideDetail
+                    onAction={(a) => onAction(g, a)}
+                  />
+                ) : (
+                  <span className="text-xs text-muted-foreground">
+                    {g.status === "returned" ? "已退回" : "待受理"}
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </DetailSection>
+      )}
+
       <DetailSection
-        title="规格明细与上架记录"
-        extra="受理、上架、下架、退回等操作针对单个规格"
+        title="上架记录"
+        extra="在商家底价基础上加价对外上架，差额为服务收益"
         flush
       >
         <div className="p-3">
-          <SpecTable items={items} onAction={onAction} withRecords hideDetail />
+          <GroupListingTable items={items} />
         </div>
       </DetailSection>
     </div>
@@ -1319,6 +1585,11 @@ export function ProviderGoods() {
     action: Exclude<Action, "detail">;
     id: string;
   } | null>(null);
+  /** 同一委托单下的全部规格：受理 / 退回按委托单整体生效 */
+  const orderIds = (g: EntrustedGoods) =>
+    goods
+      .filter((x) => x.name === g.name && x.seller === g.seller)
+      .map((x) => x.id);
   const [detailName, setDetailName] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -1328,13 +1599,14 @@ export function ProviderGoods() {
     : undefined;
 
   const update = (
-    id: string,
+    id: string | string[],
     patch: (g: EntrustedGoods) => EntrustedGoods,
     message: string,
   ) => {
+    const ids = Array.isArray(id) ? id : [id];
     setGoods((list) =>
       list.map((g) =>
-        g.id === id ? { ...patch(g), updatedAt: nowStamp() } : g,
+        ids.includes(g.id) ? { ...patch(g), updatedAt: nowStamp() } : g,
       ),
     );
     setDialog(null);
@@ -1491,7 +1763,7 @@ export function ProviderGoods() {
                 );
               })}
               <span className="ml-auto pr-2 text-muted-foreground">
-                同一商品的多个规格归为一行，点击编码前的角标展开查看规格明细与上架记录
+                同一委托单的多个规格归为一行，点击编码前的角标展开查看上架记录
               </span>
             </div>
 
@@ -1541,7 +1813,9 @@ export function ProviderGoods() {
                     .filter(Boolean)
                     .sort()
                     .at(-1);
-                  const acceptedCount = items.filter(isAccepted).length;
+                  const accept = isAccepted(head)
+                    ? acceptMeta.accepted
+                    : acceptMeta.pending;
                   return (
                     <Fragment key={grp.name}>
                       <div
@@ -1556,11 +1830,11 @@ export function ProviderGoods() {
                             type="button"
                             onClick={() => toggle(grp.name)}
                             aria-expanded={open}
-                            aria-controls={`provider-specs-${head.id}`}
+                            aria-controls={`provider-listings-${head.id}`}
                             aria-label={
                               open
-                                ? `收起 ${grp.name} 规格明细`
-                                : `展开 ${grp.name} 规格明细`
+                                ? `收起 ${grp.name} 上架记录`
+                                : `展开 ${grp.name} 上架记录`
                             }
                             className="relative flex size-6 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:border-[#1890ff] hover:text-[#1890ff]"
                           >
@@ -1650,49 +1924,17 @@ export function ProviderGoods() {
                           {head.unit}
                         </span>
                         <span className="flex flex-col items-start gap-1">
-                          {single ? (
-                            <>
-                              <Tag
-                                className={
-                                  (isAccepted(head)
-                                    ? acceptMeta.accepted
-                                    : acceptMeta.pending
-                                  ).className
-                                }
-                              >
-                                {
-                                  (isAccepted(head)
-                                    ? acceptMeta.accepted
-                                    : acceptMeta.pending
-                                  ).label
-                                }
-                              </Tag>
-                              {head.status === "returned" && (
-                                <span className="text-[11px] leading-4 text-red-600">
-                                  已退回
-                                </span>
-                              )}
-                            </>
+                          <Tag className={accept.className}>{accept.label}</Tag>
+                          {head.status === "returned" ? (
+                            <span className="text-[11px] leading-4 text-red-600">
+                              已退回
+                            </span>
                           ) : (
-                            <>
-                              <Tag
-                                className={
-                                  (acceptedCount === items.length
-                                    ? acceptMeta.accepted
-                                    : acceptMeta.pending
-                                  ).className
-                                }
-                              >
-                                {acceptedCount === items.length
-                                  ? "已受理"
-                                  : acceptedCount === 0
-                                    ? "未受理"
-                                    : "部分受理"}
-                              </Tag>
+                            !single && (
                               <span className="text-[11px] leading-4 text-muted-foreground">
-                                {acceptedCount} / {items.length} 规格
+                                按委托单整体受理
                               </span>
-                            </>
+                            )
                           )}
                         </span>
                         <span className="flex min-w-0 flex-col items-start gap-1">
@@ -1722,22 +1964,34 @@ export function ProviderGoods() {
                             >
                               详情
                             </ActionLink>
-                            <span className="text-[11px] text-muted-foreground">
-                              规格级操作请展开或进入详情
-                            </span>
+                            {head.status === "pending" ? (
+                              <>
+                                <ActionLink
+                                  onClick={() => handleAction(head, "accept")}
+                                >
+                                  受理
+                                </ActionLink>
+                                <ActionLink
+                                  tone="danger"
+                                  onClick={() => handleAction(head, "return")}
+                                >
+                                  退回
+                                </ActionLink>
+                              </>
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground">
+                                上架等操作请进入详情按规格进行
+                              </span>
+                            )}
                           </span>
                         )}
                       </div>
                       {open && (
                         <div
-                          id={`provider-specs-${head.id}`}
+                          id={`provider-listings-${head.id}`}
                           className="border-b border-border bg-muted/20 px-4 py-3 pl-[84px]"
                         >
-                          <SpecTable
-                            items={items}
-                            onAction={handleAction}
-                            withRecords
-                          />
+                          <GroupListingTable items={items} />
                         </div>
                       )}
                     </Fragment>
@@ -1762,14 +2016,14 @@ export function ProviderGoods() {
           onClose={() => setDialog(null)}
           onConfirm={() =>
             update(
-              dialogGoods.id,
+              orderIds(dialogGoods),
               (g) => ({
                 ...g,
                 status: "accepted",
                 acceptedAt: nowStamp(),
                 statusNote: undefined,
               }),
-              `已受理：${dialogGoods.name}，可加价上架`,
+              `已受理委托单 ${dialogGoods.id}：${dialogGoods.name}，可加价上架`,
             )
           }
         />
@@ -1780,7 +2034,7 @@ export function ProviderGoods() {
           onClose={() => setDialog(null)}
           onConfirm={(note) =>
             update(
-              dialogGoods.id,
+              orderIds(dialogGoods),
               (g) => ({
                 ...g,
                 status: "returned",
@@ -1790,7 +2044,26 @@ export function ProviderGoods() {
                   status: "off" as const,
                 })),
               }),
-              `已退回委托：${dialogGoods.name}`,
+              `已退回委托单 ${dialogGoods.id}：${dialogGoods.name}`,
+            )
+          }
+        />
+      )}
+      {dialog?.action === "edit" && dialogGoods && (
+        <EditDialog
+          key={dialogGoods.id}
+          goods={dialogGoods}
+          onClose={() => setDialog(null)}
+          onConfirm={(listingId, patch) =>
+            update(
+              dialogGoods.id,
+              (g) => ({
+                ...g,
+                listings: g.listings.map((l) =>
+                  l.id === listingId ? { ...l, ...patch } : l,
+                ),
+              }),
+              `已保存：${dialogGoods.name}（对外价 ¥ ${fmtPrice(patch.price)}）`,
             )
           }
         />

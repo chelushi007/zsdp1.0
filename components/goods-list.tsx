@@ -750,7 +750,12 @@ export function ActionLink({
 }
 
 type GoodsAction =
-  "detail" | "edit" | "list" | "stock" | "off" | "entrust" | "cancelEntrust";
+  | "detail"
+  | "edit"
+  | "list"
+  | "off"
+  | "entrust"
+  | "cancelEntrust";
 
 function GoodsActions({
   goods,
@@ -784,7 +789,6 @@ function GoodsActions({
         {detailLink}
         <ActionLink onClick={() => onAction("edit")}>编辑</ActionLink>
         <ActionLink onClick={() => onAction("list")}>上架</ActionLink>
-        <ActionLink onClick={() => onAction("stock")}>调整库存</ActionLink>
         {entrustLink}
         <ActionLink tone="danger" onClick={() => onAction("off")}>
           下架
@@ -809,7 +813,7 @@ function GoodsActions({
     rejected: (
       <>
         {detailLink}
-        <ActionLink>编辑</ActionLink>
+        <ActionLink onClick={() => onAction("edit")}>编辑</ActionLink>
         <ActionLink>重新提交审核</ActionLink>
       </>
     ),
@@ -1498,30 +1502,65 @@ function ListGroup({
   );
 }
 
-/** 调整库存：直接修改总库存数量 */
-function StockDialog({
+const CATEGORY_OPTIONS: Record<string, string[]> = {
+  循环物资: ["模板类", "脚手架类", "钢支撑类", "围挡类", "安全防护类"],
+  工程设备: ["起重设备", "混凝土设备", "土方设备", "桩工设备"],
+  周转材料: ["钢管扣件", "型钢", "集装箱房", "其他"],
+};
+const UNIT_OPTIONS = ["张", "根", "套", "块", "米", "吨", "台", "个", "箱"];
+
+export type GoodsEditPatch = Pick<
+  Goods,
+  "name" | "spec" | "category" | "subCategory" | "unit" | "stock"
+>;
+
+const SELECT_CLS =
+  "h-9 w-full rounded border border-border bg-background px-3 text-sm focus:border-[#1890ff] focus:outline-none";
+
+/** 编辑商品：带入当前商品信息，可修改名称 / 规格 / 品类 / 单位 / 库存；编码、店铺与上架记录不可改 */
+function EditDialog({
   goods,
   onClose,
   onConfirm,
 }: {
   goods: Goods;
   onClose: () => void;
-  onConfirm: (stock: number) => void;
+  onConfirm: (patch: GoodsEditPatch) => void;
 }) {
   const locked = lockedStock(goods);
-  const [amount, setAmount] = useState(String(goods.stock));
+  const [name, setName] = useState(goods.name);
+  const [spec, setSpec] = useState(goods.spec);
+  const [category, setCategory] = useState(goods.category);
+  const [subCategory, setSubCategory] = useState(goods.subCategory);
+  const [unit, setUnit] = useState(goods.unit);
+  const [stock, setStock] = useState(String(goods.stock));
 
-  const next = Number(amount);
-  const amountOk = amount !== "" && Number.isInteger(next) && next >= 0;
-  const belowLocked = amountOk && next < locked;
-  const changed = next !== goods.stock;
-  const ok = amountOk && !belowLocked && changed;
+  const subOptions = CATEGORY_OPTIONS[category] ?? [goods.subCategory];
+  const stockNum = Number(stock);
+  const stockOk = stock !== "" && Number.isInteger(stockNum) && stockNum >= 0;
+  const belowLocked = stockOk && stockNum < locked;
+  const unitLocked = goods.listings.length > 0;
+  const changed =
+    name.trim() !== goods.name ||
+    spec.trim() !== goods.spec ||
+    category !== goods.category ||
+    subCategory !== goods.subCategory ||
+    unit !== goods.unit ||
+    stockNum !== goods.stock;
+  const ok =
+    name.trim() !== "" &&
+    spec.trim() !== "" &&
+    subCategory !== "" &&
+    stockOk &&
+    !belowLocked &&
+    changed;
+  const statusMeta = goodsStatusMeta[goods.status];
 
   return (
     <Modal
-      title="调整库存"
-      titleId="stock-dialog-title"
-      width="max-w-[440px]"
+      title="编辑商品"
+      titleId="edit-dialog-title"
+      width="max-w-[640px]"
       onClose={onClose}
       footer={
         <>
@@ -1532,32 +1571,136 @@ function StockDialog({
             size="sm"
             className={PRIMARY_BTN}
             disabled={!ok}
-            onClick={() => onConfirm(next)}
+            onClick={() =>
+              onConfirm({
+                name: name.trim(),
+                spec: spec.trim(),
+                category,
+                subCategory,
+                unit,
+                stock: stockNum,
+              })
+            }
           >
-            确认调整
+            保存修改
           </Button>
         </>
       }
     >
-      <GoodsSummary goods={goods} />
-      <DialogField
-        label="总库存"
-        required
-        hint={
-          belowLocked
-            ? `上架中记录已占用 ${locked.toLocaleString()} ${goods.unit}，库存不可低于该值`
-            : `当前 ${goods.stock.toLocaleString()} ${goods.unit}，上架中记录占用 ${locked.toLocaleString()} ${goods.unit}`
-        }
-      >
-        <DialogInput
+      <div className="grid gap-3 rounded bg-muted/40 px-3 py-2 text-xs sm:grid-cols-4">
+        <span className="flex flex-col gap-0.5">
+          <span className="text-muted-foreground">商品编码</span>
+          <span className="font-mono">{goods.code}</span>
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5 sm:col-span-2">
+          <span className="text-muted-foreground">所属店铺</span>
+          <span className="truncate" title={goods.shop}>
+            {goods.shop}
+          </span>
+        </span>
+        <span className="flex flex-col items-start gap-0.5">
+          <span className="text-muted-foreground">当前状态</span>
+          <Tag className={statusMeta.className}>{statusMeta.label}</Tag>
+        </span>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="sm:col-span-2">
+          <DialogField label="商品名称" required>
+            <DialogInput label="商品名称" value={name} onChange={setName} />
+          </DialogField>
+        </div>
+        <div className="sm:col-span-2">
+          <DialogField
+            label="规格型号"
+            required
+            hint="同名商品按规格分别计库存；修改规格不会影响已有上架记录"
+          >
+            <DialogInput label="规格型号" value={spec} onChange={setSpec} />
+          </DialogField>
+        </div>
+        <DialogField label="一级品类" required>
+          <select
+            aria-label="一级品类"
+            value={category}
+            onChange={(e) => {
+              setCategory(e.target.value);
+              setSubCategory(CATEGORY_OPTIONS[e.target.value]?.[0] ?? "");
+            }}
+            className={SELECT_CLS}
+          >
+            {Object.keys(CATEGORY_OPTIONS).map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </DialogField>
+        <DialogField label="二级品类" required>
+          <select
+            aria-label="二级品类"
+            value={subCategory}
+            onChange={(e) => setSubCategory(e.target.value)}
+            className={SELECT_CLS}
+          >
+            {subOptions.map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
+            ))}
+          </select>
+        </DialogField>
+        <DialogField
+          label="计量单位"
+          required
+          hint={
+            unitLocked
+              ? "已有上架记录按该单位计价，单位不可修改"
+              : "上架后单位将随价格固定"
+          }
+        >
+          <select
+            aria-label="计量单位"
+            value={unit}
+            disabled={unitLocked}
+            onChange={(e) => setUnit(e.target.value)}
+            className={cn(
+              SELECT_CLS,
+              unitLocked && "cursor-not-allowed bg-muted/40 text-muted-foreground",
+            )}
+          >
+            {Array.from(new Set([goods.unit, ...UNIT_OPTIONS])).map((u) => (
+              <option key={u} value={u}>
+                {u}
+              </option>
+            ))}
+          </select>
+        </DialogField>
+        <DialogField
           label="总库存"
-          type="number"
-          value={amount}
-          onChange={setAmount}
-          placeholder="0"
-          suffix={goods.unit}
-        />
-      </DialogField>
+          required
+          hint={
+            belowLocked
+              ? `上架中记录已占用 ${locked.toLocaleString()} ${goods.unit}，库存不可低于该值`
+              : `上架中记录占用 ${locked.toLocaleString()} ${goods.unit}，可上架 ${Math.max(stockOk ? stockNum - locked : goods.stock - locked, 0).toLocaleString()} ${goods.unit}`
+          }
+        >
+          <DialogInput
+            label="总库存"
+            type="number"
+            value={stock}
+            onChange={setStock}
+            placeholder="0"
+            suffix={goods.unit}
+          />
+        </DialogField>
+      </div>
+
+      {goods.statusNote && (
+        <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          {statusMeta.label}说明：{goods.statusNote}
+        </div>
+      )}
     </Modal>
   );
 }
@@ -1812,9 +1955,12 @@ function matches(g: Goods, f: Filters) {
 
 const columns =
   "48px 118px minmax(170px,1.5fr) minmax(130px,1fr) 120px 90px minmax(100px,0.8fr) 80px 92px minmax(150px,1fr)";
-const specColumns =
-  "40px 118px minmax(160px,1.2fr) 100px 100px 100px minmax(100px,0.8fr) 90px minmax(200px,1fr)";
-const listingColumns = "120px 72px minmax(160px,1fr) 110px 80px 130px";
+const listingColumns =
+  "120px 72px minmax(160px,1fr) 100px 110px 80px 130px";
+const specSummaryColumns =
+  "118px minmax(160px,1.2fr) 100px 100px minmax(100px,0.8fr) minmax(120px,0.8fr) minmax(220px,1fr)";
+const groupListingColumns =
+  "120px minmax(140px,1fr) 72px minmax(160px,1fr) 100px 110px 80px 130px";
 const entrustColumns =
   "100px 72px minmax(160px,1fr) 100px minmax(170px,1fr) 80px 90px";
 
@@ -1918,42 +2064,65 @@ function listingUsedHeader(listings: Listing[]) {
   return "已售 / 已租";
 }
 
-function ListingTable({ goods }: { goods: Goods }) {
+/** 一组同名商品的全部上架记录：多规格时在行内标注编码与规格，记录按规格顺序排列 */
+function GroupListingTable({ items }: { items: Goods[] }) {
+  const rows = items.flatMap((g) => g.listings.map((l) => ({ g, l })));
+  const multi = items.length > 1;
+  const mixed = new Set(rows.map((r) => r.l.type)).size > 1;
+  const cols = multi ? groupListingColumns : listingColumns;
+  if (rows.length === 0)
+    return (
+      <div className="rounded border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+        暂无上架记录，可在操作列点击「上架」创建
+      </div>
+    );
   return (
     <div className="overflow-hidden rounded border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs">
         <span className="font-medium">上架记录</span>
         <span className="text-muted-foreground">
-          共 {goods.listings.length} 条
+          共 {rows.length} 条
+          {multi ? ` · ${items.length} 个规格` : ""}
         </span>
       </div>
       <div
         className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
-        style={{ gridTemplateColumns: listingColumns }}
+        style={{ gridTemplateColumns: cols }}
       >
         <span>上架单号</span>
+        {multi && <span>商品编码 / 规格</span>}
         <span>租售方式</span>
         <span>价格</span>
-        <span>{listingUsedHeader(goods.listings)}</span>
+        <span>上架数量</span>
+        <span>{listingUsedHeader(rows.map((r) => r.l))}</span>
         <span>状态</span>
         <span>操作</span>
       </div>
-      {goods.listings.map((l) => {
+      {rows.map(({ g, l }) => {
         const meta = bizMeta[l.type];
-        const mixed = new Set(goods.listings.map((x) => x.type)).size > 1;
         return (
           <div
             key={l.id}
             className="grid items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-0"
-            style={{ gridTemplateColumns: listingColumns }}
+            style={{ gridTemplateColumns: cols }}
           >
             <span className="font-mono text-xs text-muted-foreground">
               {l.id}
             </span>
+            {multi && (
+              <span className="flex min-w-0 flex-col leading-4">
+                <span className="font-mono text-xs text-muted-foreground">
+                  {g.code}
+                </span>
+                <span className="truncate text-xs" title={g.spec}>
+                  {g.spec}
+                </span>
+              </span>
+            )}
             <Tag className={meta.className}>{meta.label}</Tag>
             <span className="flex flex-col leading-tight">
               <span className="tabular-nums">
-                ¥ {fmtPrice(l.price)} / {goods.unit}
+                ¥ {fmtPrice(l.price)} / {g.unit}
                 {l.type === "rent" && l.period ? ` / ${l.period}` : ""}
               </span>
               {(l.taxRate || l.payTerm || l.negotiable) && (
@@ -1969,12 +2138,15 @@ function ListingTable({ goods }: { goods: Goods }) {
               )}
             </span>
             <span className="tabular-nums">
+              {l.quantity.toLocaleString()} {g.unit}
+            </span>
+            <span className="tabular-nums">
               {mixed && (
                 <span className="mr-1 text-xs text-muted-foreground">
                   {usedLabel(l.type)}
                 </span>
               )}
-              {l.used.toLocaleString()} {goods.unit}
+              {l.used.toLocaleString()} {g.unit}
             </span>
             <Tag className={listingStatusMeta[l.status].className}>
               {listingStatusMeta[l.status].label}
@@ -1994,120 +2166,7 @@ function ListingTable({ goods }: { goods: Goods }) {
   );
 }
 
-/** 规格明细：一组同名商品下各规格的编码、库存、状态与操作，可带出该规格的上架 / 委托记录 */
-function SpecTable({
-  items,
-  onAction,
-  withRecords,
-  hideDetail,
-}: {
-  items: Goods[];
-  onAction: (g: Goods, a: GoodsAction) => void;
-  withRecords?: boolean;
-  hideDetail?: boolean;
-}) {
-  return (
-    <div className="overflow-hidden rounded border border-border bg-card">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs">
-        <span className="font-medium">规格明细</span>
-        <span className="text-muted-foreground">共 {items.length} 个规格</span>
-      </div>
-      <div
-        className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
-        style={{ gridTemplateColumns: specColumns }}
-      >
-        <span>序号</span>
-        <span>商品编码</span>
-        <span>规格型号</span>
-        <span>总库存</span>
-        <span>上架占用</span>
-        <span>可上架</span>
-        <span>状态</span>
-        <span>委托情况</span>
-        <span>操作</span>
-      </div>
-      {items.map((g, i) => {
-        const locked = lockedStock(g);
-        const meta = goodsStatusMeta[g.status];
-        return (
-          <Fragment key={g.code}>
-            <div
-              className={cn(
-                "grid items-center gap-3 border-b border-border px-3 py-2.5 text-sm",
-                !withRecords && "last:border-0",
-              )}
-              style={{ gridTemplateColumns: specColumns }}
-            >
-              <span className="text-xs text-muted-foreground tabular-nums">
-                {i + 1}
-              </span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {g.code}
-              </span>
-              <span className="truncate font-medium" title={g.spec}>
-                {g.spec}
-              </span>
-              <span className="tabular-nums">
-                {g.stock.toLocaleString()} {g.unit}
-              </span>
-              <span className="tabular-nums text-muted-foreground">
-                {locked.toLocaleString()} {g.unit}
-              </span>
-              <span className="tabular-nums">
-                {(g.stock - locked).toLocaleString()} {g.unit}
-              </span>
-              <span className="flex min-w-0 flex-col items-start gap-1">
-                <Tag className={meta.className}>{meta.label}</Tag>
-                {g.statusNote && (
-                  <span
-                    className="line-clamp-1 text-[11px] leading-4 text-muted-foreground"
-                    title={g.statusNote}
-                  >
-                    {g.statusNote}
-                  </span>
-                )}
-              </span>
-              <span className="flex flex-col items-start gap-0.5">
-                {g.entrust ? (
-                  <>
-                    <Tag className="bg-violet-50 text-violet-700 ring-violet-200">
-                      有
-                    </Tag>
-                    <span className="text-[11px] leading-4 text-muted-foreground">
-                      {entrustStatusMeta[g.entrust.status].label}
-                    </span>
-                  </>
-                ) : (
-                  <Tag className="bg-muted text-muted-foreground ring-border">
-                    无
-                  </Tag>
-                )}
-              </span>
-              <GoodsActions
-                goods={g}
-                hideDetail={hideDetail}
-                onAction={(a) => onAction(g, a)}
-              />
-            </div>
-            {withRecords && (
-              <div className="flex flex-col gap-3 border-b border-border bg-muted/20 px-3 py-3 pl-[52px] last:border-0">
-                <ListingTable goods={g} />
-                {g.entrust && (
-                  <EntrustTable
-                    goods={g}
-                    onCancel={() => onAction(g, "cancelEntrust")}
-                  />
-                )}
-              </div>
-            )}
-          </Fragment>
-        );
-      })}
-    </div>
-  );
-}
-
-/** 商品详情页：汇总一组同名规格的基本信息、规格明细与各规格的上架 / 委托记录 */
+/** 商品详情页：基本信息、库存构成、全部上架记录与委托信息 */
 function GoodsDetail({
   group,
   onBack,
@@ -2119,27 +2178,25 @@ function GoodsDetail({
 }) {
   const items = group.items;
   const head = items[0];
+  const single = items.length === 1;
+  const allListings = items.flatMap((g) => g.listings);
   const totalStock = items.reduce((s, g) => s + g.stock, 0);
-  const onListings = items
-    .flatMap((g) => g.listings)
-    .filter((l) => l.status === "on");
-  const saleUsed = items
-    .flatMap((g) => g.listings)
+  const lockedTotal = items.reduce((s, g) => s + lockedStock(g), 0);
+  const onListings = allListings.filter((l) => l.status === "on");
+  const saleUsed = allListings
     .filter((l) => l.type === "sale")
     .reduce((s, l) => s + l.used, 0);
-  const rentUsed = items
-    .flatMap((g) => g.listings)
+  const rentUsed = allListings
     .filter((l) => l.type === "rent")
     .reduce((s, l) => s + l.used, 0);
-  const entrusted = items.filter((g) => g.entrust).length;
+  const entrustedItems = items.filter((g) => g.entrust);
   const createdAt = items.map((g) => g.createdAt).sort()[0];
   const updatedAt = items
     .map((g) => g.updatedAt)
     .sort()
     .at(-1);
-  const canList = items.some(
-    (g) => g.status === "active" || g.status === "off",
-  );
+  const canList = head.status === "active" || head.status === "off";
+  const statusMeta = goodsStatusMeta[head.status];
 
   return (
     <div className="flex flex-col gap-4">
@@ -2148,7 +2205,7 @@ function GoodsDetail({
         onBack={onBack}
         tags={
           <>
-            {items.length > 1 && (
+            {!single && (
               <Tag className="bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/20">
                 {items.length} 规格
               </Tag>
@@ -2162,6 +2219,9 @@ function GoodsDetail({
         }
         subtitle={
           <span className="flex flex-wrap gap-x-3 gap-y-1">
+            <span className="font-mono">
+              {single ? head.code : `${head.code} 等 ${items.length} 个编码`}
+            </span>
             <span>{head.shop}</span>
             <span>
               {head.category} / {head.subCategory}
@@ -2170,24 +2230,30 @@ function GoodsDetail({
           </span>
         }
         actions={
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => onAction(head, "edit")}
-            >
-              编辑商品
-            </Button>
-            {canList && items.length === 1 && (
+          single ? (
+            <>
               <Button
+                variant="outline"
                 size="sm"
-                className={PRIMARY_BTN}
-                onClick={() => onAction(head, "list")}
+                onClick={() => onAction(head, "edit")}
               >
-                上架
+                编辑商品
               </Button>
-            )}
-          </>
+              {canList && (
+                <Button
+                  size="sm"
+                  className={PRIMARY_BTN}
+                  onClick={() => onAction(head, "list")}
+                >
+                  上架
+                </Button>
+              )}
+            </>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              编辑 / 上架等操作请在下方「规格与库存」中按规格进行
+            </span>
+          )
         }
       />
 
@@ -2196,13 +2262,17 @@ function GoodsDetail({
           label="总库存"
           value={totalStock}
           unit={head.unit}
-          hint={`${items.length} 个规格合计`}
+          hint={
+            single
+              ? `上架占用 ${lockedTotal.toLocaleString()} · 可上架 ${(totalStock - lockedTotal).toLocaleString()} ${head.unit}`
+              : `${items.length} 个规格合计 · 可上架 ${(totalStock - lockedTotal).toLocaleString()} ${head.unit}`
+          }
         />
         <StatCard
-          label="上架中记录"
-          value={onListings.length}
+          label="上架记录"
+          value={allListings.length}
           unit="条"
-          hint={`占用库存 ${onListings.reduce((s, l) => s + l.quantity, 0).toLocaleString()} ${head.unit}`}
+          hint={`上架中 ${onListings.length} 条 · 占用库存 ${onListings.reduce((s, l) => s + l.quantity, 0).toLocaleString()} ${head.unit}`}
         />
         <StatCard
           label="累计已售 / 已租"
@@ -2211,26 +2281,52 @@ function GoodsDetail({
         />
         <StatCard
           label="委托运营"
-          value={entrusted ? `${entrusted} / ${items.length}` : "无"}
-          unit={entrusted ? "个规格" : undefined}
-          hint={entrusted ? "已委托给服务商代为运营" : "全部由本店自营"}
+          value={
+            entrustedItems.length
+              ? single
+                ? entrustStatusMeta[head.entrust!.status].label
+                : `${entrustedItems.length} / ${items.length}`
+              : "无"
+          }
+          unit={!single && entrustedItems.length ? "个规格" : undefined}
+          hint={
+            entrustedItems.length
+              ? single
+                ? `委托给 ${head.entrust!.provider}`
+                : "已委托给服务商代为运营"
+              : "全部由本店自营"
+          }
         />
       </div>
 
       <DetailSection title="基本信息">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <DescItem label="商品名称">{group.name}</DescItem>
-          <DescItem label="所属店铺">{head.shop}</DescItem>
-          <DescItem label="品类">
-            {head.category} / {head.subCategory}
-          </DescItem>
-          <DescItem label="计量单位">{head.unit}</DescItem>
+          {single && <DescItem label="规格型号">{head.spec}</DescItem>}
           <DescItem label="商品编码">
             <span className="font-mono text-xs">
               {items.map((g) => g.code).join("、")}
             </span>
           </DescItem>
-          <DescItem label="规格数量">{items.length} 个</DescItem>
+          <DescItem label="所属店铺">{head.shop}</DescItem>
+          <DescItem label="品类">
+            {head.category} / {head.subCategory}
+          </DescItem>
+          <DescItem label="计量单位">{head.unit}</DescItem>
+          {single ? (
+            <DescItem label="商品状态">
+              <span className="flex flex-col items-start gap-1">
+                <Tag className={statusMeta.className}>{statusMeta.label}</Tag>
+                {head.statusNote && (
+                  <span className="text-xs text-muted-foreground">
+                    {head.statusNote}
+                  </span>
+                )}
+              </span>
+            </DescItem>
+          ) : (
+            <DescItem label="规格数量">{items.length} 个</DescItem>
+          )}
           <DescItem label="创建时间">
             <span className="font-mono text-xs">{createdAt}</span>
           </DescItem>
@@ -2240,32 +2336,123 @@ function GoodsDetail({
         </div>
       </DetailSection>
 
+      {!single && (
+        <DetailSection
+          title="规格与库存"
+          extra="每个规格独立计库存与状态；编辑 / 上架 / 委托 / 下架按规格操作"
+          flush
+        >
+          <div
+            className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground"
+            style={{ gridTemplateColumns: specSummaryColumns }}
+          >
+            <span>商品编码</span>
+            <span>规格型号</span>
+            <span>总库存</span>
+            <span>可上架</span>
+            <span>状态</span>
+            <span>委托情况</span>
+            <span>操作</span>
+          </div>
+          {items.map((g) => {
+            const locked = lockedStock(g);
+            const m = goodsStatusMeta[g.status];
+            return (
+              <div
+                key={g.code}
+                className="grid items-center gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0"
+                style={{ gridTemplateColumns: specSummaryColumns }}
+              >
+                <span className="font-mono text-xs text-muted-foreground">
+                  {g.code}
+                </span>
+                <span className="truncate font-medium" title={g.spec}>
+                  {g.spec}
+                </span>
+                <span className="tabular-nums">
+                  {g.stock.toLocaleString()} {g.unit}
+                </span>
+                <span className="tabular-nums">
+                  {(g.stock - locked).toLocaleString()} {g.unit}
+                </span>
+                <span className="flex min-w-0 flex-col items-start gap-1">
+                  <Tag className={m.className}>{m.label}</Tag>
+                  {g.statusNote && (
+                    <span
+                      className="line-clamp-1 text-[11px] leading-4 text-muted-foreground"
+                      title={g.statusNote}
+                    >
+                      {g.statusNote}
+                    </span>
+                  )}
+                </span>
+                <span className="text-xs">
+                  {g.entrust ? (
+                    <span className="flex flex-col">
+                      <span>{entrustStatusMeta[g.entrust.status].label}</span>
+                      <span className="truncate text-[11px] text-muted-foreground">
+                        {g.entrust.provider}
+                      </span>
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">无</span>
+                  )}
+                </span>
+                <GoodsActions
+                  goods={g}
+                  hideDetail
+                  onAction={(a) => onAction(g, a)}
+                />
+              </div>
+            );
+          })}
+        </DetailSection>
+      )}
+
       <DetailSection
-        title="规格明细与记录"
-        extra="每个规格独立计库存与上架；上架 / 调整库存 / 委托等操作针对单个规格"
+        title="上架记录"
+        extra="同一商品可多次上架，每条记录对应一种租售方式及其运营规则"
         flush
       >
         <div className="p-3">
-          <SpecTable items={items} onAction={onAction} withRecords hideDetail />
+          <GroupListingTable items={items} />
         </div>
       </DetailSection>
+
+      {entrustedItems.length > 0 && (
+        <DetailSection
+          title="委托信息"
+          extra="待受理的委托可撤回；服务商受理后由其加价上架"
+          flush
+        >
+          <div className="flex flex-col gap-3 p-3">
+            {entrustedItems.map((g) => (
+              <div key={g.code} className="flex flex-col gap-1.5">
+                {!single && (
+                  <span className="text-xs text-muted-foreground">
+                    <span className="font-mono">{g.code}</span> · {g.spec}
+                  </span>
+                )}
+                <EntrustTable
+                  goods={g}
+                  onCancel={() => onAction(g, "cancelEntrust")}
+                />
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+      )}
     </div>
   );
 }
 
-export function GoodsList({
-  onCreate,
-  onEdit,
-}: {
-  onCreate: () => void;
-  onEdit?: (code: string) => void;
-}) {
+export function GoodsList({ onCreate }: { onCreate: () => void }) {
   const [goods, setGoods] = useState<Goods[]>(goodsData);
   const [draft, setDraft] = useState<Filters>(emptyFilters);
   const [applied, setApplied] = useState<Filters>(emptyFilters);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [dialog, setDialog] = useState<{
-    action: Exclude<GoodsAction, "edit" | "detail">;
+    action: Exclude<GoodsAction, "detail">;
     code: string;
   } | null>(null);
   const [detailName, setDetailName] = useState<string | null>(null);
@@ -2297,10 +2484,6 @@ export function GoodsList({
   const handleAction = (g: Goods, action: GoodsAction) => {
     if (action === "detail") {
       setDetailName(g.name);
-      return;
-    }
-    if (action === "edit") {
-      onEdit?.(g.code);
       return;
     }
     if (action === "cancelEntrust") {
@@ -2405,8 +2588,7 @@ export function GoodsList({
               })}
               <span className="ml-auto pr-2 text-muted-foreground">
                 {isFiltered ? `筛选结果 ${visible.length} 条 · ` : ""}
-                同一商品的多个规格归为一行，点击编码前的角标展开查看规格明细与上架
-                / 委托记录
+                同一商品的多个规格归为一行，点击编码前的角标展开查看上架记录
               </span>
             </div>
 
@@ -2459,11 +2641,11 @@ export function GoodsList({
                             type="button"
                             onClick={() => toggle(grp.name)}
                             aria-expanded={open}
-                            aria-controls={`specs-${head.code}`}
+                            aria-controls={`listings-${head.code}`}
                             aria-label={
                               open
-                                ? `收起 ${grp.name} 规格明细`
-                                : `展开 ${grp.name} 规格明细`
+                                ? `收起 ${grp.name} 上架记录`
+                                : `展开 ${grp.name} 上架记录`
                             }
                             className="relative flex size-6 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:border-[#1890ff] hover:text-[#1890ff]"
                           >
@@ -2551,27 +2733,18 @@ export function GoodsList({
                             >
                               详情
                             </ActionLink>
-                            <ActionLink
-                              onClick={() => handleAction(head, "edit")}
-                            >
-                              编辑
-                            </ActionLink>
                             <span className="text-[11px] text-muted-foreground">
-                              规格级操作请展开或进入详情
+                              编辑 / 上架等操作请进入详情按规格进行
                             </span>
                           </span>
                         )}
                       </div>
                       {open && (
                         <div
-                          id={`specs-${head.code}`}
+                          id={`listings-${head.code}`}
                           className="border-b border-border bg-muted/20 px-4 py-3 pl-[84px]"
                         >
-                          <SpecTable
-                            items={items}
-                            onAction={handleAction}
-                            withRecords
-                          />
+                          <GroupListingTable items={items} />
                         </div>
                       )}
                     </Fragment>
@@ -2617,17 +2790,20 @@ export function GoodsList({
           }
         />
       )}
-      {dialog?.action === "stock" && dialogGoods && (
-        <StockDialog
+      {dialog?.action === "edit" && dialogGoods && (
+        <EditDialog
+          key={dialogGoods.code}
           goods={dialogGoods}
           onClose={() => setDialog(null)}
-          onConfirm={(stock) =>
+          onConfirm={(patch) => {
             updateGoods(
               dialogGoods.code,
-              (g) => ({ ...g, stock }),
-              `库存已调整为 ${stock.toLocaleString()} ${dialogGoods.unit}`,
-            )
-          }
+              (g) => ({ ...g, ...patch }),
+              `已保存：${patch.name}（${patch.spec}）`,
+            );
+            if (detailName === dialogGoods.name && patch.name !== detailName)
+              setDetailName(patch.name);
+          }}
         />
       )}
       {dialog?.action === "off" && dialogGoods && (
