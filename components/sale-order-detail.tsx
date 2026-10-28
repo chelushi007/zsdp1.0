@@ -133,22 +133,46 @@ function ContractTab({ o }: { o: SaleOrder }) {
 }
 
 function StatementTab({ o }: { o: SaleOrder }) {
-  if (!o.statementAmount && !o.reconcile) return <Empty text="尚未生成对账单" />
-  const reconciled = o.reconcile === '已对账' || o.reconcile === '免对账'
+  const list = o.statements ?? []
+  if (list.length === 0 && !o.statementAmount && !o.reconcile) return <Empty text="尚未生成对账单" />
   const paid = !['negotiating', 'toReconcile', 'unpaid', 'cancelled'].includes(o.status)
+  const reconciled = o.reconcile === '已对账' || o.reconcile === '免对账'
+  if (list.length === 0)
+    return (
+      <DocCard title="对账单" no={`DZ${o.id.slice(2)}`} state={o.reconcile ?? '待对账'} stateTone={reconciled ? 'good' : 'warn'}>
+        <Rows
+          rows={[
+            ['对账金额', <span key="amt" className="font-medium">{fmtMoney(o.statementAmount ?? saleAmount(o))}</span>],
+            ['收款状态', paid ? <span className="text-emerald-700">已收款</span> : <span className="text-amber-700">待收款</span>],
+            ['支付方式', o.payMethod],
+          ]}
+        />
+      </DocCard>
+    )
   return (
-    <DocCard title="对账单" no={`DZ${o.id.slice(2)}`} state={o.reconcile ?? '待对账'} stateTone={reconciled ? 'good' : 'warn'}>
-      <Rows
-        rows={[
-          ['对账金额', <span key="amt" className="font-medium">{fmtMoney(o.statementAmount ?? saleAmount(o))}</span>],
-          ['发送时间', stampOf(o, '对账单') ?? '—'],
-          ['确认时间', stampOf(o, '确认对账') ?? '—'],
-          ['收款状态', paid ? <span className="text-emerald-700">已收款</span> : <span className="text-amber-700">待收款</span>],
-          ['收款时间', stampOf(o, '收款') ?? stampOf(o, '支付') ?? '—'],
-          ['支付方式', o.payMethod],
-        ]}
-      />
-    </DocCard>
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
+        <span>
+          共 {list.length} 期 · 对账状态 {o.reconcile ?? '待对账'}
+        </span>
+        <span>{paid ? '已收款' : '待收款'}</span>
+      </div>
+      {[...list].reverse().map((s) => (
+        <DocCard key={s.no} title={`对账单 · 第 ${s.seq} 期`} no={s.no} state={s.state} stateTone={s.state === '已确认' ? 'good' : s.state === '有异议' ? 'muted' : 'warn'}>
+          <Rows
+            rows={[
+              ['对账金额', <span key="amt" className="font-medium">{fmtMoney(s.amount)}</span>],
+              ['对账周期', s.period ?? '—'],
+              ['创建时间', s.createdAt],
+              [s.state === '有异议' ? '异议时间' : '确认时间', s.repliedAt ?? '—'],
+              ...(s.note ? ([['对账说明', s.note]] as Row[]) : []),
+              ...(s.reply ? ([['买方反馈', <span key="r" className={s.state === '有异议' ? 'text-red-700' : undefined}>{s.reply}</span>]] as Row[]) : []),
+              ...(s.attachment ? ([['附件', <span key="a" className="text-[#1890ff]">{s.attachment}</span>]] as Row[]) : []),
+            ]}
+          />
+        </DocCard>
+      ))}
+    </div>
   )
 }
 
@@ -200,7 +224,7 @@ export function SaleDetailModal({ order: o, role, onClose }: { order: SaleOrder;
   const ready: Record<Tab, boolean> = {
     订单商品: true,
     订单合同: Boolean(o.contractNo),
-    对账单: Boolean(o.statementAmount || o.reconcile),
+    对账单: Boolean(o.statements?.length || o.statementAmount || o.reconcile),
     发货单: Boolean(o.logistics || o.pickupNo),
     发票: o.invoice === '已开票',
     业务日记: true,

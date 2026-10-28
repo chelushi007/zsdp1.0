@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { ArrowLeft, FileSignature, FileText, Upload } from 'lucide-react'
+import { FileSignature, FileText, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { DialogField, DialogInput, PRIMARY_BTN, Tag } from '@/components/goods-list'
-import { fmtMoney, saleAmount, saleStatusMeta, type SaleOrder } from '@/lib/orders-data'
+import { DialogField, DialogInput, PRIMARY_BTN } from '@/components/goods-list'
+import { Card, InfoGrid, OrderInfoCard, PageBar } from '@/components/sale-page-shared'
+import { fmtMoney, saleAmount, type SaleOrder } from '@/lib/orders-data'
 
 const TODAY = '2024-10-28'
 
@@ -19,33 +20,6 @@ export type ContractSubmit = {
   signedAt: string
   file: string
   note: string
-}
-
-function Card({ title, extra, children }: { title: string; extra?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section className="flex flex-col rounded-md border border-border bg-card">
-      <header className="flex items-center justify-between border-b border-border px-5 py-3">
-        <h2 className="text-sm font-medium">{title}</h2>
-        {extra}
-      </header>
-      <div className="flex flex-col gap-4 px-5 py-4">{children}</div>
-    </section>
-  )
-}
-
-function InfoGrid({ rows, cols = 3 }: { rows: [string, React.ReactNode][]; cols?: 2 | 3 }) {
-  return (
-    <dl className={cn('grid gap-x-6 gap-y-3 text-sm', cols === 3 ? 'grid-cols-2 lg:grid-cols-3' : 'grid-cols-2')}>
-      {rows.map(([k, v]) => (
-        <div key={k} className="flex min-w-0 flex-col gap-0.5">
-          <dt className="text-xs text-muted-foreground">{k}</dt>
-          <dd className="truncate" title={typeof v === 'string' ? v : undefined}>
-            {v}
-          </dd>
-        </div>
-      ))}
-    </dl>
-  )
 }
 
 function ModeOption({ active, title, desc, icon: Icon, onClick }: { active: boolean; title: string; desc: string; icon: typeof FileText; onClick: () => void }) {
@@ -81,67 +55,15 @@ export function SaleContractPage({ order: o, onBack, onSubmit }: { order: SaleOr
   const [note, setNote] = useState('')
 
   const amount = saleAmount(o)
-  const unit = `¥ ${o.unitPrice.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} / ${o.goods.unit}`
   const valid = no.trim() && (mode === '线上' ? signer.trim() && phone.trim() : signedAt && file.trim())
-  const meta = saleStatusMeta[o.status]
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={onBack}>
-            <ArrowLeft data-icon="inline-start" />
-            返回销售订单
-          </Button>
-          <span className="h-4 w-px bg-border" aria-hidden />
-          <h1 className="text-base font-semibold">发起合同</h1>
-          <span className="font-mono text-xs text-muted-foreground">{o.id}</span>
-          <Tag className={meta.className}>{meta.label}</Tag>
-        </div>
-      </div>
+      <PageBar title="发起合同" order={o} onBack={onBack} />
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="flex flex-col gap-4">
-          <Card title="订单信息">
-            <InfoGrid
-              rows={[
-                ['订单号', <span key="id" className="font-mono">{o.id}</span>],
-                ['下单时间', o.createdAt],
-                ['结算方式', o.payTerm],
-                ['买方（甲方）', o.buyer],
-                ['卖方（乙方）', o.seller],
-                ['所属店铺', o.shop],
-                ['服务商', o.provider ?? '—'],
-                ['支付方式', o.payMethod],
-                ['收货地址', o.address],
-              ]}
-            />
-            <div className="overflow-hidden rounded border border-border">
-              <div className="grid grid-cols-[minmax(0,2fr)_1fr_1fr_1fr] bg-muted/50 px-4 py-2 text-xs text-muted-foreground">
-                <span>商品</span>
-                <span className="text-right">数量</span>
-                <span className="text-right">单价</span>
-                <span className="text-right">小计</span>
-              </div>
-              <div className="grid grid-cols-[minmax(0,2fr)_1fr_1fr_1fr] items-center px-4 py-3 text-sm">
-                <span className="flex min-w-0 flex-col">
-                  <span className="truncate">{o.goods.name}</span>
-                  <span className="truncate text-xs text-muted-foreground">{o.goods.spec}</span>
-                </span>
-                <span className="text-right tabular-nums">
-                  {o.quantity.toLocaleString()} {o.goods.unit}
-                </span>
-                <span className="text-right tabular-nums">{unit}</span>
-                <span className="text-right tabular-nums">{fmtMoney(o.unitPrice * o.quantity)}</span>
-              </div>
-              <div className="flex items-center justify-end gap-6 border-t border-border bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
-                <span>运费 {o.freight ? fmtMoney(o.freight) : '免运费'}</span>
-                <span>
-                  合同金额 <span className="text-sm font-semibold text-foreground">{fmtMoney(amount)}</span>
-                </span>
-              </div>
-            </div>
-          </Card>
+          <OrderInfoCard order={o} amountLabel="合同金额" />
 
           <Card title="签署方式">
             <div role="radiogroup" aria-label="签署方式" className="flex flex-col gap-3 sm:flex-row">

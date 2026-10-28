@@ -24,6 +24,25 @@ export type PayTerm = '先款后货' | '货到付款'
 /** 对账状态：待对账 / 已对账 / 免对账（跳过对账直接付款）；未到对账环节时为空 */
 export type ReconcileState = '待对账' | '已对账' | '免对账'
 
+export type StatementState = '待确认' | '已确认' | '有异议'
+
+export type Statement = {
+  no: string
+  /** 第几期 */
+  seq: number
+  amount: number
+  /** 对账周期 / 范围 */
+  period?: string
+  note?: string
+  attachment?: string
+  state: StatementState
+  createdAt: string
+  /** 买方确认 / 异议时间 */
+  repliedAt?: string
+  /** 异议内容 */
+  reply?: string
+}
+
 type OrderBase = {
   id: string
   goods: OrderGoods
@@ -80,6 +99,8 @@ export type SaleOrder = OrderBase & {
   pickupNo?: string
   /** 买方议价出价 */
   bidPrice?: number
+  /** 历史对账单（按创建时间升序） */
+  statements?: Statement[]
   /** 合同签署方式 */
   contractSign?: '线上' | '线下'
   /** 合同签署状态 */
@@ -717,6 +738,19 @@ export const saleOrdersData: SaleOrder[] = [
   {
     kind: 'sale',
     id: 'SO2024102807',
+    statements: [
+      {
+        no: 'DZ2024102807-01',
+        seq: 1,
+        amount: 28500,
+        period: '2024-10-28 全量',
+        note: '按合同单价 150 块结算，含运费',
+        state: '有异议',
+        createdAt: '2024-10-28 11:20',
+        repliedAt: '2024-10-28 14:05',
+        reply: '运费应由卖方承担，请去掉运费后重新对账',
+      },
+    ],
     shop: '华东建设工程有限公司周转材料店',
     status: 'toReconcile',
     payTerm: '先款后货',
@@ -732,7 +766,12 @@ export const saleOrdersData: SaleOrder[] = [
     invoice: '待开票',
     createdAt: '2024-10-28 08:30',
     updatedAt: '2024-10-28 08:30',
-    timeline: [{ at: '2024-10-28 08:30', label: '买方提交订单，待对账', by: '买/租方' }],
+    statementAmount: 28500,
+    timeline: [
+      { at: '2024-10-28 08:30', label: '买方提交订单，待对账', by: '买/租方' },
+      { at: '2024-10-28 11:20', label: '商家发送对账单 ¥28,500.00（第 1 期）', by: '商家' },
+      { at: '2024-10-28 14:05', label: '买/租方提出对账异议', by: '买/租方', note: '运费应由卖方承担，请去掉运费后重新对账' },
+    ],
   },
   {
     kind: 'sale',

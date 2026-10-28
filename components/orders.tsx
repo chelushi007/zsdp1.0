@@ -6,6 +6,7 @@ import { ActionLink, bizMeta } from '@/components/goods-list'
 import { Select } from '@/components/shop-form-fields'
 import { SaleDetailModal } from '@/components/sale-order-detail'
 import { SaleContractPage } from '@/components/sale-contract-page'
+import { SaleReconcilePage } from '@/components/sale-reconcile-page'
 import {
   ActionCell,
   ActionDialog,
@@ -30,6 +31,7 @@ import {
   type Column,
   type DetailSection,
   type Kpi,
+  nowStamp,
 } from '@/components/orders-shared'
 import {
   DEMO,
@@ -64,6 +66,8 @@ import {
   type RentStatus,
   type SaleOrder,
   type SaleStatus,
+  type Statement,
+  type StatementState,
 } from '@/lib/orders-data'
 
 export type OrdersKind = 'rent' | 'sale' | 'after'
@@ -125,6 +129,13 @@ function SettleCell({ o }: { o: RentOrder | SaleOrder }) {
 }
 
 /** 对账与付款环节：先款后货在下单后、货到付款在交付后进入；买/租方可对账后付款，也可跳过对账直接付款 */
+function replyStatement(x: RentOrder | SaleOrder, state: StatementState, reply?: string): { statements?: Statement[] } {
+  if (x.kind !== 'sale' || !x.statements?.length) return {}
+  const list = x.statements
+  const last = list[list.length - 1]
+  return { statements: [...list.slice(0, -1), { ...last, state, repliedAt: nowStamp(), reply: reply || undefined }] }
+}
+
 function settleActions<T extends RentOrder | SaleOrder>(o: T, role: OrderRole): ActionDef<T>[] {
   const by = actorOf[role]
   const list: ActionDef<T>[] = []
@@ -139,7 +150,7 @@ function settleActions<T extends RentOrder | SaleOrder>(o: T, role: OrderRole): 
         label: '确认对账',
         title: '确认对账',
         fields: [{ key: 'note', label: '对账说明' }],
-        apply: (x, v) => withEvent({ ...x, status: 'unpaid', reconcile: '已对账' }, `买/租方确认对账 ${fmtMoney(x.statementAmount ?? amount)}`, by, v.note),
+        apply: (x, v) => withEvent({ ...x, status: 'unpaid', reconcile: '已对账', ...replyStatement(x, '已确认', v.note) }, `买/租方确认对账 ${fmtMoney(x.statementAmount ?? amount)}`, by, v.note),
         toast: () => '对账已确认',
       })
       list.push({
@@ -157,14 +168,16 @@ function settleActions<T extends RentOrder | SaleOrder>(o: T, role: OrderRole): 
         label: '对账有异议',
         tone: 'danger',
         fields: [{ key: 'reason', label: '异议内容', required: true }],
-        apply: (x, v) => withEvent(x, '买/租方提出对账异议', by, v.reason),
+        apply: (x, v) => withEvent({ ...x, ...replyStatement(x, '有异议', v.reason) }, '买/租方提出对账异议', by, v.reason),
         toast: () => '异议已提交',
       })
     } else {
+      if (o.kind === 'sale' && role === 'seller') list.push({ id: 'statement', group: '对账', label: '对账', instant: true, apply: (x) => x, toast: () => '' })
+      else
       list.push({
         id: 'statement',
         group: '对账',
-        label: o.kind === 'sale' ? '对账' : o.statementAmount ? '重发对账单' : '发送对账单',
+        label: o.statementAmount ? '重发对账单' : '发送对账单',
         title: '发送对账单',
         fields: [
           { key: 'amount', label: '对账金额', type: 'number', prefix: '¥', required: true, initial: String(o.statementAmount ?? amount) },
@@ -748,6 +761,8 @@ function SaleOrders({ role }: { role: OrderRole }) {
   const { rows, dialog, dialogRow, detailRow, toast, run, trigger, commit, setDialog, setDetailId } = useOrderList(own)
   const [contractId, setContractId] = useState<string | null>(null)
   const contractRow = contractId ? rows.find((o) => o.id === contractId) : undefined
+  const [reconcileId, setReconcileId] = useState<string | null>(null)
+  const reconcileRow = reconcileId ? rows.find((o) => o.id === reconcileId) : undefined
   const [draft, setDraft] = useState<BaseFilters>(emptyBaseFilters)
   const [applied, setApplied] = useState<BaseFilters>(emptyBaseFilters)
   const [termDraft, setTermDraft] = useState('')
@@ -846,9 +861,32 @@ function SaleOrders({ role }: { role: OrderRole }) {
       key: 'actions',
       label: '操作',
       width: 'minmax(220px,1.4fr)',
-      render: (o) => <ActionCell actions={saleActions(o, role)} onAction={(a) => (a.id === 'contract' ? setContractId(o.id) : trigger(o, a))} extra={<ActionLink onClick={() => setDetailId(o.id)}>详情</ActionLink>} />,
+      render: (o) => <ActionCell actions={saleActions(o, role)} onAction={(a) => (a.id === 'contract' ? setContractId(o.id) : a.id === 'statement' && role === 'seller' ? setReconcileId(o.id) : trigger(o, a))} extra={<ActionLink onClick={() => setDetailId(o.id)}>详情</ActionLink>} />,
     },
   ]
+
+  if (reconcileRow)
+    return (
+      <>
+        <SaleReconcilePage
+          key={reconcileRow.id}
+          order={reconcileRow}
+          onBack={() => setReconcileId(null)}
+          onCreate={(d) => {
+            const seq = (reconcileRow.statements?.length ?? 0) + 1
+            const statement: Statement = { no: d.no, seq, amount: d.amount, period: d.period, note: d.note || undefined, attachment: d.attachment || undefined, state: '待确认', createdAt: nowStamp() }
+            const next = withEvent(
+              { ...reconcileRow, statementAmount: d.amount, statements: [...(reconcileRow.statements ?? []), statement] },
+              `商家发送对账单 ${fmtMoney(d.amount)}（第 ${seq} 期）`,
+              actorOf[role],
+              d.note || undefined,
+            )
+            commit(next, `第 ${seq} 期对账单已发送给买方`)
+          }}
+        />
+        <Toast message={toast} />
+      </>
+    )
 
   if (contractRow)
     return (
