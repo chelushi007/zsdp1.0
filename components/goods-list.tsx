@@ -38,6 +38,16 @@ type Listing = {
   minDays?: number
   /** 出售业务起订量 */
   minOrder?: number
+  /** 出租业务最长租期 */
+  maxDays?: number
+  /** 税率，「不含税」表示报价不含税 */
+  taxRate?: string
+  /** 结算方式 */
+  payTerm?: '先款后货' | '货到付款'
+  /** 是否支持议价 */
+  negotiable?: boolean
+  /** 出租损耗赔付标准 */
+  lossRule?: string
   /** 本次上架数量 */
   quantity: number
   /** 已售出 / 已租出数量 */
@@ -565,7 +575,11 @@ function EntrustDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: (
   )
 }
 
-/** 上架：为商品新增一条上架记录 */
+const TAX_RATES = ['不含税', '1%', '3%', '6%', '9%', '13%']
+const PAY_TERMS = ['先款后货', '货到付款'] as const
+type PayTerm = (typeof PAY_TERMS)[number]
+
+/** 上架：为商品新增一条上架记录，并在此确定该租售方式的运营规则（税率、结算、议价、租期等） */
 function ListDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () => void; onConfirm: (l: Listing) => void }) {
   const available = goods.stock - lockedStock(goods)
   const [type, setType] = useState<BizType>('sale')
@@ -575,18 +589,33 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () =
   const [period, setPeriod] = useState<'天' | '月'>('天')
   const [deposit, setDeposit] = useState('')
   const [minDays, setMinDays] = useState('')
+  const [maxDays, setMaxDays] = useState('')
+  const [taxRate, setTaxRate] = useState('13%')
+  const [payTerm, setPayTerm] = useState<PayTerm>('先款后货')
+  const [negotiable, setNegotiable] = useState(false)
+  const [lossRule, setLossRule] = useState('')
 
   const qty = Number(quantity)
   const qtyOk = qty > 0 && qty <= available
-  const ok = Number(price) > 0 && qtyOk && (type === 'sale' || (Number(deposit) >= 0 && deposit !== '' && Number(minDays) > 0))
+  const rentOk = Number(deposit) >= 0 && deposit !== '' && Number(minDays) > 0 && (maxDays === '' || Number(maxDays) >= Number(minDays))
+  const ok = Number(price) > 0 && qtyOk && Boolean(taxRate) && (type === 'sale' || rentOk)
 
   const submit = () => {
     if (!ok) return
     const id = `L${new Date().toISOString().slice(2, 10).replace(/-/g, '')}${String(goods.listings.length + 1).padStart(3, '0')}`
+    const common = { id, status: 'on' as const, price: Number(price), quantity: qty, used: 0, taxRate, payTerm, negotiable }
     onConfirm(
       type === 'sale'
-        ? { id, type, status: 'on', price: Number(price), minOrder: minOrder ? Number(minOrder) : undefined, quantity: qty, used: 0 }
-        : { id, type, status: 'on', price: Number(price), period, deposit: Number(deposit), minDays: Number(minDays), quantity: qty, used: 0 },
+        ? { ...common, type, minOrder: minOrder ? Number(minOrder) : undefined }
+        : {
+            ...common,
+            type,
+            period,
+            deposit: Number(deposit),
+            minDays: Number(minDays),
+            maxDays: maxDays ? Number(maxDays) : undefined,
+            lossRule: lossRule.trim() || undefined,
+          },
     )
   }
 
@@ -594,6 +623,7 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () =
     <Modal
       title={goods.status === 'off' ? '重新上架' : '新增上架'}
       titleId="list-dialog-title"
+      width="max-w-[640px]"
       onClose={onClose}
       footer={
         <>
@@ -607,7 +637,7 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () =
       }
     >
       <GoodsSummary goods={goods} />
-      <DialogField label="租售方式" required>
+      <DialogField label="租售方式" required hint="同一商品可多次上架，每条上架记录对应一种租售方式及其运营规则">
         <div role="radiogroup" aria-label="租售方式" className="grid grid-cols-2 gap-2">
           {(['sale', 'rent'] as BizType[]).map((t) => {
             const active = type === t
@@ -619,67 +649,136 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () =
                 aria-checked={active}
                 onClick={() => setType(t)}
                 className={cn(
-                  'flex h-9 items-center justify-center gap-1.5 rounded border text-sm transition-colors',
+                  'flex h-12 flex-col items-center justify-center rounded border text-sm transition-colors',
                   active ? 'border-[#1890ff] bg-[#1890ff]/5 text-[#1890ff]' : 'border-border hover:border-[#1890ff]/50',
                 )}
               >
-                {bizMeta[t].label}
+                <span className="font-medium">{bizMeta[t].label}</span>
+                <span className={cn('text-[11px]', active ? 'text-[#1890ff]/80' : 'text-muted-foreground')}>
+                  {t === 'sale' ? '按单价一次性售出，库存随成交扣减' : '按天或按月计租，归还后库存回收'}
+                </span>
               </button>
             )
           })}
         </div>
       </DialogField>
-      <div className="grid gap-4 sm:grid-cols-2">
-        {type === 'rent' && (
-          <DialogField label="计租周期" required>
-            <div role="radiogroup" aria-label="计租周期" className="flex h-9 items-center gap-4 text-sm">
-              {(['天', '月'] as const).map((p) => (
-                <label key={p} className="flex items-center gap-1.5">
-                  <input type="radio" name="list-period" checked={period === p} onChange={() => setPeriod(p)} className="accent-[#1890ff]" />
-                  按{p}
+
+      <ListGroup title="价格与数量">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {type === 'rent' && (
+            <DialogField label="计租周期" required>
+              <div role="radiogroup" aria-label="计租周期" className="flex h-9 items-center gap-4 text-sm">
+                {(['天', '月'] as const).map((p) => (
+                  <label key={p} className="flex items-center gap-1.5">
+                    <input type="radio" name="list-period" checked={period === p} onChange={() => setPeriod(p)} className="accent-[#1890ff]" />
+                    按{p}
+                  </label>
+                ))}
+              </div>
+            </DialogField>
+          )}
+          <DialogField label={type === 'sale' ? '销售单价' : '租金单价'} required>
+            <DialogInput
+              label="单价"
+              type="number"
+              value={price}
+              onChange={setPrice}
+              placeholder="0.00"
+              prefix="¥"
+              suffix={type === 'sale' ? `/ ${goods.unit}` : `/ ${goods.unit} / ${period}`}
+            />
+          </DialogField>
+          {type === 'sale' ? (
+            <DialogField label="起订量">
+              <DialogInput label="起订量" type="number" value={minOrder} onChange={setMinOrder} placeholder="不限" suffix={goods.unit} />
+            </DialogField>
+          ) : (
+            <DialogField label="押金" required hint="归还验收合格后退还">
+              <DialogInput label="押金" type="number" value={deposit} onChange={setDeposit} placeholder="0.00" prefix="¥" suffix={`/ ${goods.unit}`} />
+            </DialogField>
+          )}
+          <DialogField
+            label="上架数量"
+            required
+            hint={
+              quantity && !qtyOk
+                ? `不可超过可上架库存 ${available.toLocaleString()} ${goods.unit}`
+                : `可上架库存 ${available.toLocaleString()} ${goods.unit}（总库存减去上架中记录占用）`
+            }
+          >
+            <DialogInput label="上架数量" type="number" value={quantity} onChange={setQuantity} placeholder="0" suffix={goods.unit} />
+          </DialogField>
+        </div>
+      </ListGroup>
+
+      <ListGroup title={type === 'sale' ? '出售规则' : '出租规则'}>
+        <div className="grid gap-4 sm:grid-cols-2">
+          {type === 'rent' && (
+            <>
+              <DialogField label="最短租期" required>
+                <DialogInput label="最短租期" type="number" value={minDays} onChange={setMinDays} placeholder="0" suffix={period} />
+              </DialogField>
+              <DialogField label="最长租期" hint={maxDays && Number(maxDays) < Number(minDays) ? '不可小于最短租期' : undefined}>
+                <DialogInput label="最长租期" type="number" value={maxDays} onChange={setMaxDays} placeholder="不限" suffix={period} />
+              </DialogField>
+            </>
+          )}
+          <DialogField label="税率" required hint={taxRate === '不含税' ? (type === 'sale' ? '价格为不含税报价' : '租金为不含税报价') : undefined}>
+            <select
+              aria-label="税率"
+              value={taxRate}
+              onChange={(e) => setTaxRate(e.target.value)}
+              className="h-9 w-full rounded border bg-background px-2 text-sm outline-none focus:border-[#1890ff]"
+            >
+              {TAX_RATES.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+          </DialogField>
+          <DialogField label="结算方式" required>
+            <div role="radiogroup" aria-label="结算方式" className="flex h-9 items-center gap-4 text-sm">
+              {PAY_TERMS.map((t) => (
+                <label key={t} className="flex items-center gap-1.5">
+                  <input type="radio" name="list-pay-term" checked={payTerm === t} onChange={() => setPayTerm(t)} className="accent-[#1890ff]" />
+                  {t}
                 </label>
               ))}
             </div>
           </DialogField>
-        )}
-        <DialogField label={type === 'sale' ? '销售单价' : '租金单价'} required>
-          <DialogInput
-            label="单价"
-            type="number"
-            value={price}
-            onChange={setPrice}
-            placeholder="0.00"
-            prefix="¥"
-            suffix={type === 'sale' ? `/ ${goods.unit}` : `/ ${goods.unit} / ${period}`}
-          />
-        </DialogField>
-        {type === 'sale' ? (
-          <DialogField label="起订量">
-            <DialogInput label="起订量" type="number" value={minOrder} onChange={setMinOrder} placeholder="不限" suffix={goods.unit} />
+          <DialogField label="议价">
+            <label className="flex h-9 items-center gap-2 text-sm">
+              <input type="checkbox" checked={negotiable} onChange={(e) => setNegotiable(e.target.checked)} className="accent-[#1890ff]" />
+              支持买{type === 'sale' ? '' : '/租'}方发起议价
+            </label>
           </DialogField>
-        ) : (
-          <>
-            <DialogField label="押金" required>
-              <DialogInput label="押金" type="number" value={deposit} onChange={setDeposit} placeholder="0.00" prefix="¥" suffix={`/ ${goods.unit}`} />
-            </DialogField>
-            <DialogField label="最短租期" required>
-              <DialogInput label="最短租期" type="number" value={minDays} onChange={setMinDays} placeholder="0" suffix={period} />
-            </DialogField>
-          </>
-        )}
-        <DialogField
-          label="上架数量"
-          required
-          hint={
-            quantity && !qtyOk
-              ? `不可超过可上架库存 ${available.toLocaleString()} ${goods.unit}`
-              : `可上架库存 ${available.toLocaleString()} ${goods.unit}（总库存减去上架中记录占用）`
-          }
-        >
-          <DialogInput label="上架数量" type="number" value={quantity} onChange={setQuantity} placeholder="0" suffix={goods.unit} />
-        </DialogField>
-      </div>
+          {type === 'rent' && (
+            <div className="sm:col-span-2">
+              <DialogField label="损耗赔付标准">
+                <textarea
+                  aria-label="损耗赔付标准"
+                  value={lossRule}
+                  onChange={(e) => setLossRule(e.target.value)}
+                  rows={2}
+                  placeholder="说明归还时的验收标准及损坏、丢失的赔付方式，如：板面破损超过 10% 按原价 60% 赔付"
+                  className="w-full rounded border bg-background px-2 py-1.5 text-sm outline-none focus:border-[#1890ff]"
+                />
+              </DialogField>
+            </div>
+          )}
+        </div>
+      </ListGroup>
     </Modal>
+  )
+}
+
+function ListGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-3 rounded border p-3">
+      <span className="text-xs font-medium text-muted-foreground">{title}</span>
+      {children}
+    </div>
   )
 }
 
@@ -1008,9 +1107,16 @@ function ListingTable({ goods }: { goods: Goods }) {
           >
             <span className="font-mono text-xs text-muted-foreground">{l.id}</span>
             <Tag className={meta.className}>{meta.label}</Tag>
-            <span className="tabular-nums">
-              ¥ {fmtPrice(l.price)} / {goods.unit}
-              {l.type === 'rent' && l.period ? ` / ${l.period}` : ''}
+            <span className="flex flex-col leading-tight">
+              <span className="tabular-nums">
+                ¥ {fmtPrice(l.price)} / {goods.unit}
+                {l.type === 'rent' && l.period ? ` / ${l.period}` : ''}
+              </span>
+              {(l.taxRate || l.payTerm || l.negotiable) && (
+                <span className="text-[11px] text-muted-foreground">
+                  {[l.taxRate && `税率 ${l.taxRate}`, l.payTerm, l.negotiable && '可议价'].filter(Boolean).join(' · ')}
+                </span>
+              )}
             </span>
             <span className="tabular-nums">
               {mixed && <span className="mr-1 text-xs text-muted-foreground">{usedLabel(l.type)}</span>}
@@ -1116,7 +1222,7 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
             )
           })}
           <span className="ml-auto pr-2 text-muted-foreground">
-            {isFiltered ? `筛选结果 ${visible.length} 条 · ` : ''}点击编码前的角标可展开查看上架 / 委托记录
+            {isFiltered ? `筛选结��� ${visible.length} 条 · ` : ''}点击编码前的角标可展开查看上架 / 委托记录
           </span>
         </div>
 

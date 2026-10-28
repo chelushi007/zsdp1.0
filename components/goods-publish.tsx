@@ -15,31 +15,23 @@ import {
   RotateCcw,
   Save,
   ShieldCheck,
-  ShoppingCart,
-  Timer,
   Trash2,
   Truck,
   X,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { RegionCascader, Select, Tip, categoryTree, regionTree, type Region } from '@/components/shop-form-fields'
+import { RegionCascader, Select, Tip, regionTree, type Region } from '@/components/shop-form-fields'
 import { MaterialPicker } from '@/components/material-picker'
 import { GoodsDetailTable, lineComplete, newGoodsLine, type GoodsLine } from '@/components/goods-detail-table'
-import { categoryName, type Material } from '@/lib/materials-data'
+import { type Material } from '@/lib/materials-data'
 
 /* ---------- 基础数据 ---------- */
 
-const CONDITIONS = ['全新', '九成新', '八成新', '七成新及以下']
 const SHOPS = ['华东建设工程有限公司周转材料店', '苏州分公司模板租赁店', '杭州分公司脚手架专营店']
-const RENT_PERIODS = ['天', '月'] as const
-const PAY_TERMS = ['先款后货', '货到付款'] as const
-const TAX_RATES = ['不含税', '1%', '3%', '6%', '9%', '13%']
 const GOODS_IMAGES_MAX = 9
 const EMPTY_REGION: Region = { province: '', city: '', district: '' }
 
-type RentPeriod = (typeof RENT_PERIODS)[number]
-type PayTerm = (typeof PAY_TERMS)[number]
 
 /** 禁售地区：精确到省或市，city 为空表示整省禁售 */
 type BanArea = { province: string; city?: string }
@@ -190,38 +182,6 @@ function TextArea({ value, onChange, placeholder }: { value: string; onChange: (
       placeholder={placeholder}
       className="min-h-24 rounded border border-border bg-background px-3 py-2 text-sm leading-relaxed outline-none placeholder:text-xs placeholder:text-muted-foreground/60 focus:border-[#1890ff]"
     />
-  )
-}
-
-function RadioGroup<T extends string>({
-  value,
-  options,
-  onChange,
-  label,
-}: {
-  value: T
-  options: readonly T[]
-  onChange: (v: T) => void
-  label: string
-}) {
-  return (
-    <div role="radiogroup" aria-label={label} className="flex h-9 items-center gap-1 rounded border border-border bg-background p-1">
-      {options.map((o) => (
-        <button
-          key={o}
-          type="button"
-          role="radio"
-          aria-checked={value === o}
-          onClick={() => onChange(o)}
-          className={cn(
-            'h-7 flex-1 rounded px-3 text-xs',
-            value === o ? 'bg-[#1890ff] text-white' : 'text-muted-foreground hover:bg-muted',
-          )}
-        >
-          {o}
-        </button>
-      ))}
-    </div>
   )
 }
 
@@ -687,47 +647,10 @@ function TemplatePicker({
 
 /* ---------- 运营方式 ---------- */
 
-function BizCard({
-  enabled,
-  onToggle,
-  icon,
-  title,
-  description,
-  tone,
-  children,
-}: {
-  enabled: boolean
-  onToggle: (v: boolean) => void
-  icon: React.ReactNode
-  title: string
-  description: string
-  tone: 'blue' | 'green'
-  children: React.ReactNode
-}) {
-  const accent = tone === 'blue' ? 'border-[#1890ff] bg-[#1890ff]/5' : 'border-emerald-500 bg-emerald-50/60'
-  const iconTone = tone === 'blue' ? 'bg-[#1890ff]/10 text-[#1890ff]' : 'bg-emerald-100 text-emerald-700'
-  return (
-    <div className={cn('flex flex-col rounded-md border transition-colors', enabled ? accent : 'border-border bg-background')}>
-      <label className="flex cursor-pointer items-center gap-3 px-4 py-3">
-        <span className={cn('flex size-9 items-center justify-center rounded', iconTone)}>{icon}</span>
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="text-sm font-medium">{title}</span>
-          <span className="truncate text-xs text-muted-foreground">{description}</span>
-        </span>
-        <Switch checked={enabled} onChange={onToggle} label={`启用${title}`} />
-      </label>
-      {enabled && <div className="grid gap-4 border-t border-border/60 bg-card px-4 py-4 md:grid-cols-2">{children}</div>}
-    </div>
-  )
-}
-
 /* ---------- 页面 ---------- */
 
 export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSubmitted?: () => void }) {
   const [name, setName] = useState('')
-  const [subCategory, setSubCategory] = useState('')
-  const [brand, setBrand] = useState('')
-  const [condition, setCondition] = useState('')
   const [shop, setShop] = useState(SHOPS[0])
   const [images, setImages] = useState(0)
   const [region, setRegion] = useState<Region>(EMPTY_REGION)
@@ -737,19 +660,6 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const [pickerOpen, setPickerOpen] = useState(false)
   const [warnStock, setWarnStock] = useState('')
 
-  const [saleOn, setSaleOn] = useState(true)
-  const [taxRate, setTaxRate] = useState('13%')
-  const [negotiable, setNegotiable] = useState(false)
-  const [salePayTerm, setSalePayTerm] = useState<PayTerm>('先款后货')
-
-  const [rentOn, setRentOn] = useState(false)
-  const [rentPeriod, setRentPeriod] = useState<RentPeriod>('天')
-  const [rentPayTerm, setRentPayTerm] = useState<PayTerm>('先款后货')
-  const [minDays, setMinDays] = useState('')
-  const [maxDays, setMaxDays] = useState('')
-  const [rentTaxRate, setRentTaxRate] = useState('13%')
-  const [rentNegotiable, setRentNegotiable] = useState(false)
-  const [lossRule, setLossRule] = useState('')
 
   const [banEnabled, setBanEnabled] = useState(false)
   const [banAreas, setBanAreas] = useState<BanArea[]>([])
@@ -797,31 +707,16 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const num = (v: string) => (v === '' ? NaN : Number(v))
 
   const addMaterials = (list: Material[]) => {
-    setLines((prev) => [...prev, ...list.filter((m) => !prev.some((l) => l.material.code === m.code)).map((m) => newGoodsLine(m, saleOn, rentOn))])
-    // 明细为空时按首个物料自动带出品类
-    if (!subCategory && list[0]) setSubCategory(categoryName(list[0].categoryCode))
+    setLines((prev) => [...prev, ...list.filter((m) => !prev.some((l) => l.material.code === m.code)).map(newGoodsLine)])
     setPickerOpen(false)
-  }
-  const toggleSale = (on: boolean) => {
-    setSaleOn(on)
-    if (on) setLines((prev) => prev.map((l) => ({ ...l, saleOn: true })))
-  }
-  const toggleRent = (on: boolean) => {
-    setRentOn(on)
-    if (on) setLines((prev) => prev.map((l) => ({ ...l, rentOn: true })))
   }
 
   const unitLabel = lines[0]?.material.unit ?? '单位'
-  const bizSelected = saleOn || rentOn
-  const incompleteLines = lines.filter((l) => !lineComplete(l, saleOn, rentOn)).length
+  const incompleteLines = lines.filter((l) => !lineComplete(l)).length
   const linesOk = lines.length > 0 && incompleteLines === 0
-  const saleLines = saleOn ? lines.filter((l) => l.saleOn).length : 0
-  const rentLines = rentOn ? lines.filter((l) => l.rentOn).length : 0
-  const saleOk = !saleOn || saleLines > 0
-  const rentOk = !rentOn || (rentLines > 0 && Number(minDays) > 0)
   const totalStock = lines.reduce((sum, l) => sum + (Number(l.stock) || 0), 0)
   const regionOk = Boolean(region.province && region.city && region.district) && address.trim().length > 0
-  const basicOk = name.trim().length > 0 && subCategory && images > 0 && regionOk
+  const basicOk = name.trim().length > 0 && images > 0 && regionOk
   const freightOk =
     freight.mode === '包邮' ||
     freight.mode === '到付' ||
@@ -832,29 +727,21 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
       num(freight.base) >= 0 &&
       num(freight.addQty) > 0 &&
       num(freight.addFee) >= 0)
-  const canSubmit = agreed && basicOk && linesOk && bizSelected && saleOk && rentOk && freightOk
+  const canSubmit = agreed && basicOk && linesOk && freightOk
 
   const blocker = !basicOk
     ? !regionOk
       ? '请选择商品所在地并填写具体地址'
-      : '请完善基本信息（名称、品类、主图）'
-    : !bizSelected
-      ? '请至少启用一种运营方式'
-      : lines.length === 0
-        ? '请添加至少一条商品明细'
-        : incompleteLines > 0
-          ? `还有 ${incompleteLines} 条明细未填写完整（库存、起订量及已启用方式的价格）`
-          : !saleOk
-            ? '已启用出售，但没有任何明细勾选「可售」'
-            : !rentOk
-              ? rentLines === 0
-                ? '已启用出租，但没有任何明细勾选「可租」'
-                : '请填写最短租期'
-          : !freightOk
-            ? '请完善运费设置'
-            : !agreed
-              ? '勾选同意商品发布规范后方可提交'
-              : '提交后进入平台审核，审核通过自动上架为「运营中」'
+      : '请完善基本信息（名称、主图）'
+    : lines.length === 0
+      ? '请添加至少一条商品明细'
+      : incompleteLines > 0
+        ? `还有 ${incompleteLines} 条明细未填写完整（库存、起订量）`
+        : !freightOk
+          ? '请完善运费设置'
+          : !agreed
+            ? '勾选同意商品发布规范后方可提交'
+            : '提交后进入平台审核，审核通过后可在商品列表中选择租售方式上架'
 
   const regionLabel = [region.province, region.city, region.district].filter(Boolean).join(' / ')
 
@@ -898,23 +785,8 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
               <Field label="商品名称" required span>
                 <TextInput value={name} onChange={setName} placeholder="请输入商品名称，如：建筑模板 915×1830×15mm 覆膜板，不超过 60 字" />
               </Field>
-              <Field label="品类" required>
-                <Select
-                  label="品类"
-                  placeholder="请选择品类"
-                  value={subCategory}
-                  options={categoryTree[0].children}
-                  onChange={setSubCategory}
-                />
-              </Field>
               <Field label="所属店铺" required>
                 <Select label="所属店铺" placeholder="请选择店铺" value={shop} options={SHOPS} onChange={setShop} />
-              </Field>
-              <Field label="品牌 / 厂家">
-                <TextInput value={brand} onChange={setBrand} placeholder="选填，如：鲁班建材" />
-              </Field>
-              <Field label="成色">
-                <Select label="成色" placeholder="请选择成色" value={condition} options={CONDITIONS} onChange={setCondition} />
               </Field>
               <Field label="商品所在地" required span hint="省 / 市 / 区县 + 具体地址，用于计算运费与买方筛选">
                 <RegionCascader value={region} onChange={setRegion} detail={address} onDetailChange={setAddress} />
@@ -934,85 +806,12 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
             }
           >
             <div className="flex flex-col gap-4">
-              <GoodsDetailTable lines={lines} saleOn={saleOn} rentOn={rentOn} rentPeriod={rentPeriod} onChange={setLines} onAdd={() => setPickerOpen(true)} />
+              <GoodsDetailTable lines={lines} onChange={setLines} onAdd={() => setPickerOpen(true)} />
               <div className="grid gap-4 md:grid-cols-2">
                 <Field label="库存预警值" hint="任一规格库存低于该值时列表标记为紧张">
                   <TextInput type="number" value={warnStock} onChange={setWarnStock} placeholder="选填" />
                 </Field>
               </div>
-            </div>
-          </Section>
-
-          <Section
-            title="运营方式"
-            extra={<span className="text-xs text-muted-foreground">可同时启用；此处为该方式的通用规则，单价、押金在「商品明细」中按规格逐行填写</span>}
-          >
-            <div className="flex flex-col gap-3">
-              <Tip>
-                运营方式与商品明细的对应关系：启用一种方式后，明细表出现该方式的价格列，并可按行勾选「可售 / 可租」；未勾选的规格不会生成该方式的上架记录。
-                税率、结算方式、议价、租期等规则对该方式下所有规格统一生效。
-              </Tip>
-              <BizCard
-                enabled={saleOn}
-                onToggle={toggleSale}
-                icon={<ShoppingCart className="size-4" aria-hidden />}
-                title="出售"
-                description={saleOn ? `按含税销售单价一次性售出，库存随成交扣减 · 已有 ${saleLines}/${lines.length} 个规格可售` : '按单价一次性售出，库存随成交扣减'}
-                tone="blue"
-              >
-                <Field label="税率" required hint="选择「不含税」则价格为不含税报价">
-                  <Select label="出售税率" placeholder="请选择税率" value={taxRate} options={TAX_RATES} onChange={setTaxRate} />
-                </Field>
-                <Field label="结算方式" required>
-                  <RadioGroup label="出售结算方式" value={salePayTerm} options={PAY_TERMS} onChange={setSalePayTerm} />
-                </Field>
-                <Field label="议价">
-                  <label className="flex h-9 items-center gap-2 text-sm">
-                    <Switch checked={negotiable} onChange={setNegotiable} label="出售支持议价" />
-                    支持议价
-                  </label>
-                </Field>
-              </BizCard>
-
-              <BizCard
-                enabled={rentOn}
-                onToggle={toggleRent}
-                icon={<Timer className="size-4" aria-hidden />}
-                title="出租"
-                description={rentOn ? `按${rentPeriod}计租，归还后库存回收 · 已有 ${rentLines}/${lines.length} 个规格可租，租金与押金在明细中按规格填写` : '按天或按月计租，归还后库存回收'}
-                tone="green"
-              >
-                <Field label="计租周期" required hint="切换后明细中租金单价按新周期计">
-                  <RadioGroup label="计租周期" value={rentPeriod} options={RENT_PERIODS} onChange={setRentPeriod} />
-                </Field>
-                <Field label="最短租期" required>
-                  <TextInput type="number" value={minDays} onChange={setMinDays} placeholder="0" suffix={rentPeriod} />
-                </Field>
-                <Field label="最长租期">
-                  <TextInput type="number" value={maxDays} onChange={setMaxDays} placeholder="不限" suffix={rentPeriod} />
-                </Field>
-                <Field label="税率" required hint="选择「不含税」则租金为不含税报价">
-                  <Select label="出租税率" placeholder="请选择税率" value={rentTaxRate} options={TAX_RATES} onChange={setRentTaxRate} />
-                </Field>
-                <Field label="结算方式" required>
-                  <RadioGroup label="出租结算方式" value={rentPayTerm} options={PAY_TERMS} onChange={setRentPayTerm} />
-                </Field>
-                <Field label="议价">
-                  <label className="flex h-9 items-center gap-2 text-sm">
-                    <Switch checked={rentNegotiable} onChange={setRentNegotiable} label="出租支持议价" />
-                    支持议价
-                  </label>
-                </Field>
-                <Field label="损耗赔付标准" span>
-                  <TextArea
-                    value={lossRule}
-                    onChange={setLossRule}
-                    placeholder="说明归还时的验收标准及损坏、丢失的赔付方式，如：板面破损超过 10% 按原价 60% 赔付"
-                  />
-                </Field>
-              </BizCard>
-
-              {!bizSelected && <Tip tone="warn">请至少启用一种运营方式，否则商品无法上架。</Tip>}
             </div>
           </Section>
 
