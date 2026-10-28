@@ -701,7 +701,6 @@ export function ProviderGoods() {
           >
             重置
           </Button>
-          <span className="ml-auto text-xs text-muted-foreground">商品由商家委托发起，受理后可加价上架</span>
         </div>
       </div>
 
@@ -783,7 +782,7 @@ export function ProviderGoods() {
                     <span className="truncate text-xs" title={g.seller}>
                       {g.seller}
                     </span>
-                    <span className="flex flex-wrap gap-1">
+                    <span className="flex flex-col items-start gap-1">
                       {g.types.map((t) => (
                         <Tag key={t} className={bizMeta[t].className}>
                           {bizMeta[t].label}
@@ -806,11 +805,8 @@ export function ProviderGoods() {
                     <span className="tabular-nums">
                       {g.quantity.toLocaleString()} {g.unit}
                     </span>
-                    <span className="flex flex-col tabular-nums">
-                      <span>
-                        {lockedQty(g).toLocaleString()} {g.unit}
-                      </span>
-                      <span className="text-[11px] text-muted-foreground">剩余 {(g.quantity - lockedQty(g)).toLocaleString()}</span>
+                    <span className="tabular-nums">
+                      {lockedQty(g).toLocaleString()} {g.unit}
                     </span>
                     <span className="flex min-w-0 flex-col items-start gap-1">
                       <Tag className={accept.className}>{accept.label}</Tag>

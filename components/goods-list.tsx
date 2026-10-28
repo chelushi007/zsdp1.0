@@ -751,8 +751,16 @@ function OffDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () =>
   )
 }
 
-type Filters = { code: string; name: string; category: string; status: GoodsStatus | '' }
-const emptyFilters: Filters = { code: '', name: '', category: '', status: '' }
+type EntrustFilter = '' | 'has' | 'none' | 'pending' | 'accepted'
+type Filters = { code: string; name: string; category: string; status: GoodsStatus | ''; entrust: EntrustFilter }
+const emptyFilters: Filters = { code: '', name: '', category: '', status: '', entrust: '' }
+
+const entrustOptions: { label: string; value: EntrustFilter }[] = [
+  { label: '有委托', value: 'has' },
+  { label: '有 · 待受理', value: 'pending' },
+  { label: '有 · 已受理', value: 'accepted' },
+  { label: '无委托', value: 'none' },
+]
 
 const statusOptions: { label: string; value: GoodsStatus }[] = goodsStatusOrder.map((s) => ({
   label: goodsStatusMeta[s].label,
@@ -803,9 +811,10 @@ function FilterPanel({
   onCreate: () => void
 }) {
   const statusLabel = statusOptions.find((o) => o.value === draft.status)?.label ?? ''
+  const entrustLabel = entrustOptions.find((o) => o.value === draft.entrust)?.label ?? ''
   return (
     <div className="flex flex-col gap-4 rounded-md bg-card p-5">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <FilterRow label="商品编码">
           <FilterInput label="商品编码" value={draft.code} onChange={(code) => onDraftChange({ ...draft, code })} />
         </FilterRow>
@@ -828,6 +837,15 @@ function FilterPanel({
             placeholder="全部"
             options={statusOptions.map((o) => o.label)}
             onChange={(l) => onDraftChange({ ...draft, status: statusOptions.find((o) => o.label === l)?.value ?? '' })}
+          />
+        </FilterRow>
+        <FilterRow label="委托情况">
+          <Select
+            label="委托情况"
+            value={entrustLabel}
+            placeholder="全部"
+            options={entrustOptions.map((o) => o.label)}
+            onChange={(l) => onDraftChange({ ...draft, entrust: entrustOptions.find((o) => o.label === l)?.value ?? '' })}
           />
         </FilterRow>
       </div>
@@ -853,6 +871,9 @@ function matches(g: Goods, f: Filters) {
   if (f.name && !g.name.includes(f.name.trim())) return false
   if (f.category && g.subCategory !== f.category) return false
   if (f.status && g.status !== f.status) return false
+  if (f.entrust === 'has' && !g.entrust) return false
+  if (f.entrust === 'none' && g.entrust) return false
+  if ((f.entrust === 'pending' || f.entrust === 'accepted') && g.entrust?.status !== f.entrust) return false
   return true
 }
 
