@@ -6,8 +6,23 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Select, categoryTree } from '@/components/shop-form-fields'
 
-type BizType = 'sale' | 'rent'
+export type BizType = 'sale' | 'rent'
 type ListingStatus = 'on' | 'off'
+
+/** 委托给服务商代为运营的信息 */
+export type Entrust = {
+  types: BizType[]
+  provider: string
+  quantity: number
+  /** 商家底价：出售按单位计，出租按单位 / 天计 */
+  salePrice?: number
+  rentPrice?: number
+  rentDeposit?: number
+  /** 委托期限（月） */
+  months: number
+  status: 'pending' | 'accepted'
+  createdAt: string
+}
 
 /** 上架记录：一个商品可多次上架，每条记录对应一种租售方式 */
 type Listing = {
@@ -45,6 +60,7 @@ type Goods = {
   /** 违规下架 / 审核驳回的原因说明 */
   statusNote?: string
   listings: Listing[]
+  entrust?: Entrust
   updatedAt: string
 }
 
@@ -56,7 +72,7 @@ const goodsData: Goods[] = [
     category: '循环物资',
     subCategory: '模板类',
     unit: '张',
-    stock: 5000,
+    stock: 6000,
     status: 'active',
     listings: [
       { id: 'L240302001', type: 'sale', status: 'on', price: 128, minOrder: 50, quantity: 3200, used: 1250 },
@@ -92,6 +108,16 @@ const goodsData: Goods[] = [
       { id: 'L240408001', type: 'sale', status: 'off', price: 5800, minOrder: 10, quantity: 120, used: 120 },
       { id: 'L240408002', type: 'rent', status: 'on', price: 12, period: '天', deposit: 3000, minDays: 180, quantity: 420, used: 410 },
     ],
+    entrust: {
+      types: ['rent'],
+      provider: '华建周转材料服务有限公司',
+      quantity: 120,
+      rentPrice: 10,
+      rentDeposit: 3000,
+      months: 6,
+      status: 'accepted',
+      createdAt: '2024-09-18',
+    },
     updatedAt: '2024-09-30 11:10',
   },
   {
@@ -125,7 +151,7 @@ const goodsData: Goods[] = [
     category: '循环物资',
     subCategory: '型材类',
     unit: '吨',
-    stock: 395,
+    stock: 480,
     status: 'active',
     listings: [
       { id: 'L240703001', type: 'sale', status: 'on', price: 4280, minOrder: 5, quantity: 95, used: 30 },
@@ -164,7 +190,7 @@ const goodsData: Goods[] = [
   },
 ]
 
-const bizMeta: Record<BizType, { label: string; className: string }> = {
+export const bizMeta: Record<BizType, { label: string; className: string }> = {
   sale: { label: '出售', className: 'bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/30' },
   rent: { label: '出租', className: 'bg-emerald-50 text-emerald-700 ring-emerald-200' },
 }
@@ -184,17 +210,17 @@ const goodsStatusMeta: Record<GoodsStatus, { label: string; className: string; c
   rejected: { label: '审核驳回', className: 'bg-amber-50 text-amber-700 ring-amber-200', countClass: 'text-amber-700' },
 }
 
-function Tag({ className, children }: { className: string; children: React.ReactNode }) {
+export function Tag({ className, children }: { className: string; children: React.ReactNode }) {
   return (
     <span className={cn('inline-flex h-5 items-center rounded px-1.5 text-xs ring-1 ring-inset', className)}>{children}</span>
   )
 }
 
-function fmtPrice(n: number) {
+export function fmtPrice(n: number) {
   return n.toLocaleString('zh-CN', { minimumFractionDigits: n < 1 ? 2 : 0, maximumFractionDigits: 3 })
 }
 
-function ActionLink({
+export function ActionLink({
   children,
   tone = 'primary',
   onClick,
@@ -214,9 +240,16 @@ function ActionLink({
   )
 }
 
-type GoodsAction = 'edit' | 'list' | 'stock' | 'off'
+type GoodsAction = 'edit' | 'list' | 'stock' | 'off' | 'entrust' | 'cancelEntrust'
 
-function GoodsActions({ status, onAction }: { status: GoodsStatus; onAction: (a: GoodsAction) => void }) {
+function GoodsActions({ goods, onAction }: { goods: Goods; onAction: (a: GoodsAction) => void }) {
+  const entrustLink = goods.entrust ? (
+    <ActionLink tone="danger" onClick={() => onAction('cancelEntrust')}>
+      撤回委托
+    </ActionLink>
+  ) : (
+    <ActionLink onClick={() => onAction('entrust')}>委托</ActionLink>
+  )
   const actions: Record<GoodsStatus, React.ReactNode> = {
     draft: (
       <>
@@ -231,6 +264,7 @@ function GoodsActions({ status, onAction }: { status: GoodsStatus; onAction: (a:
         <ActionLink onClick={() => onAction('edit')}>编辑</ActionLink>
         <ActionLink onClick={() => onAction('list')}>上架</ActionLink>
         <ActionLink onClick={() => onAction('stock')}>调整库存</ActionLink>
+        {entrustLink}
         <ActionLink tone="danger" onClick={() => onAction('off')}>
           下架
         </ActionLink>
@@ -241,6 +275,7 @@ function GoodsActions({ status, onAction }: { status: GoodsStatus; onAction: (a:
         <ActionLink>详情</ActionLink>
         <ActionLink onClick={() => onAction('edit')}>编辑</ActionLink>
         <ActionLink onClick={() => onAction('list')}>重新上架</ActionLink>
+        {entrustLink}
       </>
     ),
     violation: (
@@ -258,7 +293,7 @@ function GoodsActions({ status, onAction }: { status: GoodsStatus; onAction: (a:
       </>
     ),
   }
-  return <span className="flex flex-wrap items-center gap-x-3 gap-y-1">{actions[status]}</span>
+  return <span className="flex flex-wrap items-center gap-x-3 gap-y-1">{actions[goods.status]}</span>
 }
 
 /* ---------- 操作弹窗 ---------- */
@@ -268,7 +303,7 @@ function lockedStock(g: Goods) {
   return g.listings.filter((l) => l.status === 'on').reduce((s, l) => s + l.quantity, 0)
 }
 
-function Modal({
+export function Modal({
   title,
   titleId,
   width = 'max-w-[520px]',
@@ -301,7 +336,7 @@ function Modal({
   )
 }
 
-function DialogField({
+export function DialogField({
   label,
   required,
   hint,
@@ -324,7 +359,7 @@ function DialogField({
   )
 }
 
-function DialogInput({
+export function DialogInput({
   label,
   value,
   onChange,
@@ -374,7 +409,118 @@ function GoodsSummary({ goods }: { goods: Goods }) {
   )
 }
 
-const PRIMARY_BTN = 'bg-[#1890ff] hover:bg-[#1890ff]/90'
+export const PRIMARY_BTN = 'bg-[#1890ff] hover:bg-[#1890ff]/90'
+
+export const PROVIDERS = ['华建周转材料服务有限公司', '中建租赁服务（上海）有限公司', '筑友设备运营服务商', '鼎盛建材流通服务中心']
+const ENTRUST_MONTHS = ['3 个月', '6 个月', '12 个月']
+
+/** 委托：将商品委托给服务商代为出售 / 出租，服务商受理后可加价上架 */
+function EntrustDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () => void; onConfirm: (e: Entrust) => void }) {
+  const available = goods.stock - lockedStock(goods)
+  const [types, setTypes] = useState<BizType[]>([])
+  const [provider, setProvider] = useState('')
+  const [quantity, setQuantity] = useState('')
+  const [salePrice, setSalePrice] = useState('')
+  const [rentPrice, setRentPrice] = useState('')
+  const [rentDeposit, setRentDeposit] = useState('')
+  const [months, setMonths] = useState('6 个月')
+
+  const toggleType = (t: BizType) => setTypes((list) => (list.includes(t) ? list.filter((x) => x !== t) : [...list, t]))
+
+  const qty = Number(quantity)
+  const qtyOk = qty > 0 && qty <= available
+  const saleOk = !types.includes('sale') || Number(salePrice) > 0
+  const rentOk = !types.includes('rent') || (Number(rentPrice) > 0 && rentDeposit !== '' && Number(rentDeposit) >= 0)
+  const ok = types.length > 0 && provider !== '' && qtyOk && saleOk && rentOk
+
+  const submit = () => {
+    if (!ok) return
+    onConfirm({
+      types: (['sale', 'rent'] as BizType[]).filter((t) => types.includes(t)),
+      provider,
+      quantity: qty,
+      salePrice: types.includes('sale') ? Number(salePrice) : undefined,
+      rentPrice: types.includes('rent') ? Number(rentPrice) : undefined,
+      rentDeposit: types.includes('rent') ? Number(rentDeposit) : undefined,
+      months: Number.parseInt(months, 10),
+      status: 'pending',
+      createdAt: new Date().toISOString().slice(0, 10),
+    })
+  }
+
+  return (
+    <Modal
+      title="委托服务商运营"
+      titleId="entrust-dialog-title"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            取消
+          </Button>
+          <Button size="sm" className={PRIMARY_BTN} disabled={!ok} onClick={submit}>
+            提交委托
+          </Button>
+        </>
+      }
+    >
+      <GoodsSummary goods={goods} />
+      <DialogField label="委托方式" required hint="可同时勾选；服务商受理后按您填写的底价加价上架，差价为服务商收益">
+        <div role="group" aria-label="委托方式" className="grid grid-cols-2 gap-2">
+          {(['sale', 'rent'] as BizType[]).map((t) => {
+            const active = types.includes(t)
+            return (
+              <button
+                key={t}
+                type="button"
+                role="checkbox"
+                aria-checked={active}
+                onClick={() => toggleType(t)}
+                className={cn(
+                  'flex h-9 items-center justify-center gap-1.5 rounded border text-sm transition-colors',
+                  active ? 'border-[#1890ff] bg-[#1890ff]/5 text-[#1890ff]' : 'border-border hover:border-[#1890ff]/50',
+                )}
+              >
+                {active && <CheckCircle2 className="size-3.5" aria-hidden />}
+                委托{bizMeta[t].label}
+              </button>
+            )
+          })}
+        </div>
+      </DialogField>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <DialogField label="服务商" required>
+          <Select label="服务商" placeholder="请选择服务商" value={provider} options={PROVIDERS} onChange={setProvider} />
+        </DialogField>
+        <DialogField
+          label="委托数量"
+          required
+          hint={quantity && !qtyOk ? `不可超过可委托库存 ${available.toLocaleString()} ${goods.unit}` : `可委托库存 ${available.toLocaleString()} ${goods.unit}`}
+        >
+          <DialogInput label="委托数量" type="number" value={quantity} onChange={setQuantity} placeholder="0" suffix={goods.unit} />
+        </DialogField>
+        {types.includes('sale') && (
+          <DialogField label="出售底价" required>
+            <DialogInput label="出售底价" type="number" value={salePrice} onChange={setSalePrice} placeholder="0.00" prefix="¥" suffix={`/ ${goods.unit}`} />
+          </DialogField>
+        )}
+        {types.includes('rent') && (
+          <>
+            <DialogField label="出租底价" required>
+              <DialogInput label="出租底价" type="number" value={rentPrice} onChange={setRentPrice} placeholder="0.00" prefix="¥" suffix={`/ ${goods.unit} / 天`} />
+            </DialogField>
+            <DialogField label="押金" required>
+              <DialogInput label="押金" type="number" value={rentDeposit} onChange={setRentDeposit} placeholder="0.00" prefix="¥" suffix={`/ ${goods.unit}`} />
+            </DialogField>
+          </>
+        )}
+        <DialogField label="委托期限" required>
+          <Select label="委托期限" placeholder="请选择" value={months} options={ENTRUST_MONTHS} onChange={setMonths} />
+        </DialogField>
+      </div>
+    </Modal>
+  )
+}
 
 /** 上架：为商品新增一条上架记录 */
 function ListDialog({ goods, onClose, onConfirm }: { goods: Goods; onClose: () => void; onConfirm: (l: Listing) => void }) {
@@ -763,6 +909,10 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
       onEdit?.(g.code)
       return
     }
+    if (action === 'cancelEntrust') {
+      updateGoods(g.code, (x) => ({ ...x, entrust: undefined }), `已撤回委托：${g.name}`)
+      return
+    }
     setDialog({ action, code: g.code })
   }
 
@@ -884,13 +1034,26 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
                     </span>
                     <span className="flex min-w-0 flex-col items-start gap-1">
                       <Tag className={statusMeta.className}>{statusMeta.label}</Tag>
+                      {g.entrust && (
+                        <span
+                          className="line-clamp-2 text-[11px] leading-4 text-muted-foreground"
+                          title={`委托${g.entrust.types.map((t) => bizMeta[t].label).join('、')}给 ${g.entrust.provider}`}
+                        >
+                          <span className="text-violet-600">
+                            委托{g.entrust.types.map((t) => bizMeta[t].label).join('/')}
+                            {g.entrust.status === 'pending' ? ' · 待受理' : ' · 已受理'}
+                          </span>
+                          {' · '}
+                          {g.entrust.quantity.toLocaleString()} {g.unit}
+                        </span>
+                      )}
                       {g.statusNote && (
                         <span className="line-clamp-2 text-[11px] leading-4 text-muted-foreground" title={g.statusNote}>
                           {g.statusNote}
                         </span>
                       )}
                     </span>
-                    <GoodsActions status={g.status} onAction={(a) => handleAction(g, a)} />
+                    <GoodsActions goods={g} onAction={(a) => handleAction(g, a)} />
                   </div>
                   {open && (
                     <div id={`listings-${g.code}`} className="border-b border-border bg-muted/20 px-4 py-3 pl-[84px]">
@@ -918,6 +1081,20 @@ export function GoodsList({ onCreate, onEdit }: { onCreate: () => void; onEdit?:
               dialogGoods.code,
               (g) => ({ ...g, status: 'active', listings: [l, ...g.listings] }),
               `已上架：${dialogGoods.name}（${bizMeta[l.type].label} ${l.quantity.toLocaleString()} ${dialogGoods.unit}）`,
+            )
+          }
+        />
+      )}
+      {dialog?.action === 'entrust' && dialogGoods && (
+        <EntrustDialog
+          key={dialogGoods.code}
+          goods={dialogGoods}
+          onClose={() => setDialog(null)}
+          onConfirm={(entrust) =>
+            updateGoods(
+              dialogGoods.code,
+              (g) => ({ ...g, entrust }),
+              `已提交委托：${dialogGoods.name}（${entrust.types.map((t) => bizMeta[t].label).join('/')} ${entrust.quantity.toLocaleString()} ${dialogGoods.unit}，待 ${entrust.provider} 受理）`,
             )
           }
         />

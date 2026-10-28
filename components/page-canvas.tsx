@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ShopCreate, ShopInfo } from '@/components/shop-info'
 import { GoodsList } from '@/components/goods-list'
 import { GoodsPublish } from '@/components/goods-publish'
+import { ProviderGoods } from '@/components/provider-goods'
 import type { MenuNode } from '@/lib/menu'
 
 type Props = {
@@ -199,6 +200,8 @@ export function PageCanvas({ path, onNavigate }: Props) {
           onBack={() => onNavigate('seller-goods-list')}
           onSubmitted={() => onNavigate('seller-goods-list')}
         />
+      ) : node.id === 'provider-goods' ? (
+        <ProviderGoods key={node.id} />
       ) : isHub ? (
         <HubLayout node={node} onNavigate={onNavigate} />
       ) : node.id === 'ops-dashboard' ? (

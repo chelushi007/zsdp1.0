@@ -81,10 +81,10 @@ export const menuTree: MenuNode[] = [
     children: [
       { id: 'provider-dashboard', label: '我的工作台', description: '服务商概览：受托商品、服务订单、佣金结算' },
       {
-        id: 'provider-entrust',
-        label: '委托商品管理',
+        id: 'provider-goods',
+        label: '商品管理',
         emphasized: true,
-        description: '接收商家委托的商品，代为出租/销售与维护',
+        description: '受理商家委托的商品，在底价基础上加价上架、代为出售与出租',
       },
       ...workbenchCommon('provider', '服务商'),
     ],
