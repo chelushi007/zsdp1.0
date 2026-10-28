@@ -37,6 +37,13 @@ type ProviderListing = {
   minOrder?: number
   quantity: number
   used: number
+  listedAt: string
+}
+
+function nowStamp() {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
 /** 受托商品：一条记录只对应一种委托方式（出售或出租），同一商品同时委托租售时拆为两条 */
@@ -54,7 +61,10 @@ type EntrustedGoods = {
   basePrice: number
   /** 出租押金（仅出租） */
   deposit?: number
+  /** 商家发起委托的时间 */
   entrustedAt: string
+  /** 服务商受理的时间，未受理 / 已退回时为空 */
+  acceptedAt?: string
   status: EntrustStatus
   statusNote?: string
   listings: ProviderListing[]
@@ -75,9 +85,10 @@ const seed: EntrustedGoods[] = [
     basePrice: 10,
     deposit: 3000,
     entrustedAt: '2024-09-18',
+    acceptedAt: '2024-09-19 09:40',
     status: 'listed',
     listings: [
-      { id: 'PL240920001', type: 'rent', status: 'on', basePrice: 10, markupMode: 'percent', markupValue: 15, price: 11.5, period: '天', deposit: 3000, minDays: 180, quantity: 100, used: 62 },
+      { id: 'PL240920001', listedAt: '2024-09-20 10:30', type: 'rent', status: 'on', basePrice: 10, markupMode: 'percent', markupValue: 15, price: 11.5, period: '天', deposit: 3000, minDays: 180, quantity: 100, used: 62 },
     ],
     updatedAt: '2024-10-21 14:30',
   },
@@ -93,9 +104,10 @@ const seed: EntrustedGoods[] = [
     quantity: 1500,
     basePrice: 175,
     entrustedAt: '2024-09-25',
+    acceptedAt: '2024-09-26 11:00',
     status: 'listed',
     listings: [
-      { id: 'PL240928001', type: 'sale', status: 'on', basePrice: 175, markupMode: 'percent', markupValue: 12, price: 196, minOrder: 50, quantity: 1200, used: 340 },
+      { id: 'PL240928001', listedAt: '2024-09-28 14:05', type: 'sale', status: 'on', basePrice: 175, markupMode: 'percent', markupValue: 12, price: 196, minOrder: 50, quantity: 1200, used: 340 },
     ],
     updatedAt: '2024-10-22 11:20',
   },
@@ -145,6 +157,7 @@ const seed: EntrustedGoods[] = [
     basePrice: 0.02,
     deposit: 25,
     entrustedAt: '2024-10-24',
+    acceptedAt: '2024-10-25 09:05',
     status: 'accepted',
     listings: [],
     updatedAt: '2024-10-25 09:05',
@@ -161,10 +174,11 @@ const seed: EntrustedGoods[] = [
     quantity: 600,
     basePrice: 320,
     entrustedAt: '2024-08-02',
+    acceptedAt: '2024-08-03 15:20',
     status: 'off',
     statusNote: '商家调整供货价，暂停销售',
     listings: [
-      { id: 'PL240805001', type: 'sale', status: 'off', basePrice: 320, markupMode: 'fixed', markupValue: 45, price: 365, minOrder: 20, quantity: 600, used: 210 },
+      { id: 'PL240805001', listedAt: '2024-08-05 09:15', type: 'sale', status: 'off', basePrice: 320, markupMode: 'fixed', markupValue: 45, price: 365, minOrder: 20, quantity: 600, used: 210 },
     ],
     updatedAt: '2024-10-02 08:50',
   },
@@ -198,6 +212,7 @@ const seed: EntrustedGoods[] = [
     basePrice: 30,
     deposit: 5000,
     entrustedAt: '2024-07-15',
+    acceptedAt: '2024-07-16 15:40',
     status: 'accepted',
     listings: [],
     updatedAt: '2024-07-16 15:40',
@@ -384,7 +399,7 @@ function ListDialog({ goods, onClose, onConfirm }: { goods: EntrustedGoods; onCl
   const submit = () => {
     if (!ok) return
     const id = `PL${new Date().toISOString().slice(2, 10).replace(/-/g, '')}${String(goods.listings.length + 1).padStart(3, '0')}`
-    const common = { id, type, status: 'on' as const, basePrice: base, markupMode, markupValue: markup, price, quantity: qty, used: 0 }
+    const common = { id, listedAt: nowStamp(), type, status: 'on' as const, basePrice: base, markupMode, markupValue: markup, price, quantity: qty, used: 0 }
     onConfirm(
       type === 'sale'
         ? { ...common, minOrder: minOrder ? Number(minOrder) : undefined }
@@ -563,8 +578,8 @@ function Actions({ goods, onAction }: { goods: EntrustedGoods; onAction: (a: Act
   return <span className="flex flex-wrap items-center gap-x-3 gap-y-1">{map[goods.status]}</span>
 }
 
-const columns = '36px 100px minmax(130px,1.3fr) minmax(100px,1fr) 64px 112px 84px 76px 76px 72px 96px minmax(120px,1fr)'
-const listingColumns = '120px 72px minmax(140px,1fr) minmax(150px,1fr) 100px 80px 120px'
+const columns = '36px 100px minmax(130px,1.3fr) minmax(100px,1fr) 64px 112px 84px 84px 76px 76px 72px 96px minmax(120px,1fr)'
+const listingColumns = '120px 128px 72px minmax(140px,1fr) minmax(150px,1fr) 100px 80px 120px'
 
 /** 上架记录：出售行显示起订量，出租行显示押金与最短租期，仅展示对外价格 */
 function ListingTable({ goods }: { goods: EntrustedGoods }) {
@@ -580,6 +595,7 @@ function ListingTable({ goods }: { goods: EntrustedGoods }) {
         style={{ gridTemplateColumns: listingColumns }}
       >
         <span>上架单号</span>
+        <span>上架时间</span>
         <span>租售方式</span>
         <span>{isRent ? '对外租金' : '对外售价'}</span>
         <span>{isRent ? '押金 / 最短租期' : '起订量'}</span>
@@ -597,6 +613,7 @@ function ListingTable({ goods }: { goods: EntrustedGoods }) {
             style={{ gridTemplateColumns: listingColumns }}
           >
             <span className="font-mono text-xs text-muted-foreground">{l.id}</span>
+            <span className="font-mono text-xs text-muted-foreground">{l.listedAt}</span>
             <Tag className={bizMeta[l.type].className}>{bizMeta[l.type].label}</Tag>
             <span className="tabular-nums">
               ¥ {fmtPrice(l.price)} {suffix}
@@ -625,8 +642,9 @@ function ListingTable({ goods }: { goods: EntrustedGoods }) {
   )
 }
 
-type Filters = { keyword: string; seller: string; type: BizType | ''; status: EntrustStatus | '' }
-const emptyFilters: Filters = { keyword: '', seller: '', type: '', status: '' }
+/** status 仅由列表上方的状态页签控制，不再出现在条件区 */
+type Filters = { keyword: string; seller: string; type: BizType | ''; status: EntrustStatus | ''; from: string; to: string }
+const emptyFilters: Filters = { keyword: '', seller: '', type: '', status: '', from: '', to: '' }
 
 function matches(g: EntrustedGoods, f: Filters) {
   const kw = f.keyword.trim().toLowerCase()
@@ -634,8 +652,12 @@ function matches(g: EntrustedGoods, f: Filters) {
   if (f.seller && g.seller !== f.seller) return false
   if (f.type && g.type !== f.type) return false
   if (f.status && g.status !== f.status) return false
+  if (f.from && g.entrustedAt < f.from) return false
+  if (f.to && g.entrustedAt > f.to) return false
   return true
 }
+
+const DATE_INPUT = 'h-9 min-w-0 flex-1 rounded border border-border bg-background px-2 text-sm text-foreground'
 
 function FilterRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -657,13 +679,8 @@ export function ProviderGoods() {
   const sellers = Array.from(new Set(goods.map((g) => g.seller)))
   const dialogGoods = dialog ? goods.find((g) => g.id === dialog.id) : undefined
 
-  const now = () => {
-    const d = new Date()
-    const p = (n: number) => String(n).padStart(2, '0')
-    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
-  }
   const update = (id: string, patch: (g: EntrustedGoods) => EntrustedGoods, message: string) => {
-    setGoods((list) => list.map((g) => (g.id === id ? { ...patch(g), updatedAt: now() } : g)))
+    setGoods((list) => list.map((g) => (g.id === id ? { ...patch(g), updatedAt: nowStamp() } : g)))
     setDialog(null)
     setToast(message)
     window.setTimeout(() => setToast(null), 2500)
@@ -679,7 +696,6 @@ export function ProviderGoods() {
   const toggle = (id: string) => setExpanded((e) => ({ ...e, [id]: !e[id] }))
 
   const typeLabel = draft.type ? bizMeta[draft.type].label : ''
-  const statusLabel = draft.status ? statusMeta[draft.status].label : ''
 
   return (
     <div className="flex flex-col gap-4">
@@ -706,13 +722,23 @@ export function ProviderGoods() {
               onChange={(l) => setDraft({ ...draft, type: l === '出售' ? 'sale' : l === '出租' ? 'rent' : '' })}
             />
           </FilterRow>
-          <FilterRow label="状态">
-            <Select
-              label="状态"
-              placeholder="全部"
-              value={statusLabel}
-              options={statusOrder.map((s) => statusMeta[s].label)}
-              onChange={(l) => setDraft({ ...draft, status: statusOrder.find((s) => statusMeta[s].label === l) ?? '' })}
+          <FilterRow label="委托时间">
+            <input
+              type="date"
+              aria-label="委托开始日期"
+              value={draft.from}
+              max={draft.to || undefined}
+              onChange={(e) => setDraft({ ...draft, from: e.target.value })}
+              className={DATE_INPUT}
+            />
+            <span className="text-xs text-muted-foreground">至</span>
+            <input
+              type="date"
+              aria-label="委托结束日期"
+              value={draft.to}
+              min={draft.from || undefined}
+              onChange={(e) => setDraft({ ...draft, to: e.target.value })}
+              className={DATE_INPUT}
             />
           </FilterRow>
         </div>
@@ -756,7 +782,7 @@ export function ProviderGoods() {
         </div>
 
         <div className="overflow-x-auto">
-          <div className="min-w-[1080px]">
+          <div className="min-w-[1180px]">
             <div
               className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2.5 text-xs font-medium text-muted-foreground"
               style={{ gridTemplateColumns: columns }}
@@ -767,6 +793,7 @@ export function ProviderGoods() {
               <span>委托方</span>
               <span>委托方式</span>
               <span>商家底价</span>
+              <span>委托时间</span>
               <span>受托时间</span>
               <span>受托数量</span>
               <span>上架数量</span>
@@ -824,6 +851,16 @@ export function ProviderGoods() {
                       )}
                     </span>
                     <span className="font-mono text-xs text-muted-foreground">{g.entrustedAt}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {g.acceptedAt ? (
+                        <span className="flex flex-col leading-4">
+                          <span>{g.acceptedAt.slice(0, 10)}</span>
+                          <span className="text-[11px]">{g.acceptedAt.slice(11)}</span>
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </span>
                     <span className="tabular-nums">
                       {g.quantity.toLocaleString()} {g.unit}
                     </span>
@@ -865,7 +902,9 @@ export function ProviderGoods() {
         <AcceptDialog
           goods={dialogGoods}
           onClose={() => setDialog(null)}
-          onConfirm={() => update(dialogGoods.id, (g) => ({ ...g, status: 'accepted', statusNote: undefined }), `已受理：${dialogGoods.name}，可加价上架`)}
+          onConfirm={() =>
+            update(dialogGoods.id, (g) => ({ ...g, status: 'accepted', acceptedAt: nowStamp(), statusNote: undefined }), `已受理：${dialogGoods.name}，可加价上架`)
+          }
         />
       )}
       {dialog?.action === 'return' && dialogGoods && (
