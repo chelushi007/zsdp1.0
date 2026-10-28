@@ -24,10 +24,12 @@ import {
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { RegionCascader, Select, Tip, categoryTree, regionTree, type Region } from '@/components/shop-form-fields'
+import { MaterialPicker } from '@/components/material-picker'
+import { GoodsDetailTable, lineComplete, newGoodsLine, type GoodsLine } from '@/components/goods-detail-table'
+import { categoryName, type Material } from '@/lib/materials-data'
 
 /* ---------- 基础数据 ---------- */
 
-const UNITS = ['张', '件', '套', '根', '米', '吨', '平方米', '块']
 const CONDITIONS = ['全新', '九成新', '八成新', '七成新及以下']
 const SHOPS = ['华东建设工程有限公司周转材料店', '苏州分公司模板租赁店', '杭州分公司脚手架专营店']
 const RENT_PERIODS = ['天', '月'] as const
@@ -724,8 +726,6 @@ function BizCard({
 export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSubmitted?: () => void }) {
   const [name, setName] = useState('')
   const [subCategory, setSubCategory] = useState('')
-  const [spec, setSpec] = useState('')
-  const [unit, setUnit] = useState('')
   const [brand, setBrand] = useState('')
   const [condition, setCondition] = useState('')
   const [shop, setShop] = useState(SHOPS[0])
@@ -733,12 +733,11 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const [region, setRegion] = useState<Region>(EMPTY_REGION)
   const [address, setAddress] = useState('')
 
-  const [stock, setStock] = useState('')
+  const [lines, setLines] = useState<GoodsLine[]>([])
+  const [pickerOpen, setPickerOpen] = useState(false)
   const [warnStock, setWarnStock] = useState('')
 
   const [saleOn, setSaleOn] = useState(true)
-  const [salePrice, setSalePrice] = useState('')
-  const [minOrder, setMinOrder] = useState('')
   const [taxRate, setTaxRate] = useState('13%')
   const [negotiable, setNegotiable] = useState(false)
   const [salePayTerm, setSalePayTerm] = useState<PayTerm>('先款后货')
@@ -746,8 +745,6 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const [rentOn, setRentOn] = useState(false)
   const [rentPeriod, setRentPeriod] = useState<RentPeriod>('天')
   const [rentPayTerm, setRentPayTerm] = useState<PayTerm>('先款后货')
-  const [rentPrice, setRentPrice] = useState('')
-  const [deposit, setDeposit] = useState('')
   const [minDays, setMinDays] = useState('')
   const [maxDays, setMaxDays] = useState('')
   const [rentTaxRate, setRentTaxRate] = useState('13%')
@@ -799,13 +796,32 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
   const updateFreight = (patch: Partial<FreightRule>) => setFreight((f) => ({ ...f, ...patch }))
   const num = (v: string) => (v === '' ? NaN : Number(v))
 
-  const unitLabel = unit || '单位'
+  const addMaterials = (list: Material[]) => {
+    setLines((prev) => [...prev, ...list.filter((m) => !prev.some((l) => l.material.code === m.code)).map((m) => newGoodsLine(m, saleOn, rentOn))])
+    // 明细为空时按首个物料自动带出品类
+    if (!subCategory && list[0]) setSubCategory(categoryName(list[0].categoryCode))
+    setPickerOpen(false)
+  }
+  const toggleSale = (on: boolean) => {
+    setSaleOn(on)
+    if (on) setLines((prev) => prev.map((l) => ({ ...l, saleOn: true })))
+  }
+  const toggleRent = (on: boolean) => {
+    setRentOn(on)
+    if (on) setLines((prev) => prev.map((l) => ({ ...l, rentOn: true })))
+  }
+
+  const unitLabel = lines[0]?.material.unit ?? '单位'
   const bizSelected = saleOn || rentOn
-  const saleOk = !saleOn || Number(salePrice) > 0
-  const rentOk = !rentOn || (Number(rentPrice) > 0 && Number(deposit) >= 0 && Number(minDays) > 0)
+  const incompleteLines = lines.filter((l) => !lineComplete(l, saleOn, rentOn)).length
+  const linesOk = lines.length > 0 && incompleteLines === 0
+  const saleLines = saleOn ? lines.filter((l) => l.saleOn).length : 0
+  const rentLines = rentOn ? lines.filter((l) => l.rentOn).length : 0
+  const saleOk = !saleOn || saleLines > 0
+  const rentOk = !rentOn || (rentLines > 0 && Number(minDays) > 0)
+  const totalStock = lines.reduce((sum, l) => sum + (Number(l.stock) || 0), 0)
   const regionOk = Boolean(region.province && region.city && region.district) && address.trim().length > 0
-  const basicOk =
-    name.trim().length > 0 && subCategory && spec.trim().length > 0 && unit && images > 0 && Number(stock) > 0 && regionOk
+  const basicOk = name.trim().length > 0 && subCategory && images > 0 && regionOk
   const freightOk =
     freight.mode === '包邮' ||
     freight.mode === '到付' ||
@@ -816,18 +832,24 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
       num(freight.base) >= 0 &&
       num(freight.addQty) > 0 &&
       num(freight.addFee) >= 0)
-  const canSubmit = agreed && basicOk && bizSelected && saleOk && rentOk && freightOk
+  const canSubmit = agreed && basicOk && linesOk && bizSelected && saleOk && rentOk && freightOk
 
   const blocker = !basicOk
     ? !regionOk
       ? '请选择商品所在地并填写具体地址'
-      : '请完善基本信息（名称、品类、规格、单位、主图、库存）'
+      : '请完善基本信息（名称、品类、主图）'
     : !bizSelected
       ? '请至少启用一种运营方式'
-      : !saleOk
-        ? '请填写出售单价'
-        : !rentOk
-          ? '请填写租金单价、押金与最短租期'
+      : lines.length === 0
+        ? '请添加至少一条商品明细'
+        : incompleteLines > 0
+          ? `还有 ${incompleteLines} 条明细未填写完整（库存、起订量及已启用方式的价格）`
+          : !saleOk
+            ? '已启用出售，但没有任何明细勾选「可售」'
+            : !rentOk
+              ? rentLines === 0
+                ? '已启用出租，但没有任何明细勾选「可租」'
+                : '请填写最短租期'
           : !freightOk
             ? '请完善运费设置'
             : !agreed
@@ -849,6 +871,8 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
       </div>
 
       <PublishFlow />
+
+      {pickerOpen && <MaterialPicker excludeCodes={lines.map((l) => l.material.code)} onConfirm={addMaterials} onClose={() => setPickerOpen(false)} />}
 
       {banManagerOpen && (
         <BanTemplateManager
@@ -886,12 +910,6 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
               <Field label="所属店铺" required>
                 <Select label="所属店铺" placeholder="请选择店铺" value={shop} options={SHOPS} onChange={setShop} />
               </Field>
-              <Field label="规格型号" required>
-                <TextInput value={spec} onChange={setSpec} placeholder="如：915×1830×15mm" />
-              </Field>
-              <Field label="计量单位" required>
-                <Select label="计量单位" placeholder="请选择单位" value={unit} options={UNITS} onChange={setUnit} />
-              </Field>
               <Field label="品牌 / 厂家">
                 <TextInput value={brand} onChange={setBrand} placeholder="选填，如：鲁班建材" />
               </Field>
@@ -907,36 +925,41 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
             </div>
           </Section>
 
-          <Section title="库存信息">
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="总库存" required hint="商品实物数量，出售与出租共用">
-                <TextInput type="number" value={stock} onChange={setStock} placeholder="0" suffix={unitLabel} />
-              </Field>
-              <Field label="库存预警值" hint="低于该值时列表标记为紧张">
-                <TextInput type="number" value={warnStock} onChange={setWarnStock} placeholder="选填" suffix={unitLabel} />
-              </Field>
+          <Section
+            title="商品明细"
+            extra={
+              <span className="text-xs text-muted-foreground">
+                {lines.length > 0 ? `${lines.length} 个规格 · 总库存 ${totalStock.toLocaleString('zh-CN')}` : '同品类可添加多个规格型号'}
+              </span>
+            }
+          >
+            <div className="flex flex-col gap-4">
+              <GoodsDetailTable lines={lines} saleOn={saleOn} rentOn={rentOn} rentPeriod={rentPeriod} onChange={setLines} onAdd={() => setPickerOpen(true)} />
+              <div className="grid gap-4 md:grid-cols-2">
+                <Field label="库存预警值" hint="任一规格库存低于该值时列表标记为紧张">
+                  <TextInput type="number" value={warnStock} onChange={setWarnStock} placeholder="选填" />
+                </Field>
+              </div>
             </div>
           </Section>
 
           <Section
             title="运营方式"
-            extra={<span className="text-xs text-muted-foreground">可同时启用，每种方式提交后生成一条上架记录</span>}
+            extra={<span className="text-xs text-muted-foreground">可同时启用；此处为该方式的通用规则，单价、押金在「商品明细」中按规格逐行填写</span>}
           >
             <div className="flex flex-col gap-3">
+              <Tip>
+                运营方式与商品明细的对应关系：启用一种方式后，明细表出现该方式的价格列，并可按行勾选「可售 / 可租」；未勾选的规格不会生成该方式的上架记录。
+                税率、结算方式、议价、租期等规则对该方式下所有规格统一生效。
+              </Tip>
               <BizCard
                 enabled={saleOn}
-                onToggle={setSaleOn}
+                onToggle={toggleSale}
                 icon={<ShoppingCart className="size-4" aria-hidden />}
                 title="出售"
-                description="按单价一次性售出，库存随成交扣减"
+                description={saleOn ? `按含税销售单价一次性售出，库存随成交扣减 · 已有 ${saleLines}/${lines.length} 个规格可售` : '按单价一次性售出，库存随成交扣减'}
                 tone="blue"
               >
-                <Field label="销售单价" required>
-                  <TextInput type="number" value={salePrice} onChange={setSalePrice} placeholder="0.00" prefix="¥" suffix={`/ ${unitLabel}`} />
-                </Field>
-                <Field label="起订量">
-                  <TextInput type="number" value={minOrder} onChange={setMinOrder} placeholder="不限" suffix={unitLabel} />
-                </Field>
                 <Field label="税率" required hint="选择「不含税」则价格为不含税报价">
                   <Select label="出售税率" placeholder="请选择税率" value={taxRate} options={TAX_RATES} onChange={setTaxRate} />
                 </Field>
@@ -953,27 +976,14 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
 
               <BizCard
                 enabled={rentOn}
-                onToggle={setRentOn}
+                onToggle={toggleRent}
                 icon={<Timer className="size-4" aria-hidden />}
                 title="出租"
-                description="按天或按月计租，归还后库存回收"
+                description={rentOn ? `按${rentPeriod}计租，归还后库存回收 · 已有 ${rentLines}/${lines.length} 个规格可租，租金与押金在明细中按规格填写` : '按天或按月计租，归还后库存回收'}
                 tone="green"
               >
-                <Field label="计租周期" required>
+                <Field label="计租周期" required hint="切换后明细中租金单价按新周期计">
                   <RadioGroup label="计租周期" value={rentPeriod} options={RENT_PERIODS} onChange={setRentPeriod} />
-                </Field>
-                <Field label="租金单价" required>
-                  <TextInput
-                    type="number"
-                    value={rentPrice}
-                    onChange={setRentPrice}
-                    placeholder="0.00"
-                    prefix="¥"
-                    suffix={`/ ${unitLabel} / ${rentPeriod}`}
-                  />
-                </Field>
-                <Field label="押金" required hint="归还验收合格后退还">
-                  <TextInput type="number" value={deposit} onChange={setDeposit} placeholder="0.00" prefix="¥" suffix={`/ ${unitLabel}`} />
                 </Field>
                 <Field label="最短租期" required>
                   <TextInput type="number" value={minDays} onChange={setMinDays} placeholder="0" suffix={rentPeriod} />
