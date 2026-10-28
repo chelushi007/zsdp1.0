@@ -39,7 +39,7 @@ export type PayTerm = "先款后货" | "货到付款";
 export type ReconcileState = "待对账" | "已对账" | "免对账";
 
 export type StatementState = "待确认" | "已确认" | "有异议";
-/** 对账周期类型：一次性全量对账，或按月 / 按季度分期对账 */
+/** 对账方式：一次性（全部数量一次对账）或按月 / 按季度分期对账 */
 export type StatementCycle = "一次性" | "按月" | "按季度";
 export const statementCycles: StatementCycle[] = ["一次性", "按月", "按季度"];
 

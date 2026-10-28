@@ -64,11 +64,11 @@ function defaultPeriod(cycle: StatementCycle) {
   const [y, m] = TODAY.split("-").map(Number);
   if (cycle === "按月") return `${y}-${String(m).padStart(2, "0")} 月度对账`;
   if (cycle === "按季度") return `${y} 年第 ${Math.ceil(m / 3)} 季度对账`;
-  return `${TODAY} 全量对账`;
+  return `${TODAY} 一次性对账`;
 }
 
 const cycleHint: Record<StatementCycle, string> = {
-  一次性: "全量对账：默认按订单全部未对账数量生成",
+  一次性: "一次性对账：按订单全部未对账数量一次对账，不分期",
   按月: "按月分期：默认带入本月未对账数量，可按实际到货调整",
   按季度: "按季度分期：默认带入本季度未对账数量，可按实际到货调整",
 };
@@ -103,7 +103,7 @@ function StatementHistory({
           <span>期数</span>
           <span>对账单号</span>
           <span className="text-right">对账金额</span>
-          <span>对账周期</span>
+          <span>对账方式</span>
           <span>对账商品</span>
           <span>创建时间</span>
           <span>状态</span>
@@ -116,7 +116,9 @@ function StatementHistory({
               className="grid items-start gap-x-3 px-4 py-3 text-sm"
               style={{ gridTemplateColumns: cols }}
             >
-              <span className="tabular-nums">第 {s.seq} 期</span>
+              <span className="tabular-nums">
+                {s.cycle === "一次性" ? "一次性" : `第 ${s.seq} 期`}
+              </span>
               <span className="flex min-w-0 flex-col">
                 <span className="truncate font-mono text-xs">{s.no}</span>
                 {s.attachment && (
@@ -214,10 +216,13 @@ function StatementLinesEditor({
   rows,
   qty,
   onChange,
+  readOnly,
 }: {
   rows: LineRow[];
   qty: Record<string, string>;
   onChange: (code: string, v: string) => void;
+  /** 一次性对账时数量固定为全部剩余，不可编辑 */
+  readOnly?: boolean;
 }) {
   const cols = "minmax(190px,1.6fr) 96px 96px 96px 132px 118px";
   const total = rows.reduce(
@@ -280,10 +285,11 @@ function StatementLinesEditor({
                     max={r.remain}
                     value={qty[r.code] ?? ""}
                     onChange={(e) => onChange(r.code, e.target.value)}
-                    disabled={r.remain === 0}
+                    disabled={r.remain === 0 || readOnly}
                     className={cn(
                       INPUT_CLS,
                       "h-8 w-24 text-right tabular-nums disabled:bg-muted/40 disabled:text-muted-foreground",
+                      readOnly && "disabled:text-foreground",
                       over && "border-red-400 focus:border-red-400",
                     )}
                   />
@@ -389,6 +395,9 @@ export function SaleReconcilePage({
     Object.fromEntries(rows.map((r) => [r.code, String(r.remain)])),
   );
   const [freightIncluded, setFreightIncluded] = useState(seq === 1 || allDone);
+  const oneOff = cycle === "一次性";
+  /** 已发出过分期对账单后，对账方式随首期固定，不可再切换 */
+  const cycleLocked = history.length > 0 && !!latest?.cycle;
   const [note, setNote] = useState("");
   const [attachment, setAttachment] = useState("");
 
@@ -408,9 +417,17 @@ export function SaleReconcilePage({
     (r) => (Number(qty[r.code]) || 0) >= r.remain,
   );
 
+  const fillRemain = () =>
+    setQty(Object.fromEntries(rows.map((r) => [r.code, String(r.remain)])));
+
   const changeCycle = (c: StatementCycle) => {
+    if (cycleLocked) return;
     setCycle(c);
     setPeriod(defaultPeriod(c));
+    if (c === "一次性") {
+      fillRemain();
+      setFreightIncluded(o.freight > 0);
+    }
   };
 
   const resetForm = () => {
@@ -427,8 +444,8 @@ export function SaleReconcilePage({
   const confirmedAmount = confirmed.reduce((s, x) => s + x.amount, 0);
   const summaryRows: [string, React.ReactNode][] = [
     ["对账状态", o.reconcile ?? "—"],
-    ["对账周期", latest?.cycle ?? (creating ? cycle : "—")],
-    ["累计对���期数", `${history.length} 期`],
+    ["对账方式", latest?.cycle ?? (creating ? cycle : "—")],
+    ["累计对账期数", `${history.length} 期`],
     ["买方已确认", `${confirmed.length} 期`],
     [
       "最新对账单",
@@ -460,7 +477,7 @@ export function SaleReconcilePage({
               }}
             >
               <Plus data-icon="inline-start" />
-              创建第 {seq} 期对账单
+              {oneOff && seq === 1 ? "创建对账单" : `创建第 ${seq} 期对账单`}
             </Button>
           ) : null
         }
@@ -472,7 +489,9 @@ export function SaleReconcilePage({
 
           {creating && (
             <Card
-              title={`创建对账单 · 第 ${seq} 期`}
+              title={
+                oneOff ? "创建对账单 · 一次性对账" : `创建对账单 · 第 ${seq} 期`
+              }
               extra={
                 <span className="flex items-center gap-2 text-xs text-muted-foreground">
                   {confirmed.length > 0 && (
@@ -496,10 +515,18 @@ export function SaleReconcilePage({
               )}
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <DialogField label="对账周期" required hint={cycleHint[cycle]}>
+                <DialogField
+                  label="对账方式"
+                  required
+                  hint={
+                    cycleLocked
+                      ? `首期已按「${cycle}」对账，后续各期沿用该方式`
+                      : cycleHint[cycle]
+                  }
+                >
                   <div
                     role="radiogroup"
-                    aria-label="对账周期"
+                    aria-label="对账方式"
                     className="grid grid-cols-3 gap-2"
                   >
                     {statementCycles.map((c) => (
@@ -508,12 +535,16 @@ export function SaleReconcilePage({
                         type="button"
                         role="radio"
                         aria-checked={cycle === c}
+                        disabled={cycleLocked && cycle !== c}
                         onClick={() => changeCycle(c)}
                         className={cn(
                           "h-9 rounded border text-sm transition-colors",
                           cycle === c
                             ? "border-[#1890ff] bg-[#1890ff]/5 font-medium text-[#1890ff]"
                             : "border-border bg-background text-muted-foreground hover:border-[#1890ff]/50 hover:text-foreground",
+                          cycleLocked &&
+                            cycle !== c &&
+                            "cursor-not-allowed opacity-50 hover:border-border hover:text-muted-foreground",
                         )}
                       >
                         {c}
@@ -521,21 +552,31 @@ export function SaleReconcilePage({
                     ))}
                   </div>
                 </DialogField>
-                <DialogField
-                  label="所属期 / 范围"
-                  required
-                  hint={
-                    cycle === "一次性"
-                      ? "一次性对账可填写日期或批次"
-                      : "按所选周期自动带出，可手动修改"
-                  }
-                >
-                  <DialogInput
-                    label="所属期"
-                    value={period}
-                    onChange={setPeriod}
-                  />
-                </DialogField>
+                {oneOff ? (
+                  <DialogField
+                    label="对账范围"
+                    hint="一次性对账覆盖订单全部商品数量，无需分期"
+                  >
+                    <div className="flex h-9 items-center justify-between rounded border border-border bg-muted/40 px-3 text-sm">
+                      <span className="text-xs text-muted-foreground">
+                        全部未对账数量
+                      </span>
+                      <span className="tabular-nums">{period}</span>
+                    </div>
+                  </DialogField>
+                ) : (
+                  <DialogField
+                    label="所属期 / 范围"
+                    required
+                    hint="按所选方式自动带出，可手动修改"
+                  >
+                    <DialogInput
+                      label="所属期"
+                      value={period}
+                      onChange={setPeriod}
+                    />
+                  </DialogField>
+                )}
               </div>
 
               <div className="flex flex-col gap-2">
@@ -543,39 +584,38 @@ export function SaleReconcilePage({
                   <span className="text-sm font-medium">
                     商品明细{" "}
                     <span className="text-xs font-normal text-muted-foreground">
-                      （{rows.length} 项，本次对账数量可编辑）
+                      {oneOff
+                        ? `（${rows.length} 项，一次性对账按全部剩余数量）`
+                        : `（${rows.length} 项，本次对账数量可编辑）`}
                     </span>
                   </span>
-                  <div className="flex items-center gap-3 text-xs">
-                    <button
-                      type="button"
-                      className="text-[#1890ff] hover:underline"
-                      onClick={() =>
-                        setQty(
-                          Object.fromEntries(
-                            rows.map((r) => [r.code, String(r.remain)]),
-                          ),
-                        )
-                      }
-                    >
-                      填入全部剩余
-                    </button>
-                    <button
-                      type="button"
-                      className="text-muted-foreground hover:text-foreground"
-                      onClick={() =>
-                        setQty(
-                          Object.fromEntries(rows.map((r) => [r.code, "0"])),
-                        )
-                      }
-                    >
-                      清零
-                    </button>
-                  </div>
+                  {!oneOff && (
+                    <div className="flex items-center gap-3 text-xs">
+                      <button
+                        type="button"
+                        className="text-[#1890ff] hover:underline"
+                        onClick={fillRemain}
+                      >
+                        填入全部剩余
+                      </button>
+                      <button
+                        type="button"
+                        className="text-muted-foreground hover:text-foreground"
+                        onClick={() =>
+                          setQty(
+                            Object.fromEntries(rows.map((r) => [r.code, "0"])),
+                          )
+                        }
+                      >
+                        清零
+                      </button>
+                    </div>
+                  )}
                 </div>
                 <StatementLinesEditor
                   rows={rows}
                   qty={qty}
+                  readOnly={oneOff}
                   onChange={(code, v) => setQty((q) => ({ ...q, [code]: v }))}
                 />
               </div>
@@ -584,9 +624,11 @@ export function SaleReconcilePage({
                 <DialogField
                   label="运费"
                   hint={
-                    o.freight
-                      ? "运费只计入一期，默认首期收取，末期可勾选补收"
-                      : "本订单免运费"
+                    !o.freight
+                      ? "本订单免运费"
+                      : oneOff
+                        ? "一次性对账将运费一并计入"
+                        : "运费只计入一期，默认首期收取，末期可勾选补收"
                   }
                 >
                   <label
@@ -602,7 +644,7 @@ export function SaleReconcilePage({
                         type="checkbox"
                         className="accent-[#1890ff]"
                         checked={freightIncluded && o.freight > 0}
-                        disabled={!o.freight}
+                        disabled={!o.freight || oneOff}
                         onChange={(e) => setFreightIncluded(e.target.checked)}
                       />
                       本期计入运费
@@ -613,7 +655,7 @@ export function SaleReconcilePage({
                   </label>
                 </DialogField>
                 <DialogField
-                  label="本期对账金额"
+                  label={oneOff ? "对账金额" : "本期对账金额"}
                   hint={`货款 ${fmtMoney(goodsTotal)}${freightPart ? ` + 运费 ${fmtMoney(freightPart)}` : ""}`}
                 >
                   <div className="flex h-9 items-center justify-between rounded border border-border bg-muted/40 px-3 text-sm">
@@ -685,6 +727,8 @@ export function SaleReconcilePage({
                     <span className="text-red-600">
                       存在超出剩余可对账数量的商品，请调整
                     </span>
+                  ) : oneOff ? (
+                    "一次性对账：发送后订单商品全部对账完毕，不再分期"
                   ) : isLastPeriod ? (
                     "本期对账后订单商品将全部对账完毕"
                   ) : (
@@ -718,7 +762,9 @@ export function SaleReconcilePage({
                       setCreating(false);
                     }}
                   >
-                    发送第 {seq} 期对账单给买方
+                    {oneOff
+                      ? "发送对账单给买方"
+                      : `发送第 ${seq} 期对账单给买方`}
                   </Button>
                 </span>
               </div>
@@ -758,7 +804,11 @@ export function SaleReconcilePage({
               </div>
               <div className="flex items-baseline justify-between">
                 <span className="text-xs text-muted-foreground">
-                  {creating ? `本期（第 ${seq} 期）对账金额` : "最新对账金额"}
+                  {creating
+                    ? oneOff
+                      ? "本次对账金额"
+                      : `本期（第 ${seq} 期）对账金额`
+                    : "最新对账金额"}
                 </span>
                 <span className="text-lg font-semibold tabular-nums">
                   {fmtMoney(creating ? amountNum : (latest?.amount ?? 0))}

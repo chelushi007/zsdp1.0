@@ -286,7 +286,7 @@ function StatementTab({ o }: { o: SaleOrder }) {
                 </span>,
               ],
               [
-                "对账周期",
+                "对账方式",
                 s.cycle ? `${s.cycle} · ${s.period ?? "—"}` : (s.period ?? "—"),
               ],
               ...(s.lines?.length
