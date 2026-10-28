@@ -844,14 +844,19 @@ export function ProviderGoods() {
 
             {visible.length === 0 && <p className="px-4 py-12 text-center text-sm text-muted-foreground">没有符合筛选条件的受托商品</p>}
 
-            {groupBySpec(visible).map(({ item: g, first, size }) => {
+            {groupBySpec(visible).map(({ item: g, first, last, size }) => {
               const open = expanded[g.id] ?? false
               const accept = isAccepted(g) ? acceptMeta.accepted : acceptMeta.pending
               const operation = operationMeta(g)
               return (
                 <Fragment key={g.id}>
                   <div
-                    className={cn('grid items-center gap-3 border-b border-border px-4 py-3 text-sm hover:bg-muted/30', open && 'bg-muted/20', !first && 'border-dashed')}
+                    className={cn(
+                      'grid items-center gap-3 border-b border-border px-4 py-3 text-sm hover:bg-muted/30',
+                      open && 'bg-muted/20',
+                      !last && !open && 'border-b-0',
+                      !first && 'pt-0',
+                    )}
                     style={{ gridTemplateColumns: columns }}
                   >
                     <span className="flex justify-center">
@@ -874,7 +879,7 @@ export function ProviderGoods() {
                       <GroupedName name={g.name} first={first} size={size} />
                       {first && <span className="truncate text-[11px] leading-4 text-muted-foreground">{g.subCategory}</span>}
                     </span>
-                    <span className={cn('truncate text-xs', size > 1 && 'font-medium')} title={g.spec}>
+                    <span className="truncate text-xs" title={g.spec}>
                       {g.spec}
                     </span>
                     <span className="truncate text-xs" title={g.seller}>
