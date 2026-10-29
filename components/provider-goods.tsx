@@ -1473,7 +1473,7 @@ function EntrustDetail({
       {!single && (
         <DetailSection
           title="规格与数量"
-          extra="受理 / 退回按委托单整体操作；上架、编辑、下架按规格操作"
+          extra="受理 / 退回针对整个商品；上架、编辑、下架按规格操作"
           flush
         >
           <div
@@ -1869,16 +1869,11 @@ export function ProviderGoods() {
                                 )}
                             </>
                           ) : (
-                            <>
-                              <span>
-                                {minPrice === maxPrice
-                                  ? `¥ ${fmtPrice(minPrice)}`
-                                  : `¥ ${fmtPrice(minPrice)} ~ ${fmtPrice(maxPrice)}`}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground">
-                                按规格不同
-                              </span>
-                            </>
+                            <span>
+                              {minPrice === maxPrice
+                                ? `¥ ${fmtPrice(minPrice)}`
+                                : `¥ ${fmtPrice(minPrice)} ~ ${fmtPrice(maxPrice)}`}
+                            </span>
                           )}
                         </span>
                         <span className="font-mono text-xs text-muted-foreground">
