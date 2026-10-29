@@ -12,25 +12,20 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  addEntrusts,
+  entrustStatusLabel,
+  nextEntrustId,
+  removeEntrust,
+  useEntrusts,
+  type EntrustLine,
+  type EntrustRecord,
+  type EntrustStatus,
+} from "@/lib/entrust-store";
 import { Select, categoryTree } from "@/components/shop-form-fields";
 
 export type BizType = "sale" | "rent";
 type ListingStatus = "on" | "off";
-
-/** 委托给服务商代为运营的信息 */
-export type Entrust = {
-  types: BizType[];
-  provider: string;
-  quantity: number;
-  /** 商家底价：出售按单位计，出租按单位 / 天计 */
-  salePrice?: number;
-  rentPrice?: number;
-  rentDeposit?: number;
-  /** 委托期限（月） */
-  months: number;
-  status: "pending" | "accepted";
-  createdAt: string;
-};
 
 /** 上架记录：一个商品可多次上架，每条记录对应一种租售方式 */
 type Listing = {
@@ -79,7 +74,6 @@ type Goods = {
   /** 违规下架 / 审核驳回的原因说明 */
   statusNote?: string;
   listings: Listing[];
-  entrust?: Entrust;
   createdAt: string;
   updatedAt: string;
 };
@@ -189,16 +183,6 @@ const goodsData: Goods[] = [
         used: 410,
       },
     ],
-    entrust: {
-      types: ["rent"],
-      provider: "华建周转材料服务有限公司",
-      quantity: 120,
-      rentPrice: 10,
-      rentDeposit: 3000,
-      months: 6,
-      status: "accepted",
-      createdAt: "2024-09-18",
-    },
     createdAt: "2024-04-02 09:05",
     updatedAt: "2024-09-30 11:10",
   },
@@ -358,17 +342,6 @@ const goodsData: Goods[] = [
         used: 160,
       },
     ],
-    entrust: {
-      types: ["sale", "rent"],
-      provider: "中建租赁服务（上海）有限公司",
-      quantity: 800,
-      salePrice: 175,
-      rentPrice: 0.35,
-      rentDeposit: 150,
-      months: 12,
-      status: "pending",
-      createdAt: "2024-10-27",
-    },
     createdAt: "2024-08-21 15:30",
     updatedAt: "2024-10-27 10:15",
   },
@@ -749,32 +722,25 @@ export function ActionLink({
   );
 }
 
-type GoodsAction =
-  | "detail"
-  | "edit"
-  | "list"
-  | "off"
-  | "entrust"
-  | "cancelEntrust";
+type GoodsAction = "detail" | "edit" | "list" | "off" | "entrust";
 
 function GoodsActions({
   goods,
   onAction,
   hideDetail,
+  showEntrust,
 }: {
   goods: Goods;
   onAction: (a: GoodsAction) => void;
   hideDetail?: boolean;
+  /** 委托以整个商品为单位，仅在商品级操作列显示 */
+  showEntrust?: boolean;
 }) {
   const detailLink = hideDetail ? null : (
     <ActionLink onClick={() => onAction("detail")}>详情</ActionLink>
   );
-  const entrustLink = !goods.entrust ? (
+  const entrustLink = showEntrust ? (
     <ActionLink onClick={() => onAction("entrust")}>委托</ActionLink>
-  ) : goods.entrust.status === "pending" ? (
-    <ActionLink tone="danger" onClick={() => onAction("cancelEntrust")}>
-      撤回委托
-    </ActionLink>
   ) : null;
   const actions: Record<GoodsStatus, React.ReactNode> = {
     draft: (
@@ -827,11 +793,33 @@ function GoodsActions({
 
 /* ---------- 操作弹窗 ---------- */
 
+export function round2(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
 /** 上架中记录占用的库存，调整库存时不可低于该值 */
 function lockedStock(g: Goods) {
   return g.listings
     .filter((l) => l.status === "on")
     .reduce((s, l) => s + l.quantity, 0);
+}
+
+/** 某规格在有效委托单（待受理 / 已受理）中已委托的数量 */
+function entrustedQty(code: string, records: EntrustRecord[]) {
+  return records
+    .filter((r) => r.status !== "returned")
+    .flatMap((r) => r.lines)
+    .filter((l) => l.code === code)
+    .reduce((s, l) => s + l.quantity, 0);
+}
+
+/** 某商品（按名称，含全部规格）的委托单 */
+function entrustsOf(name: string, records: EntrustRecord[]) {
+  return records.filter((r) => r.goodsName === name);
+}
+
+function canEntrust(items: Goods[]) {
+  return items.some((g) => g.status === "active" || g.status === "off");
 }
 
 export function Modal({
@@ -876,7 +864,9 @@ export function Modal({
             <X className="size-4" aria-hidden />
           </button>
         </div>
-        <div className="flex flex-col gap-4 p-5">{children}</div>
+        <div className="flex max-h-[70vh] flex-col gap-4 overflow-y-auto p-5">
+          {children}
+        </div>
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
           {footer}
         </div>
@@ -916,6 +906,7 @@ export function DialogInput({
   prefix,
   suffix,
   type = "text",
+  invalid,
 }: {
   label: string;
   value: string;
@@ -924,12 +915,19 @@ export function DialogInput({
   prefix?: string;
   suffix?: string;
   type?: "text" | "number";
+  invalid?: boolean;
 }) {
   return (
-    <div className="flex h-9 items-center rounded border border-border bg-background text-sm focus-within:border-[#1890ff]">
+    <div
+      className={cn(
+        "flex h-9 items-center rounded border bg-background text-sm focus-within:border-[#1890ff]",
+        invalid ? "border-red-400" : "border-border",
+      )}
+    >
       {prefix && <span className="pl-3 text-muted-foreground">{prefix}</span>}
       <input
         aria-label={label}
+        aria-invalid={invalid || undefined}
         type={type}
         min={type === "number" ? 0 : undefined}
         value={value}
@@ -972,62 +970,141 @@ export const PROVIDERS = [
   "筑友设备运营服务商",
   "鼎盛建材流通服务中心",
 ];
-const ENTRUST_MONTHS = ["3 个月", "6 个月", "12 个月"];
 
-/** 委托：将商品委托给服务商代为出售 / 出租，服务商受理后可加价上架 */
+type EntrustDraftLine = {
+  quantity: string;
+  salePrice: string;
+  rentPrice: string;
+  rentDeposit: string;
+};
+
+/** 规格默认委托价：取该租售方式最近一条上架记录的发布价 */
+function defaultPrice(g: Goods, type: BizType) {
+  const l =
+    g.listings.find((x) => x.type === type && x.status === "on") ??
+    g.listings.find((x) => x.type === type);
+  return l;
+}
+
+/** 委托：以整个商品（含全部规格）为单位委托给一家或多家服务商，服务商受理后可加价上架 */
 function EntrustDialog({
-  goods,
+  items,
+  records,
   onClose,
   onConfirm,
 }: {
-  goods: Goods;
+  items: Goods[];
+  records: EntrustRecord[];
   onClose: () => void;
-  onConfirm: (e: Entrust) => void;
+  onConfirm: (records: EntrustRecord[]) => void;
 }) {
-  const available = goods.stock - lockedStock(goods);
+  const head = items[0];
+  const availableOf = (g: Goods) =>
+    Math.max(g.stock - lockedStock(g) - entrustedQty(g.code, records), 0);
   const [types, setTypes] = useState<BizType[]>([]);
-  const [provider, setProvider] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [salePrice, setSalePrice] = useState("");
-  const [rentPrice, setRentPrice] = useState("");
-  const [rentDeposit, setRentDeposit] = useState("");
-  const [months, setMonths] = useState("6 个月");
+  const [providers, setProviders] = useState<string[]>([]);
+  const [lines, setLines] = useState<Record<string, EntrustDraftLine>>(() =>
+    Object.fromEntries(
+      items.map((g) => {
+        const sale = defaultPrice(g, "sale");
+        const rent = defaultPrice(g, "rent");
+        return [
+          g.code,
+          {
+            quantity: String(availableOf(g)),
+            salePrice: sale ? String(sale.price) : "",
+            rentPrice: rent
+              ? String(round2(rent.period === "月" ? rent.price / 30 : rent.price))
+              : "",
+            rentDeposit: rent?.deposit !== undefined ? String(rent.deposit) : "",
+          },
+        ];
+      }),
+    ),
+  );
 
   const toggleType = (t: BizType) =>
     setTypes((list) =>
       list.includes(t) ? list.filter((x) => x !== t) : [...list, t],
     );
+  const toggleProvider = (p: string) =>
+    setProviders((list) =>
+      list.includes(p) ? list.filter((x) => x !== p) : [...list, p],
+    );
+  const setLine = (code: string, patch: Partial<EntrustDraftLine>) =>
+    setLines((m) => ({ ...m, [code]: { ...m[code], ...patch } }));
 
-  const qty = Number(quantity);
-  const qtyOk = qty > 0 && qty <= available;
-  const saleOk = !types.includes("sale") || Number(salePrice) > 0;
-  const rentOk =
-    !types.includes("rent") ||
-    (Number(rentPrice) > 0 && rentDeposit !== "" && Number(rentDeposit) >= 0);
-  const ok = types.length > 0 && provider !== "" && qtyOk && saleOk && rentOk;
+  const k = Math.max(providers.length, 1);
+  const lineState = items.map((g) => {
+    const d = lines[g.code];
+    const qty = Number(d.quantity);
+    const available = availableOf(g);
+    const qtyFilled = d.quantity !== "";
+    const qtyOk = !qtyFilled || (Number.isInteger(qty) && qty >= 0 && qty * k <= available);
+    const included = qtyFilled && qty > 0;
+    const saleOk = !included || !types.includes("sale") || Number(d.salePrice) > 0;
+    const rentOk =
+      !included ||
+      !types.includes("rent") ||
+      (Number(d.rentPrice) > 0 && d.rentDeposit !== "" && Number(d.rentDeposit) >= 0);
+    return { g, d, qty, available, qtyOk, included, saleOk, rentOk };
+  });
+  const anyIncluded = lineState.some((x) => x.included);
+  const ok =
+    types.length > 0 &&
+    providers.length > 0 &&
+    anyIncluded &&
+    lineState.every((x) => x.qtyOk && x.saleOk && x.rentOk);
+  const totalQty = lineState.reduce((s, x) => s + (x.included ? x.qty : 0), 0);
 
   const submit = () => {
     if (!ok) return;
-    onConfirm({
-      types: (["sale", "rent"] as BizType[]).filter((t) => types.includes(t)),
-      provider,
-      quantity: qty,
-      salePrice: types.includes("sale") ? Number(salePrice) : undefined,
-      rentPrice: types.includes("rent") ? Number(rentPrice) : undefined,
-      rentDeposit: types.includes("rent") ? Number(rentDeposit) : undefined,
-      months: Number.parseInt(months, 10),
-      status: "pending",
-      createdAt: new Date().toISOString().slice(0, 10),
-    });
+    const createdAt = new Date().toISOString().slice(0, 10);
+    const orderedTypes = (["sale", "rent"] as BizType[]).filter((t) =>
+      types.includes(t),
+    );
+    const recordLines: EntrustLine[] = lineState
+      .filter((x) => x.included)
+      .map(({ g, d, qty }) => ({
+        code: g.code,
+        spec: g.spec,
+        quantity: qty,
+        salePrice: types.includes("sale") ? Number(d.salePrice) : undefined,
+        rentPrice: types.includes("rent") ? Number(d.rentPrice) : undefined,
+        rentDeposit: types.includes("rent") ? Number(d.rentDeposit) : undefined,
+      }));
+    onConfirm(
+      PROVIDERS.filter((p) => providers.includes(p)).map((provider) => ({
+        id: nextEntrustId(),
+        goodsName: head.name,
+        shop: head.shop,
+        category: head.category,
+        subCategory: head.subCategory,
+        unit: head.unit,
+        provider,
+        types: orderedTypes,
+        lines: recordLines,
+        status: "pending",
+        createdAt,
+      })),
+    );
   };
+
+  const cols = `minmax(140px,1fr) 80px 120px${types.includes("sale") ? " 120px" : ""}${types.includes("rent") ? " 130px 110px" : ""}`;
 
   return (
     <Modal
       title="委托服务商运营"
       titleId="entrust-dialog-title"
+      width="max-w-[860px]"
       onClose={onClose}
       footer={
         <>
+          <span className="mr-auto text-xs text-muted-foreground">
+            {providers.length > 0 && anyIncluded
+              ? `将生成 ${providers.length} 张委托单，每张委托 ${totalQty.toLocaleString()} ${head.unit}`
+              : "委托以整个商品为单位，含全部规格"}
+          </span>
           <Button variant="outline" size="sm" onClick={onClose}>
             取消
           </Button>
@@ -1042,117 +1119,185 @@ function EntrustDialog({
         </>
       }
     >
-      <GoodsSummary goods={goods} />
-      <DialogField
-        label="委托方式"
-        required
-        hint="可同时勾选；服务商受理后按您填写的底价加价上架，差价为服务商收益"
-      >
-        <div
-          role="group"
-          aria-label="委托方式"
-          className="grid grid-cols-2 gap-2"
-        >
-          {(["sale", "rent"] as BizType[]).map((t) => {
-            const active = types.includes(t);
-            return (
-              <button
-                key={t}
-                type="button"
-                role="checkbox"
-                aria-checked={active}
-                onClick={() => toggleType(t)}
-                className={cn(
-                  "flex h-9 items-center justify-center gap-1.5 rounded border text-sm transition-colors",
-                  active
-                    ? "border-[#1890ff] bg-[#1890ff]/5 text-[#1890ff]"
-                    : "border-border hover:border-[#1890ff]/50",
-                )}
-              >
-                {active && <CheckCircle2 className="size-3.5" aria-hidden />}
-                委托{bizMeta[t].label}
-              </button>
-            );
-          })}
-        </div>
-      </DialogField>
+      <div className="grid gap-3 rounded bg-muted/40 px-3 py-2 text-xs sm:grid-cols-4">
+        <span className="flex min-w-0 flex-col gap-0.5 sm:col-span-2">
+          <span className="text-muted-foreground">商品</span>
+          <span className="truncate font-medium" title={head.name}>
+            {head.name}
+          </span>
+        </span>
+        <span className="flex flex-col gap-0.5">
+          <span className="text-muted-foreground">规格</span>
+          <span>{items.length} 个</span>
+        </span>
+        <span className="flex flex-col gap-0.5">
+          <span className="text-muted-foreground">计量单位</span>
+          <span>{head.unit}</span>
+        </span>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
-        <DialogField label="服务商" required>
-          <Select
-            label="服务商"
-            placeholder="请选择服务商"
-            value={provider}
-            options={PROVIDERS}
-            onChange={setProvider}
-          />
+        <DialogField
+          label="委托方式"
+          required
+          hint="可同时勾选；服务商受理后按委托价加价上架，差价为服务商收益"
+        >
+          <div
+            role="group"
+            aria-label="委托方式"
+            className="grid grid-cols-2 gap-2"
+          >
+            {(["sale", "rent"] as BizType[]).map((t) => {
+              const active = types.includes(t);
+              return (
+                <button
+                  key={t}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={active}
+                  onClick={() => toggleType(t)}
+                  className={cn(
+                    "flex h-9 items-center justify-center gap-1.5 rounded border text-sm transition-colors",
+                    active
+                      ? "border-[#1890ff] bg-[#1890ff]/5 text-[#1890ff]"
+                      : "border-border hover:border-[#1890ff]/50",
+                  )}
+                >
+                  {active && <CheckCircle2 className="size-3.5" aria-hidden />}
+                  委托{bizMeta[t].label}
+                </button>
+              );
+            })}
+          </div>
         </DialogField>
         <DialogField
-          label="委托数量"
+          label="服务商"
           required
           hint={
-            quantity && !qtyOk
-              ? `不可超过可委托库存 ${available.toLocaleString()} ${goods.unit}`
-              : `可委托库存 ${available.toLocaleString()} ${goods.unit}`
+            providers.length > 1
+              ? `已选 ${providers.length} 家，每家各生成一张委托单，委托数量按家数占用库存`
+              : "可选择一家或多家服务商"
           }
         >
-          <DialogInput
-            label="委托数量"
-            type="number"
-            value={quantity}
-            onChange={setQuantity}
-            placeholder="0"
-            suffix={goods.unit}
-          />
-        </DialogField>
-        {types.includes("sale") && (
-          <DialogField label="出售底价" required>
-            <DialogInput
-              label="出售底价"
-              type="number"
-              value={salePrice}
-              onChange={setSalePrice}
-              placeholder="0.00"
-              prefix="¥"
-              suffix={`/ ${goods.unit}`}
-            />
-          </DialogField>
-        )}
-        {types.includes("rent") && (
-          <>
-            <DialogField label="出租底价" required>
-              <DialogInput
-                label="出租底价"
-                type="number"
-                value={rentPrice}
-                onChange={setRentPrice}
-                placeholder="0.00"
-                prefix="¥"
-                suffix={`/ ${goods.unit} / 天`}
-              />
-            </DialogField>
-            <DialogField label="押金" required>
-              <DialogInput
-                label="押金"
-                type="number"
-                value={rentDeposit}
-                onChange={setRentDeposit}
-                placeholder="0.00"
-                prefix="¥"
-                suffix={`/ ${goods.unit}`}
-              />
-            </DialogField>
-          </>
-        )}
-        <DialogField label="委托期限" required>
-          <Select
-            label="委托期限"
-            placeholder="请选择"
-            value={months}
-            options={ENTRUST_MONTHS}
-            onChange={setMonths}
-          />
+          <div
+            role="group"
+            aria-label="服务商"
+            className="grid grid-cols-2 gap-2"
+          >
+            {PROVIDERS.map((p) => {
+              const active = providers.includes(p);
+              return (
+                <button
+                  key={p}
+                  type="button"
+                  role="checkbox"
+                  aria-checked={active}
+                  title={p}
+                  onClick={() => toggleProvider(p)}
+                  className={cn(
+                    "flex h-9 items-center gap-1.5 truncate rounded border px-2.5 text-left text-xs transition-colors",
+                    active
+                      ? "border-[#1890ff] bg-[#1890ff]/5 text-[#1890ff]"
+                      : "border-border hover:border-[#1890ff]/50",
+                  )}
+                >
+                  {active && (
+                    <CheckCircle2 className="size-3.5 shrink-0" aria-hidden />
+                  )}
+                  <span className="truncate">{p}</span>
+                </button>
+              );
+            })}
+          </div>
         </DialogField>
       </div>
+
+      <DialogField
+        label="委托数量与委托价"
+        required
+        hint="委托价默认取该规格的发布价，可按规格修改；数量填 0 表示该规格不委托"
+      >
+        <div className="overflow-x-auto rounded border border-border">
+          <div
+            className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
+            style={{ gridTemplateColumns: cols }}
+          >
+            <span>规格型号</span>
+            <span>可委托</span>
+            <span>委托数量</span>
+            {types.includes("sale") && <span>出售委托价</span>}
+            {types.includes("rent") && (
+              <>
+                <span>出租委托价</span>
+                <span>押金</span>
+              </>
+            )}
+          </div>
+          {lineState.map(({ g, d, available, qtyOk, included, saleOk, rentOk }) => (
+            <div
+              key={g.code}
+              className="grid items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-0"
+              style={{ gridTemplateColumns: cols }}
+            >
+              <span className="flex min-w-0 flex-col leading-4">
+                <span className="truncate font-medium" title={g.spec}>
+                  {g.spec}
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  {g.code}
+                </span>
+              </span>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {available.toLocaleString()} {g.unit}
+              </span>
+              <DialogInput
+                label={`${g.spec} 委托数量`}
+                type="number"
+                value={d.quantity}
+                onChange={(v) => setLine(g.code, { quantity: v })}
+                placeholder="0"
+                suffix={g.unit}
+                invalid={!qtyOk}
+              />
+              {types.includes("sale") && (
+                <DialogInput
+                  label={`${g.spec} 出售委托价`}
+                  type="number"
+                  value={d.salePrice}
+                  onChange={(v) => setLine(g.code, { salePrice: v })}
+                  placeholder="0.00"
+                  prefix="¥"
+                  suffix={`/ ${g.unit}`}
+                  invalid={included && !saleOk}
+                />
+              )}
+              {types.includes("rent") && (
+                <>
+                  <DialogInput
+                    label={`${g.spec} 出租委托价`}
+                    type="number"
+                    value={d.rentPrice}
+                    onChange={(v) => setLine(g.code, { rentPrice: v })}
+                    placeholder="0.00"
+                    prefix="¥"
+                    suffix={`/ ${g.unit} / 天`}
+                    invalid={included && !rentOk && Number(d.rentPrice) <= 0}
+                  />
+                  <DialogInput
+                    label={`${g.spec} 押金`}
+                    type="number"
+                    value={d.rentDeposit}
+                    onChange={(v) => setLine(g.code, { rentDeposit: v })}
+                    placeholder="0.00"
+                    prefix="¥"
+                    invalid={included && d.rentDeposit === ""}
+                  />
+                </>
+              )}
+            </div>
+          ))}
+        </div>
+      </DialogField>
     </Modal>
   );
 }
@@ -1937,17 +2082,18 @@ function FilterPanel({
   );
 }
 
-function matches(g: Goods, f: Filters) {
+function matches(g: Goods, f: Filters, records: EntrustRecord[]) {
+  const entrusts = entrustsOf(g.name, records);
   if (f.code && !g.code.toLowerCase().includes(f.code.trim().toLowerCase()))
     return false;
   if (f.name && !g.name.includes(f.name.trim())) return false;
   if (f.category && g.subCategory !== f.category) return false;
   if (f.status && g.status !== f.status) return false;
-  if (f.entrust === "has" && !g.entrust) return false;
-  if (f.entrust === "none" && g.entrust) return false;
+  if (f.entrust === "has" && entrusts.length === 0) return false;
+  if (f.entrust === "none" && entrusts.length > 0) return false;
   if (
     (f.entrust === "pending" || f.entrust === "accepted") &&
-    g.entrust?.status !== f.entrust
+    !entrusts.some((e) => e.status === f.entrust)
   )
     return false;
   return true;
@@ -1958,14 +2104,12 @@ const columns =
 const listingColumns =
   "120px 72px minmax(160px,1fr) 100px 110px 80px 130px";
 const specSummaryColumns =
-  "118px minmax(160px,1.2fr) 100px 100px minmax(100px,0.8fr) minmax(120px,0.8fr) minmax(220px,1fr)";
-const groupListingColumns =
-  "120px minmax(140px,1fr) 72px minmax(160px,1fr) 100px 110px 80px 130px";
+  "118px minmax(160px,1.2fr) 100px 100px minmax(100px,0.8fr) minmax(220px,1fr)";
 const entrustColumns =
-  "100px 72px minmax(160px,1fr) 100px minmax(170px,1fr) 80px 90px";
+  "110px 92px minmax(170px,1fr) 90px 110px minmax(200px,1.2fr) 80px 90px";
 
 const entrustStatusMeta: Record<
-  Entrust["status"],
+  EntrustStatus,
   { label: string; className: string }
 > = {
   pending: {
@@ -1976,81 +2120,130 @@ const entrustStatusMeta: Record<
     label: "已受理",
     className: "bg-emerald-50 text-emerald-700 ring-emerald-200",
   },
+  returned: {
+    label: "已退回",
+    className: "bg-red-50 text-red-700 ring-red-200",
+  },
 };
 
-/** 委托记录：一条委托按出售 / 出租拆成多行展示，便于逐项查看底价 */
+function fmtLinePrice(l: EntrustLine, unit: string, types: BizType[]) {
+  const parts: string[] = [];
+  if (types.includes("sale") && l.salePrice !== undefined)
+    parts.push(`售 ¥ ${fmtPrice(l.salePrice)} / ${unit}`);
+  if (types.includes("rent") && l.rentPrice !== undefined)
+    parts.push(
+      `租 ¥ ${fmtPrice(l.rentPrice)} / ${unit} / 天${l.rentDeposit !== undefined ? `，押金 ¥ ${fmtPrice(l.rentDeposit)}` : ""}`,
+    );
+  return parts.join("；");
+}
+
+/** 委托记录：每张委托单一行，对应一家服务商；委托以整个商品为单位，行内按规格列出数量与委托价 */
 function EntrustTable({
-  goods,
+  records,
+  unit,
   onCancel,
 }: {
-  goods: Goods;
-  onCancel: () => void;
+  records: EntrustRecord[];
+  unit: string;
+  onCancel: (id: string) => void;
 }) {
-  const e = goods.entrust;
-  if (!e) return null;
-  const meta = entrustStatusMeta[e.status];
+  if (records.length === 0)
+    return (
+      <div className="rounded border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
+        暂无委托记录，可在操作列点击「委托」发起
+      </div>
+    );
+  const providers = new Set(records.map((r) => r.provider)).size;
   return (
     <div className="overflow-hidden rounded border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs">
         <span className="font-medium">委托记录</span>
-        <span className="text-muted-foreground">共 {e.types.length} 条</span>
+        <span className="text-muted-foreground">
+          共 {records.length} 张委托单 · {providers} 家服务商
+        </span>
       </div>
       <div
         className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
         style={{ gridTemplateColumns: entrustColumns }}
       >
+        <span>委托单号</span>
         <span>委托日期</span>
-        <span>委托方式</span>
         <span>服务商</span>
+        <span>委托方式</span>
         <span>委托数量</span>
-        <span>底价</span>
+        <span>委托价</span>
         <span>受理情况</span>
         <span>操作</span>
       </div>
-      {e.types.map((t, i) => (
-        <div
-          key={t}
-          className={cn(
-            "grid items-center gap-3 px-3 py-2 text-sm",
-            i > 0 && "border-t border-border",
-          )}
-          style={{ gridTemplateColumns: entrustColumns }}
-        >
-          <span className="font-mono text-xs text-muted-foreground">
-            {e.createdAt}
-          </span>
-          <Tag className={bizMeta[t].className}>{bizMeta[t].label}</Tag>
-          <span className="truncate" title={e.provider}>
-            {e.provider}
-          </span>
-          <span className="tabular-nums">
-            {e.quantity.toLocaleString()} {goods.unit}
-          </span>
-          <span className="text-xs tabular-nums">
-            {t === "sale" ? (
-              <>
-                ¥ {fmtPrice(e.salePrice ?? 0)} / {goods.unit}
-              </>
-            ) : (
-              <>
-                ¥ {fmtPrice(e.rentPrice ?? 0)} / {goods.unit} / 天
-                {e.rentDeposit !== undefined
-                  ? `，押金 ¥ ${fmtPrice(e.rentDeposit)}`
-                  : ""}
-              </>
-            )}
-          </span>
-          <Tag className={meta.className}>{meta.label}</Tag>
-          <span className="flex items-center gap-3">
-            <ActionLink>详情</ActionLink>
-            {e.status === "pending" && (
-              <ActionLink tone="danger" onClick={onCancel}>
-                撤回
-              </ActionLink>
-            )}
-          </span>
-        </div>
-      ))}
+      {records.map((r) => {
+        const meta = entrustStatusMeta[r.status];
+        const total = r.lines.reduce((s, l) => s + l.quantity, 0);
+        const multi = r.lines.length > 1;
+        return (
+          <div
+            key={r.id}
+            className="grid items-start gap-3 border-b border-border px-3 py-2 text-sm last:border-0"
+            style={{ gridTemplateColumns: entrustColumns }}
+          >
+            <span className="font-mono text-xs text-muted-foreground">
+              {r.id}
+            </span>
+            <span className="font-mono text-xs text-muted-foreground">
+              {r.createdAt}
+            </span>
+            <span className="truncate" title={r.provider}>
+              {r.provider}
+            </span>
+            <span className="flex flex-wrap gap-1">
+              {r.types.map((t) => (
+                <Tag key={t} className={bizMeta[t].className}>
+                  {bizMeta[t].label}
+                </Tag>
+              ))}
+            </span>
+            <span className="flex flex-col text-xs leading-5 tabular-nums">
+              <span className="text-sm">
+                {total.toLocaleString()} {unit}
+              </span>
+              {multi &&
+                r.lines.map((l) => (
+                  <span key={l.code} className="text-muted-foreground">
+                    {l.spec}：{l.quantity.toLocaleString()}
+                  </span>
+                ))}
+            </span>
+            <span className="flex flex-col text-xs leading-5 tabular-nums">
+              {r.lines.map((l) => (
+                <span key={l.code} className="truncate">
+                  {multi && (
+                    <span className="text-muted-foreground">{l.spec}：</span>
+                  )}
+                  {fmtLinePrice(l, unit, r.types)}
+                </span>
+              ))}
+            </span>
+            <span className="flex flex-col items-start gap-1">
+              <Tag className={meta.className}>{meta.label}</Tag>
+              {r.status === "returned" && r.statusNote && (
+                <span
+                  className="line-clamp-2 text-[11px] leading-4 text-muted-foreground"
+                  title={r.statusNote}
+                >
+                  {r.statusNote}
+                </span>
+              )}
+            </span>
+            <span className="flex items-center gap-3">
+              <ActionLink>详情</ActionLink>
+              {r.status === "pending" && (
+                <ActionLink tone="danger" onClick={() => onCancel(r.id)}>
+                  撤回
+                </ActionLink>
+              )}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -2069,7 +2262,7 @@ function GroupListingTable({ items }: { items: Goods[] }) {
   const rows = items.flatMap((g) => g.listings.map((l) => ({ g, l })));
   const multi = items.length > 1;
   const mixed = new Set(rows.map((r) => r.l.type)).size > 1;
-  const cols = multi ? groupListingColumns : listingColumns;
+  const cols = listingColumns;
   if (rows.length === 0)
     return (
       <div className="rounded border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
@@ -2090,7 +2283,6 @@ function GroupListingTable({ items }: { items: Goods[] }) {
         style={{ gridTemplateColumns: cols }}
       >
         <span>上架单号</span>
-        {multi && <span>商品编码 / 规格</span>}
         <span>租售方式</span>
         <span>价格</span>
         <span>上架数量</span>
@@ -2109,16 +2301,6 @@ function GroupListingTable({ items }: { items: Goods[] }) {
             <span className="font-mono text-xs text-muted-foreground">
               {l.id}
             </span>
-            {multi && (
-              <span className="flex min-w-0 flex-col leading-4">
-                <span className="font-mono text-xs text-muted-foreground">
-                  {g.code}
-                </span>
-                <span className="truncate text-xs" title={g.spec}>
-                  {g.spec}
-                </span>
-              </span>
-            )}
             <Tag className={meta.className}>{meta.label}</Tag>
             <span className="flex flex-col leading-tight">
               <span className="tabular-nums">
@@ -2169,12 +2351,16 @@ function GroupListingTable({ items }: { items: Goods[] }) {
 /** 商品详情页：基本信息、库存构成、全部上架记录与委托信息 */
 function GoodsDetail({
   group,
+  entrusts,
   onBack,
   onAction,
+  onCancelEntrust,
 }: {
   group: SpecGroup<Goods>;
+  entrusts: EntrustRecord[];
   onBack: () => void;
   onAction: (g: Goods, a: GoodsAction) => void;
+  onCancelEntrust: (id: string) => void;
 }) {
   const items = group.items;
   const head = items[0];
@@ -2189,7 +2375,10 @@ function GoodsDetail({
   const rentUsed = allListings
     .filter((l) => l.type === "rent")
     .reduce((s, l) => s + l.used, 0);
-  const entrustedItems = items.filter((g) => g.entrust);
+  const activeEntrusts = entrusts.filter((e) => e.status !== "returned");
+  const entrustedTotal = activeEntrusts
+    .flatMap((e) => e.lines)
+    .reduce((s, l) => s + l.quantity, 0);
   const createdAt = items.map((g) => g.createdAt).sort()[0];
   const updatedAt = items
     .map((g) => g.updatedAt)
@@ -2230,8 +2419,17 @@ function GoodsDetail({
           </span>
         }
         actions={
-          single ? (
-            <>
+          <>
+            {canEntrust(items) && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onAction(head, "entrust")}
+              >
+                委托服务商
+              </Button>
+            )}
+            {single && (
               <Button
                 variant="outline"
                 size="sm"
@@ -2239,21 +2437,17 @@ function GoodsDetail({
               >
                 编辑商品
               </Button>
-              {canList && (
-                <Button
-                  size="sm"
-                  className={PRIMARY_BTN}
-                  onClick={() => onAction(head, "list")}
-                >
-                  上架
-                </Button>
-              )}
-            </>
-          ) : (
-            <span className="text-xs text-muted-foreground">
-              编辑 / 上架等操作请在下方「规格与库存」中按规格进行
-            </span>
-          )
+            )}
+            {single && canList && (
+              <Button
+                size="sm"
+                className={PRIMARY_BTN}
+                onClick={() => onAction(head, "list")}
+              >
+                上架
+              </Button>
+            )}
+          </>
         }
       />
 
@@ -2281,19 +2475,11 @@ function GoodsDetail({
         />
         <StatCard
           label="委托运营"
-          value={
-            entrustedItems.length
-              ? single
-                ? entrustStatusMeta[head.entrust!.status].label
-                : `${entrustedItems.length} / ${items.length}`
-              : "无"
-          }
-          unit={!single && entrustedItems.length ? "个规格" : undefined}
+          value={activeEntrusts.length ? entrustedTotal : "无"}
+          unit={activeEntrusts.length ? head.unit : undefined}
           hint={
-            entrustedItems.length
-              ? single
-                ? `委托给 ${head.entrust!.provider}`
-                : "已委托给服务商代为运营"
+            activeEntrusts.length
+              ? `${activeEntrusts.length} 张委托单 · ${new Set(activeEntrusts.map((e) => e.provider)).size} 家服务商 · 已受理 ${activeEntrusts.filter((e) => e.status === "accepted").length} 张`
               : "全部由本店自营"
           }
         />
@@ -2339,7 +2525,7 @@ function GoodsDetail({
       {!single && (
         <DetailSection
           title="规格与库存"
-          extra="每个规格独立计库存与状态；编辑 / 上架 / 委托 / 下架按规格操作"
+          extra="每个规格独立计库存与状态；编辑 / 上架 / 下架按规格操作，委托以整个商品为单位"
           flush
         >
           <div
@@ -2351,7 +2537,6 @@ function GoodsDetail({
             <span>总库存</span>
             <span>可上架</span>
             <span>状态</span>
-            <span>委托情况</span>
             <span>操作</span>
           </div>
           {items.map((g) => {
@@ -2386,18 +2571,6 @@ function GoodsDetail({
                     </span>
                   )}
                 </span>
-                <span className="text-xs">
-                  {g.entrust ? (
-                    <span className="flex flex-col">
-                      <span>{entrustStatusMeta[g.entrust.status].label}</span>
-                      <span className="truncate text-[11px] text-muted-foreground">
-                        {g.entrust.provider}
-                      </span>
-                    </span>
-                  ) : (
-                    <span className="text-muted-foreground">无</span>
-                  )}
-                </span>
                 <GoodsActions
                   goods={g}
                   hideDetail
@@ -2419,29 +2592,19 @@ function GoodsDetail({
         </div>
       </DetailSection>
 
-      {entrustedItems.length > 0 && (
-        <DetailSection
-          title="委托信息"
-          extra="待受理的委托可撤回；服务商受理后由其加价上架"
-          flush
-        >
-          <div className="flex flex-col gap-3 p-3">
-            {entrustedItems.map((g) => (
-              <div key={g.code} className="flex flex-col gap-1.5">
-                {!single && (
-                  <span className="text-xs text-muted-foreground">
-                    <span className="font-mono">{g.code}</span> · {g.spec}
-                  </span>
-                )}
-                <EntrustTable
-                  goods={g}
-                  onCancel={() => onAction(g, "cancelEntrust")}
-                />
-              </div>
-            ))}
-          </div>
-        </DetailSection>
-      )}
+      <DetailSection
+        title="委托记录"
+        extra="委托以整个商品为单位，可委托给多家服务商；待受理的委托可撤回，服务商受理后由其加价上架"
+        flush
+      >
+        <div className="p-3">
+          <EntrustTable
+            records={entrusts}
+            unit={head.unit}
+            onCancel={onCancelEntrust}
+          />
+        </div>
+      </DetailSection>
     </div>
   );
 }
@@ -2457,10 +2620,25 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
   } | null>(null);
   const [detailName, setDetailName] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const records = useEntrusts();
 
   const dialogGoods = dialog
     ? goods.find((g) => g.code === dialog.code)
     : undefined;
+  const dialogItems = dialogGoods
+    ? goods.filter((g) => g.name === dialogGoods.name)
+    : [];
+  const notify = (message: string) => {
+    setDialog(null);
+    setToast(message);
+    window.setTimeout(() => setToast(null), 2500);
+  };
+  const cancelEntrust = (id: string) => {
+    const r = records.find((x) => x.id === id);
+    if (!r || r.status !== "pending") return;
+    removeEntrust(id);
+    notify(`已撤回委托单 ${id}：${r.goodsName}（${r.provider}）`);
+  };
 
   const now = () => {
     const d = new Date();
@@ -2477,33 +2655,22 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
         g.code === code ? { ...patch(g), updatedAt: now() } : g,
       ),
     );
-    setDialog(null);
-    setToast(message);
-    window.setTimeout(() => setToast(null), 2500);
+    notify(message);
   };
   const handleAction = (g: Goods, action: GoodsAction) => {
     if (action === "detail") {
       setDetailName(g.name);
       return;
     }
-    if (action === "cancelEntrust") {
-      if (g.entrust?.status !== "pending") return;
-      updateGoods(
-        g.code,
-        (x) => ({ ...x, entrust: undefined }),
-        `已撤回委托：${g.name}`,
-      );
-      return;
-    }
     setDialog({ action, code: g.code });
   };
 
-  const visible = goods.filter((g) => matches(g, applied));
+  const visible = goods.filter((g) => matches(g, applied, records));
   const isFiltered = Object.values(applied).some(Boolean);
 
   /** 各状态数量按除状态以外的其他条件统计，便于在页签间切换时看到全貌 */
   const baseFilters: Filters = { ...applied, status: "" };
-  const base = goods.filter((g) => matches(g, baseFilters));
+  const base = goods.filter((g) => matches(g, baseFilters, records));
   const countOf = (s: GoodsStatus | "") =>
     s ? base.filter((g) => g.status === s).length : base.length;
 
@@ -2525,8 +2692,10 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
       {detailGroup ? (
         <GoodsDetail
           group={detailGroup}
+          entrusts={entrustsOf(detailGroup.name, records)}
           onBack={() => setDetailName(null)}
           onAction={handleAction}
+          onCancelEntrust={cancelEntrust}
         />
       ) : (
         <>
@@ -2624,7 +2793,10 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                     (n, g) => n + g.listings.length,
                     0,
                   );
-                  const entrusted = items.filter((g) => g.entrust).length;
+                  const entrusts = entrustsOf(grp.name, records);
+                  const activeEntrusts = entrusts.filter(
+                    (e) => e.status !== "returned",
+                  );
                   const createdAt = items.map((g) => g.createdAt).sort()[0];
                   const single = items.length === 1;
                   return (
@@ -2644,8 +2816,8 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                             aria-controls={`listings-${head.code}`}
                             aria-label={
                               open
-                                ? `收起 ${grp.name} 上架记录`
-                                : `展开 ${grp.name} 上架记录`
+                                ? `收起 ${grp.name} 上架 / 委托记录`
+                                : `展开 ${grp.name} 上架 / 委托记录`
                             }
                             className="relative flex size-6 items-center justify-center rounded border border-border bg-background text-muted-foreground hover:border-[#1890ff] hover:text-[#1890ff]"
                           >
@@ -2657,7 +2829,7 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                               aria-hidden
                             />
                             <span className="absolute -right-1 -top-1 flex size-3.5 items-center justify-center rounded-full bg-[#1890ff] text-[9px] leading-none text-white">
-                              {listingCount}
+                              {listingCount + entrusts.length}
                             </span>
                           </button>
                         </span>
@@ -2698,16 +2870,16 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                           )}
                         </span>
                         <span className="flex flex-col items-start gap-0.5">
-                          {entrusted ? (
+                          {activeEntrusts.length ? (
                             <>
                               <Tag className="bg-violet-50 text-violet-700 ring-violet-200">
                                 有
                               </Tag>
-                              {single && head.entrust && (
-                                <span className="text-[11px] leading-4 text-muted-foreground">
-                                  {entrustStatusMeta[head.entrust.status].label}
-                                </span>
-                              )}
+                              <span className="text-[11px] leading-4 text-muted-foreground">
+                                {activeEntrusts.length === 1
+                                  ? entrustStatusLabel(activeEntrusts[0].status)
+                                  : `${activeEntrusts.length} 家服务商`}
+                              </span>
                             </>
                           ) : (
                             <Tag className="bg-muted text-muted-foreground ring-border">
@@ -2724,6 +2896,7 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                         {single ? (
                           <GoodsActions
                             goods={head}
+                            showEntrust
                             onAction={(a) => handleAction(head, a)}
                           />
                         ) : (
@@ -2733,15 +2906,29 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                             >
                               详情
                             </ActionLink>
+                            {canEntrust(items) && (
+                              <ActionLink
+                                onClick={() => handleAction(head, "entrust")}
+                              >
+                                委托
+                              </ActionLink>
+                            )}
                           </span>
                         )}
                       </div>
                       {open && (
                         <div
                           id={`listings-${head.code}`}
-                          className="border-b border-border bg-muted/20 px-4 py-3 pl-[84px]"
+                          className="flex flex-col gap-3 border-b border-border bg-muted/20 px-4 py-3 pl-[84px]"
                         >
                           <GroupListingTable items={items} />
+                          {entrusts.length > 0 && (
+                            <EntrustTable
+                              records={entrusts}
+                              unit={head.unit}
+                              onCancel={cancelEntrust}
+                            />
+                          )}
                         </div>
                       )}
                     </Fragment>
@@ -2775,16 +2962,17 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
       )}
       {dialog?.action === "entrust" && dialogGoods && (
         <EntrustDialog
-          key={dialogGoods.code}
-          goods={dialogGoods}
+          key={dialogGoods.name}
+          items={dialogItems}
+          records={records}
           onClose={() => setDialog(null)}
-          onConfirm={(entrust) =>
-            updateGoods(
-              dialogGoods.code,
-              (g) => ({ ...g, entrust }),
-              `已提交委托：${dialogGoods.name}（${entrust.types.map((t) => bizMeta[t].label).join("/")} ${entrust.quantity.toLocaleString()} ${dialogGoods.unit}，待 ${entrust.provider} 受理）`,
-            )
-          }
+          onConfirm={(created) => {
+            addEntrusts(created);
+            const qty = created[0].lines.reduce((s, l) => s + l.quantity, 0);
+            notify(
+              `已提交 ${created.length} 张委托单：${dialogGoods.name}（${created[0].types.map((t) => bizMeta[t].label).join("/")} ${qty.toLocaleString()} ${dialogGoods.unit}，待 ${created.map((c) => c.provider).join("、")} 受理）`,
+            );
+          }}
         />
       )}
       {dialog?.action === "edit" && dialogGoods && (

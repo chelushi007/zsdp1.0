@@ -26,9 +26,15 @@ import {
   Tag,
   bizMeta,
   fmtPrice,
+  round2,
   type BizType,
   type SpecGroup,
 } from "@/components/goods-list";
+import {
+  updateEntrust,
+  useEntrusts,
+  type EntrustRecord,
+} from "@/lib/entrust-store";
 
 /** 受托商品状态：待受理 / 已受理待上架 / 运营中 / 已下架 / 已退回 */
 type EntrustStatus = "pending" | "accepted" | "listed" | "off" | "returned";
@@ -82,7 +88,62 @@ type EntrustedGoods = {
   statusNote?: string;
   listings: ProviderListing[];
   updatedAt: string;
+  /** 来源于商家侧实时发起的委托单时记录其单号，受理 / 退回需回写 */
+  recordId?: string;
 };
+
+/** 当前登录的服务商 */
+const CURRENT_PROVIDER = "华建周转材料服务有限公司";
+
+/** 将商家侧发起的委托单拆为受托商品行：每种委托方式 × 每个规格一行 */
+function rowsFromRecord(r: EntrustRecord): EntrustedGoods[] {
+  return r.types.flatMap((type) =>
+    r.lines.map((l) => ({
+      id: `${r.id}-${type}-${l.code}`,
+      recordId: r.id,
+      code: l.code,
+      name: r.goodsName,
+      spec: l.spec,
+      subCategory: r.subCategory,
+      unit: r.unit,
+      seller: r.shop,
+      type,
+      quantity: l.quantity,
+      basePrice: (type === "sale" ? l.salePrice : l.rentPrice) ?? 0,
+      deposit: type === "rent" ? l.rentDeposit : undefined,
+      entrustedAt: `${r.createdAt} 00:00`,
+      acceptedAt: r.acceptedAt,
+      status: r.status,
+      statusNote: r.statusNote,
+      listings: [],
+      updatedAt: r.acceptedAt ?? `${r.createdAt} 00:00`,
+    })),
+  );
+}
+
+/** 合并本地状态与委托单：受理 / 退回以委托单为准，上架后的运营状态以本地为准 */
+function mergeRows(local: EntrustedGoods[], records: EntrustRecord[]) {
+  const derived = records
+    .filter((r) => !r.seeded && r.provider === CURRENT_PROVIDER)
+    .flatMap(rowsFromRecord);
+  const localMap = new Map(local.map((g) => [g.id, g]));
+  const merged = derived.map((d) => {
+    const l = localMap.get(d.id);
+    if (!l) return d;
+    const keepLocal =
+      d.status === "accepted" && (l.status === "listed" || l.status === "off");
+    return {
+      ...l,
+      quantity: d.quantity,
+      basePrice: d.basePrice,
+      deposit: d.deposit,
+      status: keepLocal ? l.status : d.status,
+      statusNote: keepLocal ? l.statusNote : d.statusNote,
+      acceptedAt: d.acceptedAt ?? l.acceptedAt,
+    };
+  });
+  return [...merged, ...local.filter((g) => !g.recordId)];
+}
 
 const seed: EntrustedGoods[] = [
   {
@@ -411,9 +472,6 @@ function priceSuffix(g: EntrustedGoods) {
   return g.type === "sale" ? `/ ${g.unit}` : `/ ${g.unit} / 天`;
 }
 
-function round2(n: number) {
-  return Math.round(n * 100) / 100;
-}
 
 function GoodsSummary({ goods }: { goods: EntrustedGoods }) {
   return (
@@ -1563,7 +1621,9 @@ function EntrustDetail({
 }
 
 export function ProviderGoods() {
-  const [goods, setGoods] = useState<EntrustedGoods[]>(seed);
+  const [local, setGoods] = useState<EntrustedGoods[]>(seed);
+  const records = useEntrusts();
+  const goods = mergeRows(local, records);
   const [draft, setDraft] = useState<Filters>(emptyFilters);
   const [applied, setApplied] = useState<Filters>(emptyFilters);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -1593,11 +1653,35 @@ export function ProviderGoods() {
     message: string,
   ) => {
     const ids = Array.isArray(id) ? id : [id];
-    setGoods((list) =>
-      list.map((g) =>
-        ids.includes(g.id) ? { ...patch(g), updatedAt: nowStamp() } : g,
-      ),
-    );
+    const stamp = nowStamp();
+    const next = new Map<string, EntrustedGoods>();
+    for (const g of goods) {
+      if (ids.includes(g.id)) next.set(g.id, { ...patch(g), updatedAt: stamp });
+    }
+    setGoods((list) => {
+      const touched = new Set(list.map((g) => g.id));
+      const updated = list.map((g) => next.get(g.id) ?? g);
+      const added = [...next.values()].filter((g) => !touched.has(g.id));
+      return [...added, ...updated];
+    });
+    // 商家侧实时发起的委托单：受理 / 退回结果回写，商家列表同步变化
+    const synced = new Set<string>();
+    for (const g of next.values()) {
+      if (!g.recordId || synced.has(g.recordId)) continue;
+      if (g.status !== "accepted" && g.status !== "returned") continue;
+      synced.add(g.recordId);
+      const status = g.status;
+      updateEntrust(g.recordId, (r) =>
+        r.status === status
+          ? r
+          : {
+              ...r,
+              status,
+              statusNote: status === "returned" ? g.statusNote : undefined,
+              acceptedAt: status === "accepted" ? stamp : r.acceptedAt,
+            },
+      );
+    }
     setDialog(null);
     setToast(message);
     window.setTimeout(() => setToast(null), 2500);
