@@ -63,8 +63,14 @@ type Listing = {
   used: number;
 };
 
-/** 商品状态：草稿 / 运营中 / 已下架 / 违规下架 / 审核驳回 */
-type GoodsStatus = "draft" | "active" | "off" | "violation" | "rejected";
+/** 商品状态：草稿 / 审核中 / 运营中 / 已下架 / 违规下架 / 审核驳回 */
+type GoodsStatus =
+  | "draft"
+  | "reviewing"
+  | "active"
+  | "off"
+  | "violation"
+  | "rejected";
 
 type Goods = {
   code: string;
@@ -541,6 +547,7 @@ const listingStatusMeta: Record<
 
 const goodsStatusOrder: GoodsStatus[] = [
   "draft",
+  "reviewing",
   "active",
   "off",
   "violation",
@@ -555,6 +562,11 @@ const goodsStatusMeta: Record<
     label: "草稿",
     className: "bg-muted text-muted-foreground ring-border",
     countClass: "text-muted-foreground",
+  },
+  reviewing: {
+    label: "审核中",
+    className: "bg-sky-50 text-sky-700 ring-sky-200",
+    countClass: "text-sky-700",
   },
   active: {
     label: "运营中",
@@ -593,7 +605,7 @@ export function groupSpecs<T extends { name: string }>(
   return groups;
 }
 
-/** 分组行的编码列：单规格直接显示编码，多规格显示首个编码并标注数量 */
+/** 分组���的编码列：单规格直接显示编码，多规格显示首个编码并标注数量 */
 export function GroupCode({ codes }: { codes: string[] }) {
   return (
     <span className="flex flex-col font-mono text-xs leading-4 text-muted-foreground">
@@ -826,10 +838,41 @@ export function ActionLink({
   );
 }
 
-type GoodsAction = "detail" | "edit" | "list" | "off" | "entrust";
+type GoodsAction =
+  | "detail"
+  | "edit"
+  | "list"
+  | "off"
+  | "entrust"
+  | "submit"
+  | "withdraw";
 
 function canList(items: Goods[]) {
   return items.some((g) => g.status === "active" || g.status === "off");
+}
+
+/** 操作列中的「违规原因」：鼠标移入 / 键盘聚焦时浮层显示原因全文 */
+function ReasonHover({ label, reason }: { label: string; reason: string }) {
+  const id = useId();
+  return (
+    <span className="group relative inline-flex">
+      <button
+        type="button"
+        aria-describedby={id}
+        className="cursor-help text-xs text-red-600 underline decoration-dotted underline-offset-2"
+      >
+        {label}
+      </button>
+      <span
+        id={id}
+        role="tooltip"
+        className="pointer-events-none invisible absolute bottom-full right-0 z-30 mb-1.5 w-60 rounded border border-border bg-popover p-2.5 text-left text-xs leading-5 text-foreground opacity-0 shadow-md transition-opacity group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+      >
+        <span className="mb-1 block font-medium text-red-600">{label}</span>
+        {reason}
+      </span>
+    </span>
+  );
 }
 
 /** 商品级操作：上架 / 委托以整个商品（含全部规格）为单位；编辑在详情页进行；下架按规格 */
@@ -847,23 +890,36 @@ function GoodsActions({
     return (
       <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {detailLink}
-        <ActionLink>提交审核</ActionLink>
+        <ActionLink onClick={() => onAction("edit")}>继续编辑</ActionLink>
+        <ActionLink onClick={() => onAction("submit")}>提交审核</ActionLink>
         <ActionLink tone="danger">删除</ActionLink>
+      </span>
+    );
+  if (head.status === "reviewing")
+    return (
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {detailLink}
+        <ActionLink onClick={() => onAction("withdraw")}>撤回审核</ActionLink>
       </span>
     );
   if (head.status === "violation")
     return (
       <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {detailLink}
-        <ActionLink>查看违规原因</ActionLink>
-        <ActionLink>整改后重新提交</ActionLink>
+        {head.statusNote && (
+          <ReasonHover label="违规原因" reason={head.statusNote} />
+        )}
+        <ActionLink onClick={() => onAction("submit")}>重新提交</ActionLink>
       </span>
     );
   if (head.status === "rejected")
     return (
       <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {detailLink}
-        <ActionLink>重新提交审核</ActionLink>
+        {head.statusNote && (
+          <ReasonHover label="驳回原因" reason={head.statusNote} />
+        )}
+        <ActionLink onClick={() => onAction("submit")}>重新提交</ActionLink>
       </span>
     );
   return (
@@ -1273,7 +1329,7 @@ function EntrustDialog({
   const head = items[0];
   const availableOf = (g: Goods) =>
     Math.max(g.stock - lockedStock(g) - entrustedQty(g.code, records), 0);
-  const [types, setTypes] = useState<BizType[]>([]);
+  const [types, setTypes] = useState<BizType[]>(["sale"]);
   const [providers, setProviders] = useState<string[]>([]);
   const [lines, setLines] = useState<Record<string, EntrustDraftLine>>(() =>
     Object.fromEntries(
@@ -2370,6 +2426,116 @@ function OffDialog({
   );
 }
 
+/** 提交审核：草稿首次提交，或违规下架 / 审核驳回整改后重新提交；提交后进入「审核中」 */
+function SubmitReviewDialog({
+  items,
+  onClose,
+  onConfirm,
+}: {
+  items: Goods[];
+  onClose: () => void;
+  onConfirm: (note: string) => void;
+}) {
+  const head = items[0];
+  const resubmit = head.status !== "draft";
+  const [note, setNote] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const totalStock = items.reduce((s, g) => s + g.stock, 0);
+  const checks = [
+    { label: "商品基础信息（名称、分类、单位）", ok: Boolean(head.name && head.category && head.unit) },
+    { label: "规格明细与库存", ok: items.every((g) => g.spec && g.stock > 0) },
+    { label: "商品图片与描述", ok: true },
+  ];
+  const ready = checks.every((c) => c.ok) && (!resubmit || confirmed);
+
+  return (
+    <Modal
+      title={resubmit ? "重新提交审核" : "提交审核"}
+      titleId="submit-review-title"
+      width="max-w-[520px]"
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" size="sm" onClick={onClose}>
+            取消
+          </Button>
+          <Button
+            size="sm"
+            className="bg-[#1890ff] text-white hover:bg-[#1890ff]/90"
+            disabled={!ready}
+            onClick={() => onConfirm(note)}
+          >
+            确认提交
+          </Button>
+        </>
+      }
+    >
+      <p className="text-sm leading-relaxed text-muted-foreground">
+        提交后商品进入「审核中」，平台一般在 1 个工作日内完成审核；审核期间不可编辑、上架或委托，可随时撤回。审核通过后商品转为「运营中」。
+      </p>
+
+      <ListGroup title="提交内容">
+        <div className="grid grid-cols-3 gap-x-4 gap-y-2">
+          <DescItem label="商品名称">{head.name}</DescItem>
+          <DescItem label="分类">
+            {head.category} / {head.subCategory}
+          </DescItem>
+          <DescItem label="规格数">{items.length} 个</DescItem>
+          <DescItem label="总库存">
+            {totalStock.toLocaleString()} {head.unit}
+          </DescItem>
+          <DescItem label="所属店铺">{head.shop}</DescItem>
+          <DescItem label="当前状态">{goodsStatusMeta[head.status].label}</DescItem>
+        </div>
+      </ListGroup>
+
+      <ListGroup title="提交前检查">
+        <ul className="flex flex-col gap-1.5 text-xs">
+          {checks.map((c) => (
+            <li key={c.label} className="flex items-center gap-2">
+              {c.ok ? (
+                <CheckCircle2 className="size-3.5 text-emerald-600" aria-hidden />
+              ) : (
+                <AlertTriangle className="size-3.5 text-red-600" aria-hidden />
+              )}
+              <span className={c.ok ? "" : "text-red-600"}>
+                {c.label}
+                {!c.ok && "（未完善，请先继续编辑）"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      </ListGroup>
+
+      {resubmit && head.statusNote && (
+        <div className="flex flex-col gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <span>
+            {goodsStatusMeta[head.status].label}原因：{head.statusNote}
+          </span>
+          <label className="flex cursor-pointer items-center gap-2">
+            <input
+              type="checkbox"
+              checked={confirmed}
+              onChange={(e) => setConfirmed(e.target.checked)}
+              className="size-3.5 accent-[#1890ff]"
+            />
+            已按上述原因完成整改
+          </label>
+        </div>
+      )}
+
+      <DialogField label="给审核员的说明">
+        <DialogInput
+          label="给审核员的说明"
+          value={note}
+          onChange={setNote}
+          placeholder={resubmit ? "说明整改内容，便于加快审核（选填）" : "选填"}
+        />
+      </DialogField>
+    </Modal>
+  );
+}
+
 type EntrustFilter = "" | "has" | "none" | "pending" | "accepted";
 type Filters = {
   code: string;
@@ -2513,7 +2679,7 @@ function FilterPanel({
           onClick={onSearch}
         >
           <Search data-icon="inline-start" />
-          查询
+          ��询
         </Button>
         <Button variant="outline" onClick={onReset}>
           重置
@@ -3076,7 +3242,7 @@ function GoodsDetail({
     .map((g) => g.updatedAt)
     .sort()
     .at(-1);
-  const editable = head.status !== "violation";
+  const editable = head.status !== "violation" && head.status !== "reviewing";
   const images = head.images ?? [];
 
   return (
@@ -3394,9 +3560,27 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
     );
     notify(message);
   };
+  /** 同名商品的全部规格一起变更状态 */
+  const updateGroupStatus = (
+    name: string,
+    status: GoodsStatus,
+    statusNote: string | undefined,
+    message: string,
+  ) => {
+    setGoods((list) =>
+      list.map((g) =>
+        g.name === name ? { ...g, status, statusNote, updatedAt: now() } : g,
+      ),
+    );
+    notify(message);
+  };
   const handleAction = (g: Goods, action: GoodsAction) => {
     if (action === "detail") {
       setDetailName(g.name);
+      return;
+    }
+    if (action === "withdraw") {
+      updateGroupStatus(g.name, "draft", undefined, `已撤回审核：${g.name}，商品恢复为草稿`);
       return;
     }
     setDialog({ action, code: g.code });
@@ -3648,7 +3832,7 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                             order={goodsStatusOrder}
                             meta={goodsStatusMeta}
                           />
-                          {single && head.statusNote && (
+                          {single && head.status === "off" && head.statusNote && (
                             <span
                               className="line-clamp-2 text-[11px] leading-4 text-muted-foreground"
                               title={head.statusNote}
@@ -3794,6 +3978,21 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
             if (detailName === dialogGoods.name && patch.name !== detailName)
               setDetailName(patch.name);
           }}
+        />
+      )}
+      {dialog?.action === "submit" && dialogGoods && (
+        <SubmitReviewDialog
+          key={dialogGoods.name}
+          items={dialogItems}
+          onClose={() => setDialog(null)}
+          onConfirm={(note) =>
+            updateGroupStatus(
+              dialogGoods.name,
+              "reviewing",
+              note || undefined,
+              `已提交审核：${dialogGoods.name}（${dialogItems.length} 个规格），预计 1 个工作日内完成`,
+            )
+          }
         />
       )}
       {dialog?.action === "off" && dialogGoods && (
