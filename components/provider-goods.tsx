@@ -640,7 +640,7 @@ function ReturnDialog({
           onChange={setReason}
         />
       </DialogField>
-      <DialogField label="补充���明">
+      <DialogField label="补充说明">
         <DialogInput
           label="补充说明"
           value={note}

@@ -593,7 +593,7 @@ export function groupSpecs<T extends { name: string }>(
   return groups;
 }
 
-/** 分组行的编��列：单规格直接显示编码，多规格显示首个编码并标注数量 */
+/** 分组行的编码列：单规格直接显示编码，多规格显示首个编码并标注数量 */
 export function GroupCode({ codes }: { codes: string[] }) {
   return (
     <span className="flex flex-col font-mono text-xs leading-4 text-muted-foreground">
@@ -1752,7 +1752,7 @@ function ListDialog({
       </div>
 
       <DialogField
-        label="租��方式"
+        label="租赁方式"
         required
         hint="每张上架单对应一种租售方式；同一商品可多次上架"
       >
@@ -1813,7 +1813,7 @@ function ListDialog({
             />
             <span>规格型号</span>
             <span>可上架</span>
-            <span>{type === "sale" ? "销售单��" : "租金单价"}</span>
+            <span>{type === "sale" ? "销售单价" : "租金单价"}</span>
             <span>上架数量</span>
             <span>{type === "sale" ? "起订量" : "押金"}</span>
           </div>
@@ -2297,7 +2297,7 @@ function EditDialog({
 
 const OFF_REASONS = [
   "库存不足",
-  "价��调整",
+  "价格调整",
   "暂停经营",
   "商品信息变更",
   "其他",
@@ -2982,7 +2982,7 @@ function ListingDetail({
         >
           <span>商品编码</span>
           <span>规格型号</span>
-          <span>{rent ? "租�� / 押金" : "单价 / 起订量"}</span>
+          <span>{rent ? "租金 / 押金" : "单价 / 起订量"}</span>
           <span>上架数量</span>
           <span>{rent ? "已租" : "已售"}</span>
           <span>剩余</span>
