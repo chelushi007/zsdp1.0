@@ -26,7 +26,6 @@ import {
   Tag,
   bizMeta,
   fmtPrice,
-  groupSpecs,
   type BizType,
   type SpecGroup,
 } from "@/components/goods-list";
@@ -362,6 +361,22 @@ const statusMeta: Record<
   },
 };
 
+/** 委托单分组：同一商品的出售 / 出租分别成组，组内为各规格 */
+type OrderGroup = SpecGroup<EntrustedGoods> & { key: string; type: BizType };
+function orderKey(g: Pick<EntrustedGoods, "name" | "type">) {
+  return `${g.name}__${g.type}`;
+}
+function groupOrders(list: EntrustedGoods[]): OrderGroup[] {
+  const groups: OrderGroup[] = [];
+  for (const item of list) {
+    const key = orderKey(item);
+    const g = groups.find((x) => x.key === key);
+    if (g) g.items.push(item);
+    else groups.push({ key, name: item.name, type: item.type, items: [item] });
+  }
+  return groups;
+}
+
 /** 受理状态：待受理 / 已退回 视为未受理，其余均为已受理 */
 function isAccepted(g: EntrustedGoods) {
   return g.status === "accepted" || g.status === "listed" || g.status === "off";
@@ -378,10 +393,9 @@ const acceptMeta = {
   },
 };
 
-/** 运营状态：仅已受理的商品有运营状态（待上架 / 运营中 / 已下架） */
+/** 运营状态：仅已上架过的商品有运营状态（运营中 / 已下架），待上架不单独标识 */
 function operationMeta(g: EntrustedGoods) {
   if (g.status === "listed") return statusMeta.listed;
-  if (g.status === "accepted") return statusMeta.accepted;
   if (g.status === "off") return statusMeta.off;
   return null;
 }
@@ -547,7 +561,7 @@ function ReturnDialog({
           onChange={setReason}
         />
       </DialogField>
-      <DialogField label="补充说明">
+      <DialogField label="补充���明">
         <DialogInput
           label="补充说明"
           value={note}
@@ -1114,14 +1128,12 @@ const specSummaryColumns =
   "108px minmax(150px,1.2fr) 64px 120px 90px 90px 96px minmax(170px,1fr)";
 const listingColumns =
   "120px 128px 72px minmax(140px,1fr) minmax(150px,1fr) 100px 80px 120px";
-const groupListingColumns =
-  "120px minmax(130px,1fr) 128px 72px minmax(140px,1fr) minmax(150px,1fr) 100px 80px 120px";
 
 /** 一组同名受托商品的全部上架记录：多规格时在行内标注编码与规格，仅展示对外价格 */
 function GroupListingTable({ items }: { items: EntrustedGoods[] }) {
   const rows = items.flatMap((g) => g.listings.map((l) => ({ g, l })));
   const multi = items.length > 1;
-  const cols = multi ? groupListingColumns : listingColumns;
+  const cols = listingColumns;
   const types = new Set(rows.map((r) => r.l.type));
   const onlyRent = types.size === 1 && types.has("rent");
   const onlySale = types.size === 1 && types.has("sale");
@@ -1144,7 +1156,6 @@ function GroupListingTable({ items }: { items: EntrustedGoods[] }) {
         style={{ gridTemplateColumns: cols }}
       >
         <span>上架单号</span>
-        {multi && <span>商品编码 / 规格</span>}
         <span>上架时间</span>
         <span>租售方式</span>
         <span>{onlyRent ? "对外租金" : onlySale ? "对外售价" : "对外价格"}</span>
@@ -1167,16 +1178,6 @@ function GroupListingTable({ items }: { items: EntrustedGoods[] }) {
             <span className="font-mono text-xs text-muted-foreground">
               {l.id}
             </span>
-            {multi && (
-              <span className="flex min-w-0 flex-col leading-4">
-                <span className="font-mono text-xs text-muted-foreground">
-                  {g.code}
-                </span>
-                <span className="truncate text-xs" title={g.spec}>
-                  {g.spec}
-                </span>
-              </span>
-            )}
             <span className="font-mono text-xs text-muted-foreground">
               {l.listedAt}
             </span>
@@ -1573,9 +1574,12 @@ export function ProviderGoods() {
   /** 同一委托单下的全部规格：受理 / 退回按委托单整体生效 */
   const orderIds = (g: EntrustedGoods) =>
     goods
-      .filter((x) => x.name === g.name && x.seller === g.seller)
+      .filter(
+        (x) =>
+          x.name === g.name && x.seller === g.seller && x.type === g.type,
+      )
       .map((x) => x.id);
-  const [detailName, setDetailName] = useState<string | null>(null);
+  const [detailKey, setDetailKey] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const sellers = Array.from(new Set(goods.map((g) => g.seller)));
@@ -1607,17 +1611,17 @@ export function ProviderGoods() {
     setDraft((d) => ({ ...d, status: s }));
     setApplied((a) => ({ ...a, status: s }));
   };
-  const toggle = (name: string) =>
-    setExpanded((e) => ({ ...e, [name]: !e[name] }));
+  const toggle = (key: string) =>
+    setExpanded((e) => ({ ...e, [key]: !e[key] }));
   const handleAction = (g: EntrustedGoods, action: Action) => {
-    if (action === "detail") setDetailName(g.name);
+    if (action === "detail") setDetailKey(orderKey(g));
     else setDialog({ action, id: g.id });
   };
 
   const typeLabel = draft.type ? bizMeta[draft.type].label : "";
-  const groups = groupSpecs(visible);
-  const detailGroup = detailName
-    ? groupSpecs(goods.filter((g) => g.name === detailName))[0]
+  const groups = groupOrders(visible);
+  const detailGroup = detailKey
+    ? groupOrders(goods.filter((g) => orderKey(g) === detailKey))[0]
     : undefined;
 
   return (
@@ -1625,7 +1629,7 @@ export function ProviderGoods() {
       {detailGroup ? (
         <EntrustDetail
           group={detailGroup}
-          onBack={() => setDetailName(null)}
+          onBack={() => setDetailKey(null)}
           onAction={handleAction}
         />
       ) : (
@@ -1783,12 +1787,11 @@ export function ProviderGoods() {
                   const items = grp.items;
                   const head = items[0];
                   const single = items.length === 1;
-                  const open = expanded[grp.name] ?? false;
+                  const open = expanded[grp.key] ?? false;
                   const listingCount = items.reduce(
                     (n, g) => n + g.listings.length,
                     0,
                   );
-                  const types = Array.from(new Set(items.map((g) => g.type)));
                   const prices = items.map((g) => g.basePrice);
                   const minPrice = Math.min(...prices);
                   const maxPrice = Math.max(...prices);
@@ -1802,7 +1805,7 @@ export function ProviderGoods() {
                     ? acceptMeta.accepted
                     : acceptMeta.pending;
                   return (
-                    <Fragment key={grp.name}>
+                    <Fragment key={grp.key}>
                       <div
                         className={cn(
                           "grid items-center gap-3 border-b border-border px-4 py-3 text-sm hover:bg-muted/30",
@@ -1813,7 +1816,7 @@ export function ProviderGoods() {
                         <span className="flex justify-center">
                           <button
                             type="button"
-                            onClick={() => toggle(grp.name)}
+                            onClick={() => toggle(grp.key)}
                             aria-expanded={open}
                             aria-controls={`provider-listings-${head.id}`}
                             aria-label={
@@ -1848,12 +1851,10 @@ export function ProviderGoods() {
                         <span className="truncate text-xs" title={head.seller}>
                           {head.seller}
                         </span>
-                        <span className="flex flex-wrap gap-1">
-                          {types.map((t) => (
-                            <Tag key={t} className={bizMeta[t].className}>
-                              {bizMeta[t].label}
-                            </Tag>
-                          ))}
+                        <span className="flex">
+                          <Tag className={bizMeta[grp.type].className}>
+                            {bizMeta[grp.type].label}
+                          </Tag>
                         </span>
                         <span className="flex flex-col text-xs tabular-nums">
                           {single ? (
@@ -1903,17 +1904,14 @@ export function ProviderGoods() {
                             .toLocaleString()}{" "}
                           {head.unit}
                         </span>
-                        <span className="flex flex-col items-start gap-1">
+                        <span className="flex">
                           <Tag className={accept.className}>{accept.label}</Tag>
-                          {head.status === "returned" && (
-                            <span className="text-[11px] leading-4 text-red-600">
-                              已退回
-                            </span>
-                          )}
                         </span>
                         <span className="flex min-w-0 flex-col items-start gap-1">
                           <StatusSummary
-                            statuses={items.map((g) => g.status)}
+                            statuses={items
+                              .map((g) => g.status)
+                              .filter((st) => st === "listed" || st === "off")}
                             order={statusOrder}
                             meta={statusMeta}
                           />
