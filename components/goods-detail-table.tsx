@@ -7,18 +7,17 @@ import { materialCategoryPath, type Material } from '@/lib/materials-data'
 export type GoodsLine = {
   material: Material
   stock: string
-  minOrder: string
 }
 
 export function newGoodsLine(material: Material): GoodsLine {
-  return { material, stock: '', minOrder: '' }
+  return { material, stock: '' }
 }
 
 const positive = (v: string) => v !== '' && Number(v) > 0
 
-/** 单行是否填写完整：库存与起订量必填 */
+/** 单行是否填写完整：库存必填 */
 export function lineComplete(l: GoodsLine) {
-  return positive(l.stock) && positive(l.minOrder)
+  return positive(l.stock)
 }
 
 export function GoodsDetailTable({ lines, onChange, onAdd }: { lines: GoodsLine[]; onChange: (lines: GoodsLine[]) => void; onAdd: () => void }) {
@@ -28,7 +27,7 @@ export function GoodsDetailTable({ lines, onChange, onAdd }: { lines: GoodsLine[
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs text-muted-foreground">从物料库选择同品类下的多个规格型号，每一行对应一个 SKU；库存与起订量为必填，价格在「上架」时按租售方式填写。</p>
+        <p className="text-xs text-muted-foreground">从物料库选择同品类下的多个规格型号，每一行对应一个 SKU；库存为必填，价格与起订量在「上架」时按租售方式填写。</p>
         <button
           type="button"
           onClick={onAdd}
@@ -50,14 +49,13 @@ export function GoodsDetailTable({ lines, onChange, onAdd }: { lines: GoodsLine[
               <Th required>规格型号</Th>
               <Th required>计量单位</Th>
               <Th required>库存</Th>
-              <Th required>起订量</Th>
               <Th>操作</Th>
             </tr>
           </thead>
           <tbody>
             {lines.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-3 py-10 text-center text-xs text-muted-foreground">
+                <td colSpan={8} className="px-3 py-10 text-center text-xs text-muted-foreground">
                   尚未添加商品明细，点击右上角「添加物料」从物料库选择规格型号
                 </td>
               </tr>
@@ -74,9 +72,6 @@ export function GoodsDetailTable({ lines, onChange, onAdd }: { lines: GoodsLine[
                   <Td>{m.unit}</Td>
                   <Td>
                     <CellInput value={l.stock} onChange={(v) => update(i, { stock: v })} invalid={!positive(l.stock)} aria-label={`${m.name} ${m.spec} 库存`} />
-                  </Td>
-                  <Td>
-                    <CellInput value={l.minOrder} onChange={(v) => update(i, { minOrder: v })} invalid={!positive(l.minOrder)} aria-label={`${m.name} ${m.spec} 起订量`} />
                   </Td>
                   <Td>
                     <button type="button" onClick={() => remove(i)} className="inline-flex items-center gap-1 text-xs text-red-600 hover:underline">

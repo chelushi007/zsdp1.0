@@ -735,7 +735,7 @@ export function GoodsPublish({ onBack, onSubmitted }: { onBack: () => void; onSu
     : lines.length === 0
       ? '请添加至少一条商品明细'
       : incompleteLines > 0
-        ? `还有 ${incompleteLines} 条明细未填写完整（库存、起订量）`
+        ? `还有 ${incompleteLines} 条明细未填写库存`
         : !freightOk
           ? '请完善运费设置'
           : !agreed
