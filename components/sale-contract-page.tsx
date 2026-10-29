@@ -148,7 +148,7 @@ export function SaleContractPage({ order: o, onBack, onSubmit }: { order: SaleOr
                 ['合同编号', <span key="no" className="font-mono">{no || '—'}</span>],
                 ['签署方式', mode === '线上' ? '线上电子签' : '线下纸质签'],
                 ['标的', `${o.goods.name} ${o.quantity.toLocaleString()} ${o.goods.unit}`],
-                ['结算方式', o.payTerm],
+                ['履约方式', o.payTerm],
               ]}
             />
             <div className="flex items-baseline justify-between border-t border-border pt-3">

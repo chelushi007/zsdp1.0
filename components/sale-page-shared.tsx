@@ -110,7 +110,7 @@ export function OrderInfoCard({
             </span>,
           ],
           ["下单时间", o.createdAt],
-          ["结算方式", o.payTerm],
+          ["履约方式", o.payTerm],
           ["买方（甲方）", o.buyer],
           ["卖方（乙方）", o.seller],
           ["所属店铺", o.shop],

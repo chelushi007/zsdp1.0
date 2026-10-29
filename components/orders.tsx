@@ -767,7 +767,7 @@ function RentOrders({ role }: { role: OrderRole }) {
     },
     {
       key: "settle",
-      label: "结算方式",
+      label: "履约方式",
       width: "84px",
       render: (o) => <SettleCell o={o} />,
     },
@@ -848,7 +848,7 @@ function RentOrders({ role }: { role: OrderRole }) {
     {
       title: "结算",
       rows: [
-        ["结算方式", o.payTerm],
+        ["履约方式", o.payTerm],
         ["对账状态", o.reconcile ?? "—"],
         ["对账单金额", o.statementAmount ? fmtMoney(o.statementAmount) : "—"],
         ["应结金额", fmtMoney(settleAmount(o))],
@@ -896,9 +896,9 @@ function RentOrders({ role }: { role: OrderRole }) {
         showSource={role === "seller"}
         dateLabel="下单时间"
         extra={
-          <FilterRow label="结算方式">
+          <FilterRow label="履约方式">
             <Select
-              label="结算方式"
+              label="履约方式"
               placeholder="全部"
               value={termDraft}
               options={payTermOptions}
@@ -1509,7 +1509,7 @@ function SaleOrders({ role }: { role: OrderRole }) {
     },
     {
       key: "settle",
-      label: "结算方式",
+      label: "履约方式",
       width: "84px",
       render: (o) => <SettleCell o={o} />,
     },
@@ -1651,9 +1651,9 @@ function SaleOrders({ role }: { role: OrderRole }) {
         showSource={role === "seller"}
         dateLabel="下单时间"
         extra={
-          <FilterRow label="结算方式">
+          <FilterRow label="履约方式">
             <Select
-              label="结算方式"
+              label="履约方式"
               placeholder="全部"
               value={termDraft}
               options={payTermOptions}

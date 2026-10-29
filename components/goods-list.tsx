@@ -51,7 +51,7 @@ type Listing = {
   maxDays?: number;
   /** 税率，「不含税」表示报价不含税 */
   taxRate?: string;
-  /** 结算方式 */
+  /** 履约方式 */
   payTerm?: "先款后货" | "货到付款";
   /** 是否支持议价 */
   negotiable?: boolean;
@@ -1971,10 +1971,10 @@ function ListDialog({
               ))}
             </select>
           </DialogField>
-          <DialogField label="结算方式" required>
+          <DialogField label="履约方式" required>
             <div
               role="radiogroup"
-              aria-label="结算方式"
+              aria-label="履约方式"
               className="flex h-9 items-center gap-4 text-sm"
             >
               {PAY_TERMS.map((t) => (
@@ -2959,7 +2959,7 @@ function ListingDetail({
             </DescItem>
           )}
           <DescItem label="税率">{first.taxRate ?? "—"}</DescItem>
-          <DescItem label="结算方式">{first.payTerm ?? "—"}</DescItem>
+          <DescItem label="履约方式">{first.payTerm ?? "—"}</DescItem>
           <DescItem label="议价">
             {first.negotiable ? `支持${rent ? "租" : "买"}方发起议价` : "不支持"}
           </DescItem>

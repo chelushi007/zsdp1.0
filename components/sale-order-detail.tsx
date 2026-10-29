@@ -139,7 +139,7 @@ function GoodsTab({ o, role }: { o: SaleOrder; role: OrderRole }) {
       <Rows
         cols={3}
         rows={[
-          ["结算方式", o.payTerm],
+          ["履约方式", o.payTerm],
           ["支付方式", o.payMethod],
           ["所属店铺", o.shop],
           ["买方", o.buyer],
@@ -206,7 +206,7 @@ function ContractTab({ o }: { o: SaleOrder }) {
             "标的",
             `${o.goods.name} ${o.quantity.toLocaleString()} ${o.goods.unit}`,
           ],
-          ["结算方式", o.payTerm],
+          ["履约方式", o.payTerm],
         ]}
       />
       <div>
