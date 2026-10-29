@@ -20,6 +20,19 @@ type ShopStatus = 'open' | 'pending' | 'closed'
 
 type OrgLevel = 'self' | 'sub'
 
+/** 单位路径：[二级单位, 三级单位?, 项目部?]，本级为二级单位 */
+type UnitPath = [string] | [string, string] | [string, string, string]
+
+const UNIT_LEVEL_NAMES = ['二级单位', '三级单位', '项目部'] as const
+
+function unitLevelName(unit: UnitPath) {
+  return UNIT_LEVEL_NAMES[unit.length - 1]
+}
+
+function unitLabel(unit: UnitPath) {
+  return unit.join(' - ')
+}
+
 type Shop = {
   id: string
   name: string
@@ -27,7 +40,7 @@ type Shop = {
   openedAt: string | null
   contact: string
   phone: string
-  org: string
+  unit: UnitPath
   orgLevel: OrgLevel
   categories: string[]
   region: Region
@@ -54,7 +67,7 @@ const statusMeta: Record<ShopStatus, { label: string; className: string }> = {
   closed: { label: '已关闭', className: 'bg-gray-100 text-gray-600 ring-gray-200' },
 }
 
-const CURRENT_ORG = '演示商户（上海）有限公司'
+const CURRENT_UNIT = '华东建设工程有限公司'
 
 const shops: Shop[] = [
   {
@@ -64,7 +77,7 @@ const shops: Shop[] = [
     openedAt: '2024-03-01 10:20',
     contact: '王敏',
     phone: '138 0011 2233',
-    org: CURRENT_ORG,
+    unit: [CURRENT_UNIT],
     orgLevel: 'self',
     categories: ['模板类', '支护类', '脚手架类'],
     region: { province: '上海市', city: '上海市', district: '浦东新区' },
@@ -86,7 +99,7 @@ const shops: Shop[] = [
     openedAt: '2024-04-15 14:05',
     contact: '李强',
     phone: '139 2233 4455',
-    org: CURRENT_ORG,
+    unit: [CURRENT_UNIT],
     orgLevel: 'self',
     categories: ['脚手架类', '支护类', '拼装类', '型材类'],
     region: { province: '上海市', city: '上海市', district: '松江区' },
@@ -107,7 +120,7 @@ const shops: Shop[] = [
     openedAt: null,
     contact: '赵雪',
     phone: '137 6655 8899',
-    org: CURRENT_ORG,
+    unit: [CURRENT_UNIT],
     orgLevel: 'self',
     categories: ['电线电缆', '其他材料'],
     region: { province: '上海市', city: '上海市', district: '徐汇区' },
@@ -128,7 +141,7 @@ const shops: Shop[] = [
     openedAt: '2023-08-12 09:00',
     contact: '陈浩',
     phone: '136 1122 3344',
-    org: '演示商户（苏州）分公司',
+    unit: [CURRENT_UNIT, '苏州分公司'],
     orgLevel: 'sub',
     categories: ['轨道类', '型材类', '拼装类'],
     region: { province: '江苏省', city: '苏州市', district: '工业园区' },
@@ -149,7 +162,7 @@ const shops: Shop[] = [
     openedAt: null,
     contact: '周丽',
     phone: '135 9988 7766',
-    org: '演示商户（杭州）分公司',
+    unit: [CURRENT_UNIT, '杭州分公司'],
     orgLevel: 'sub',
     categories: ['房屋建筑类', '模板类', '其他材料'],
     region: { province: '浙江省', city: '杭州市', district: '滨江区' },
@@ -170,7 +183,7 @@ const shops: Shop[] = [
     openedAt: '2023-01-05 10:30',
     contact: '孙伟',
     phone: '131 4455 6677',
-    org: '演示商户（嘉兴）项目部',
+    unit: [CURRENT_UNIT, '嘉兴分公司', '南湖项目部'],
     orgLevel: 'sub',
     categories: ['模板类', '支护类'],
     region: { province: '浙江省', city: '嘉兴市', district: '南湖区' },
@@ -244,7 +257,7 @@ function RowActions({
         {common}
         <span
           className="rounded bg-muted px-1.5 text-[10px] leading-4 text-muted-foreground ring-1 ring-inset ring-border"
-          title="下级机构的店铺仅支持查看，请由所属机构进行管理"
+          title="下级单位的店铺仅支持查看，请由所属单位进行管理"
         >
           仅可查看
         </span>
@@ -275,7 +288,7 @@ function RowActions({
       return (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           {common}
-          <ActionLink>重新开��</ActionLink>
+          <ActionLink>重新开通</ActionLink>
         </div>
       )
   }
@@ -389,7 +402,7 @@ function FilterPanel({
             className="size-4 rounded border-border accent-[#1890ff]"
           />
           本级及下级
-          <span className="text-xs text-muted-foreground">（勾选后同时查看下级机构的店铺）</span>
+          <span className="text-xs text-muted-foreground">（勾选后同时查看三级单位、项目部的店铺）</span>
         </label>
         <Button variant="outline" className="ml-auto" onClick={onCreate}>
           <Plus data-icon="inline-start" />
@@ -448,16 +461,17 @@ function ConfirmCloseDialog({ shop, onCancel, onConfirm }: { shop: Shop; onCance
 const columns = '125px minmax(160px,1.4fr) minmax(150px,1fr) 80px 135px 60px 115px minmax(170px,1fr)'
 
 function OrgCell({ shop }: { shop: Shop }) {
+  const label = unitLabel(shop.unit)
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <span className="truncate text-xs">{shop.org}</span>
+    <span className="flex min-w-0 items-center gap-1.5" title={label}>
+      <span className="truncate text-xs">{label}</span>
       <span
         className={cn(
           'shrink-0 rounded px-1 text-[10px] leading-4 ring-1 ring-inset',
           shop.orgLevel === 'self' ? 'bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/30' : 'bg-muted text-muted-foreground ring-border',
         )}
       >
-        {shop.orgLevel === 'self' ? '本级' : '下级'}
+        {unitLevelName(shop.unit)}
       </span>
     </span>
   )
@@ -520,7 +534,7 @@ function ShopList({
             >
               <span>店铺编号</span>
               <span>店铺名称</span>
-              <span>所属机构</span>
+              <span>所属单位</span>
               <span>状态</span>
               <span>开通时间</span>
               <span>联系人</span>
@@ -638,7 +652,19 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
+export function ShopCreate({ onDone }: { onDone: () => void }) {
+  return <ShopForm onBack={onDone} backLabel="返回店铺信息" />
+}
+
+function ShopForm({
+  shop,
+  onBack,
+  backLabel = '返回列表',
+}: {
+  shop?: Shop
+  onBack: () => void
+  backLabel?: string
+}) {
   const isEdit = Boolean(shop)
   const [categories, setCategories] = useState<string[]>(shop?.categories ?? [])
   const [region, setRegion] = useState<Region>(shop?.region ?? { province: '', city: '', district: '' })
@@ -655,7 +681,7 @@ function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeft data-icon="inline-start" />
-          返回列表
+          {backLabel}
         </Button>
         {isEdit && <StatusBadge status={shop!.status} />}
       </div>
@@ -666,7 +692,7 @@ function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
             <Input placeholder="请输入店铺名称，不超过 30 个字" value={shop?.name} />
           </Field>
           <Field label="营业时间">
-            <Input placeholder="例如：周���至周五 09:00 - 18:00" value={shop?.businessHours} />
+            <Input placeholder="例如：周一至周五 09:00 - 18:00" value={shop?.businessHours} />
           </Field>
           <Field label="主营类目" required span hint={`最多选择 ${MAX_CATEGORIES} 个类目，首个类目将作为店铺主类目展示`}>
             <CategoryPicker value={categories} onChange={setCategories} />
@@ -726,13 +752,13 @@ function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
         </div>
       </Section>
 
-      <div className="sticky bottom-0 flex flex-col gap-3 rounded-md border border-border bg-card px-5 py-3">
-        <label className="flex cursor-pointer items-start gap-2 text-sm">
+      <div className="sticky bottom-0 flex flex-col items-center gap-3 rounded-md border border-border bg-card px-5 py-4 text-center">
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
           <input
             type="checkbox"
             checked={agreed}
             onChange={(e) => setAgreed(e.target.checked)}
-            className="mt-0.5 size-4 accent-[#1890ff]"
+            className="size-4 accent-[#1890ff]"
           />
           <span>
             请阅读并同意
@@ -742,7 +768,7 @@ function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
             后发布
           </span>
         </label>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center justify-center gap-2">
           <Button className="bg-[#1890ff] hover:bg-[#1890ff]/90" disabled={!canPublish}>
             {isEdit ? '保存并发布' : '发布并开通'}
           </Button>
@@ -750,18 +776,18 @@ function ShopForm({ shop, onBack }: { shop?: Shop; onBack: () => void }) {
           <Button variant="ghost" onClick={onBack}>
             取消
           </Button>
-          <p className="ml-auto text-xs text-muted-foreground">
-            {!agreed
-              ? '勾选同意开店须知后方可发布'
-              : !imagesOk
-                ? `企业图片至少上传 ${COMPANY_IMAGES_MIN} 张后方可发布`
-                : categories.length === 0
-                  ? '请选择主营类目后发布'
-                  : isEdit
-                    ? '发布后修改立即生效'
-                    : '仅保存时店铺状态为「未开通」，可在列表中开通'}
-          </p>
         </div>
+        <p className="text-xs text-muted-foreground">
+          {!agreed
+            ? '勾选同意开店须知后方可发布'
+            : !imagesOk
+              ? `企业图片至少上传 ${COMPANY_IMAGES_MIN} 张后方可发布`
+              : categories.length === 0
+                ? '请选择主营类目后发布'
+                : isEdit
+                  ? '发布后修改立即生效'
+                  : '仅保存时店铺状态为「未开通」，可在列表中开通'}
+        </p>
       </div>
     </div>
   )
@@ -781,7 +807,7 @@ function DetailActions({ shop, onEdit, onClose }: { shop: Shop; onEdit: () => vo
     return (
       <span className="flex h-8 items-center gap-1.5 rounded border border-dashed border-border px-3 text-xs text-muted-foreground">
         <Lock className="size-3.5" aria-hidden />
-        下级机构店铺，仅可查看，请由「{shop.org}」管理
+        下级单位店铺，仅可查看，请由「{shop.unit[shop.unit.length - 1]}」管理
       </span>
     )
   }
@@ -899,7 +925,10 @@ function ShopDetail({
           <Section title="基本信息">
             <dl className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <DescItem label="店铺名称" value={shop.name} />
-              <DescItem label="所属机构" value={`${shop.org}（${shop.orgLevel === 'self' ? '本级' : '下级'}）`} />
+              <DescItem
+                label="所属单位"
+                value={`${unitLabel(shop.unit)}（${unitLevelName(shop.unit)}${shop.orgLevel === 'self' ? '，本级' : '，下级'}）`}
+              />
               <DescItem label="营业时间" value={shop.businessHours} />
               <DescItem
                 label="店铺 Logo"

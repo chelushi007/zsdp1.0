@@ -51,9 +51,8 @@ export const menuTree: MenuNode[] = [
         label: '店铺管理',
         description: '店铺基础信息、装修与资质维护',
         children: [
-          { id: 'seller-shop-info', label: '店铺信息', description: '店铺名称、简介、联系方式与营业状态' },
-          { id: 'seller-shop-deco', label: '店铺装修', description: '首页模板、轮播图与栏目配置' },
-          { id: 'seller-shop-cert', label: '资质认证', description: '营业执照、经营许可等资质上传与审核' },
+        { id: 'seller-shop-info', label: '店铺信息', description: '店铺名称、简介、联系方式与营业状态' },
+        { id: 'seller-shop-create', label: '新增店铺', description: '填写店铺基本信息、主营类目与企业资料，发布新店铺' },
         ],
       },
       {
@@ -62,8 +61,7 @@ export const menuTree: MenuNode[] = [
         description: '租赁与销售商品的发布、上下架与库存',
         children: [
           { id: 'seller-goods-list', label: '商品列表', description: '全部商品的查询、上下架与批量操作' },
-          { id: 'seller-goods-publish', label: '发布商品', description: '新增商品，设置租售方式、价格与押金' },
-          { id: 'seller-goods-stock', label: '库存管理', description: '可租/可售库存、在租数量与归还记录' },
+        { id: 'seller-goods-publish', label: '发布商品', description: '新增商品，设置运营方式、价格与押金' },
         ],
       },
       ...workbenchCommon('seller', '商家'),
@@ -83,10 +81,10 @@ export const menuTree: MenuNode[] = [
     children: [
       { id: 'provider-dashboard', label: '我的工作台', description: '服务商概览：受托商品、服务订单、佣金结算' },
       {
-        id: 'provider-entrust',
-        label: '委托商品管理',
+        id: 'provider-goods',
+        label: '商品管理',
         emphasized: true,
-        description: '接收商家委托的商品，代为出租/销售与维护',
+        description: '受理商家委托的商品，在底价基础上加价上架、代为出售与出租',
       },
       ...workbenchCommon('provider', '服务商'),
     ],

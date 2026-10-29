@@ -464,7 +464,7 @@ export function CompanyImagesUploader({ count, onChange }: { count: number; onCh
         <span className={cn('tabular-nums', tooFew ? 'text-amber-600' : 'text-muted-foreground')}>
           已上传 {count} / {COMPANY_IMAGES_MAX} 张{tooFew && `，至少还需 ${COMPANY_IMAGES_MIN - count} 张`}
         </span>
-        <span className="text-muted-foreground">支持拖拽排���，首图将作为店铺封面</span>
+        <span className="text-muted-foreground">支持拖拽排序，首图将作为店铺封面</span>
       </div>
       <Tip tone={tooFew ? 'warn' : 'info'}>
         店铺第一张图片请上传企业正门实景照片，画面力求规整美观，尺寸比例为 16:9，最多可上传 {COMPANY_IMAGES_MAX} 张，最少{' '}
