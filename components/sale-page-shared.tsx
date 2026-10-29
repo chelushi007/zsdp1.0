@@ -6,9 +6,12 @@ import { cn } from "@/lib/utils";
 import { Tag } from "@/components/goods-list";
 import {
   fmtMoney,
+  goodsTax,
   orderLines,
   saleAmount,
   saleStatusMeta,
+  taxLabel,
+  taxRatesOf,
   type SaleOrder,
 } from "@/lib/orders-data";
 
@@ -98,7 +101,9 @@ export function OrderInfoCard({
   amountLabel?: string;
 }) {
   const amount = saleAmount(o);
+  const tax = goodsTax(o);
   const lines = orderLines(o);
+  const cols = "grid-cols-[minmax(0,2fr)_1fr_1fr_88px_1fr]";
   return (
     <Card title="订单信息">
       <InfoGrid
@@ -111,6 +116,7 @@ export function OrderInfoCard({
           ],
           ["下单时间", o.createdAt],
           ["履约方式", o.payTerm],
+          ["税率", taxRatesOf(o).map(taxLabel).join(" / ")],
           ["买方（甲方）", o.buyer],
           ["卖方（乙方）", o.seller],
           ["所属店铺", o.shop],
@@ -121,6 +127,11 @@ export function OrderInfoCard({
             o.contractNo ? (
               <span key="ht" className="font-mono">
                 {o.contractNo}
+                {o.contractState && (
+                  <span className="ml-1 font-sans text-xs text-muted-foreground">
+                    {o.contractState}
+                  </span>
+                )}
               </span>
             ) : (
               "—"
@@ -130,7 +141,12 @@ export function OrderInfoCard({
         ]}
       />
       <div className="overflow-hidden rounded border border-border">
-        <div className="grid grid-cols-[minmax(0,2fr)_1fr_1fr_1fr] bg-muted/50 px-4 py-2 text-xs text-muted-foreground">
+        <div
+          className={cn(
+            "grid bg-muted/50 px-4 py-2 text-xs text-muted-foreground",
+            cols,
+          )}
+        >
           <span>
             商品
             {lines.length > 1 && (
@@ -139,37 +155,62 @@ export function OrderInfoCard({
           </span>
           <span className="text-right">数量</span>
           <span className="text-right">单价</span>
+          <span className="text-right">税率</span>
           <span className="text-right">小计</span>
         </div>
         <ul className="divide-y divide-border">
-          {lines.map((l) => (
-            <li
-              key={l.code}
-              className="grid grid-cols-[minmax(0,2fr)_1fr_1fr_1fr] items-center px-4 py-3 text-sm"
-            >
-              <span className="flex min-w-0 flex-col">
-                <span className="truncate">{l.name}</span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {l.spec}
+          {lines.map((l) => {
+            const below = l.minOrder !== undefined && l.quantity < l.minOrder;
+            return (
+              <li
+                key={l.code}
+                className={cn("grid items-center px-4 py-3 text-sm", cols)}
+              >
+                <span className="flex min-w-0 flex-col">
+                  <span className="truncate">{l.name}</span>
+                  <span className="truncate text-xs text-muted-foreground">
+                    {l.spec}
+                  </span>
+                  <span className="truncate font-mono text-[11px] text-muted-foreground">
+                    {l.code}
+                    {l.listingNo && ` · 上架单 ${l.listingNo}`}
+                  </span>
                 </span>
-              </span>
-              <span className="text-right tabular-nums">
-                {l.quantity.toLocaleString()} {l.unit}
-              </span>
-              <span className="text-right tabular-nums">
-                ¥{" "}
-                {l.unitPrice.toLocaleString("zh-CN", {
-                  maximumFractionDigits: 2,
-                })}{" "}
-                / {l.unit}
-              </span>
-              <span className="text-right tabular-nums">
-                {fmtMoney(l.unitPrice * l.quantity)}
-              </span>
-            </li>
-          ))}
+                <span className="flex flex-col items-end tabular-nums">
+                  <span>
+                    {l.quantity.toLocaleString()} {l.unit}
+                  </span>
+                  {l.minOrder !== undefined && (
+                    <span
+                      className={cn(
+                        "text-[11px]",
+                        below ? "text-red-600" : "text-muted-foreground",
+                      )}
+                    >
+                      起订 {l.minOrder.toLocaleString()} {l.unit}
+                      {below && " · 未达"}
+                    </span>
+                  )}
+                </span>
+                <span className="text-right tabular-nums">
+                  ¥{" "}
+                  {l.unitPrice.toLocaleString("zh-CN", {
+                    maximumFractionDigits: 2,
+                  })}{" "}
+                  / {l.unit}
+                </span>
+                <span className="text-right text-xs text-muted-foreground">
+                  {taxLabel(l.taxRate)}
+                </span>
+                <span className="text-right tabular-nums">
+                  {fmtMoney(l.unitPrice * l.quantity)}
+                </span>
+              </li>
+            );
+          })}
         </ul>
         <div className="flex items-center justify-end gap-6 border-t border-border bg-muted/30 px-4 py-2 text-xs text-muted-foreground">
+          {tax > 0 && <span>其中税额 {fmtMoney(tax)}</span>}
           <span>运费 {o.freight ? fmtMoney(o.freight) : "免运费"}</span>
           <span>
             {amountLabel}{" "}

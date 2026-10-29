@@ -31,7 +31,31 @@ export type OrderGoods = {
   name: string;
   spec: string;
   unit: string;
+  /** 成交所依据的上架单号（与商品管理「上架单」一致） */
+  listingNo?: string;
+  /** 上架单约定的税率，「不含税」表示报价不含税 */
+  taxRate?: string;
+  /** 上架单约定的起订量（出售） */
+  minOrder?: number;
 };
+
+/** 税率字符串转小数，不含税 / 未设置返回 0 */
+export function taxRateValue(taxRate?: string) {
+  const n = Number.parseFloat(taxRate ?? "");
+  return Number.isFinite(n) ? n / 100 : 0;
+}
+
+/** 含税金额中的税额 */
+export function taxOf(amount: number, taxRate?: string) {
+  const r = taxRateValue(taxRate);
+  return r ? amount - amount / (1 + r) : 0;
+}
+
+/** 税率显示文案 */
+export function taxLabel(taxRate?: string) {
+  if (!taxRate || taxRate === "不含税") return "不含税";
+  return `含税 ${taxRate}`;
+}
 
 /** 先款后货：对账 → 付款 → 发货；货到付款：发货 → 收货(验收) → 对账 → 付款 */
 export type PayTerm = "先款后货" | "货到付款";
@@ -330,6 +354,24 @@ export function orderLines(o: SaleOrder): OrderLine[] {
   );
 }
 
+/** 货款中的税额合计（按各商品上架单税率价税分离） */
+export function goodsTax(o: SaleOrder) {
+  return orderLines(o).reduce(
+    (s, l) => s + taxOf(l.unitPrice * l.quantity, l.taxRate),
+    0,
+  );
+}
+
+/** 订单涉及的税率去重（如「13%」「不含税」） */
+export function taxRatesOf(o: SaleOrder) {
+  return [...new Set(orderLines(o).map((l) => l.taxRate ?? "不含税"))];
+}
+
+/** 数量低于上架单起订量的明细行 */
+export function belowMinOrderLines(o: SaleOrder) {
+  return orderLines(o).filter((l) => l.minOrder && l.quantity < l.minOrder);
+}
+
 /** 商品货款合计（不含运费） */
 export function goodsAmount(o: SaleOrder) {
   return orderLines(o).reduce((s, l) => s + l.unitPrice * l.quantity, 0);
@@ -399,42 +441,63 @@ const G = {
     name: "钢支撑 Φ609×16",
     spec: "Q235B / 6m 标准节",
     unit: "吨",
+    listingNo: "S240115001",
+    taxRate: "13%",
+    minOrder: 5,
   },
   hBeam: {
     code: "G2024020002",
     name: "H 型钢 400×200",
     spec: "Q355B / 12m",
     unit: "吨",
+    listingNo: "S240220003",
+    taxRate: "13%",
+    minOrder: 10,
   },
   scaffold: {
     code: "G2024040003",
     name: "盘扣式脚手架 横杆 1.2m",
     spec: "Q355 / 热镀锌",
     unit: "根",
+    listingNo: "S240412002",
+    taxRate: "13%",
+    minOrder: 500,
   },
   fence: {
     code: "G2024060004",
     name: "装配式围挡 2.5m",
     spec: "彩钢板 / 含立柱",
     unit: "片",
+    listingNo: "S240608001",
+    taxRate: "9%",
+    minOrder: 50,
   },
   box: {
     code: "G2024070006",
     name: "打包箱式活动房 3×6m",
     spec: "标准箱 / 含门窗",
     unit: "个",
+    listingNo: "S240703004",
+    taxRate: "不含税",
+    minOrder: 2,
   },
   formwork: {
     code: "G2024080105",
     name: "组合式钢模板 300×1500 平模",
     spec: "Q235 / 5mm 面板",
     unit: "块",
+    listingNo: "S240812006",
+    taxRate: "13%",
+    minOrder: 200,
   },
   hoist: {
     code: "G2024090011",
     name: "施工升降机 SC200/200",
     spec: "双笼 / 2t×2",
     unit: "台",
+    listingNo: "S240905002",
+    taxRate: "13%",
+    minOrder: 1,
   },
 } satisfies Record<string, OrderGoods>;
 

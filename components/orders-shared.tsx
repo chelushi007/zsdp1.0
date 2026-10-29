@@ -362,13 +362,41 @@ export function IdCell({ id, sub }: { id: string; sub?: string }) {
   )
 }
 
-export function GoodsCell({ name, spec, qty, unit }: { name: string; spec: string; qty: number; unit: string }) {
+export function GoodsCell({
+  name,
+  spec,
+  qty,
+  unit,
+  code,
+  listingNo,
+  extraCount,
+}: {
+  name: string
+  spec: string
+  qty: number
+  unit: string
+  /** 商品编码 */
+  code?: string
+  /** 上架单号 */
+  listingNo?: string
+  /** 多商品订单时，除首行外的其他商品数 */
+  extraCount?: number
+}) {
   return (
     <span className="flex min-w-0 flex-col">
-      <span className="truncate font-medium">{name}</span>
+      <span className="truncate font-medium">
+        {name}
+        {extraCount ? <span className="ml-1 text-xs font-normal text-[#1890ff]">等 {extraCount + 1} 项</span> : null}
+      </span>
       <span className="truncate text-xs text-muted-foreground">
         {spec} · {qty.toLocaleString()} {unit}
       </span>
+      {(code || listingNo) && (
+        <span className="truncate font-mono text-[11px] text-muted-foreground" title={listingNo ? `上架单 ${listingNo}` : undefined}>
+          {code}
+          {listingNo && ` · ${listingNo}`}
+        </span>
+      )}
     </span>
   )
 }

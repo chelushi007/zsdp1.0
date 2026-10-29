@@ -28,10 +28,13 @@ import {
 } from "@/components/sale-page-shared";
 import {
   fmtMoney,
+  goodsTax,
   orderLines,
   reconciledQty,
   saleAmount,
   statementCycles,
+  taxLabel,
+  taxOf,
   type OrderLine,
   type SaleOrder,
   type Statement,
@@ -650,9 +653,13 @@ function StatementLinesEditor({
   /** 一次性对账时数量固定为全部剩余，不可编辑 */
   readOnly?: boolean;
 }) {
-  const cols = "minmax(190px,1.6fr) 96px 96px 96px 132px 118px";
+  const cols = "minmax(210px,1.6fr) 96px 96px 96px 132px 118px";
   const total = rows.reduce(
     (s, r) => s + (Number(qty[r.code]) || 0) * r.unitPrice,
+    0,
+  );
+  const totalTax = rows.reduce(
+    (s, r) => s + taxOf((Number(qty[r.code]) || 0) * r.unitPrice, r.taxRate),
     0,
   );
   return (
@@ -686,7 +693,11 @@ function StatementLinesEditor({
                     {r.unitPrice.toLocaleString("zh-CN", {
                       maximumFractionDigits: 2,
                     })}{" "}
-                    / {r.unit}
+                    / {r.unit} · {taxLabel(r.taxRate)}
+                  </span>
+                  <span className="truncate font-mono text-[11px] text-muted-foreground">
+                    {r.code}
+                    {r.listingNo && ` · 上架单 ${r.listingNo}`}
                   </span>
                 </span>
                 <span className="text-right tabular-nums">
@@ -740,6 +751,7 @@ function StatementLinesEditor({
             本期商品 {rows.filter((r) => (Number(qty[r.code]) || 0) > 0).length}{" "}
             / {rows.length} 项
           </span>
+          {totalTax > 0 && <span>其中税额 {fmtMoney(totalTax)}</span>}
           <span>
             本期货款{" "}
             <span className="text-sm font-semibold text-foreground">
@@ -899,7 +911,16 @@ export function SaleReconcilePage({
   const confirmed = history.filter((s) => s.state === "已确认");
   const confirmedAmount = confirmed.reduce((s, x) => s + x.amount, 0);
   const summaryRows: [string, React.ReactNode][] = [
+    ["履约方式", o.payTerm],
     ["对账状态", o.reconcile ?? "—"],
+    [
+      "上架单",
+      <span key="ln" className="font-mono text-xs">
+        {[...new Set(lines.map((l) => l.listingNo).filter(Boolean))].join(
+          "、",
+        ) || "—"}
+      </span>,
+    ],
     ["对账方式", latest?.cycle ?? (creating ? cycle : "—")],
     ...(latest?.periodStart && latest.periodEnd
       ? ([
@@ -1337,6 +1358,16 @@ export function SaleReconcilePage({
                   {fmtMoney(orderAmount)}
                 </span>
               </div>
+              {goodsTax(o) > 0 && (
+                <div className="flex items-baseline justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    其中税额
+                  </span>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {fmtMoney(goodsTax(o))}
+                  </span>
+                </div>
+              )}
               <div className="flex items-baseline justify-between">
                 <span className="text-xs text-muted-foreground">
                   已确认对账金额

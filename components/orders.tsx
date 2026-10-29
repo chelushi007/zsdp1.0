@@ -45,6 +45,7 @@ import {
   afterTypeMeta,
   depositTotal,
   fmtMoney,
+  goodsTax,
   overdueDays,
   ownsOrder,
   payTermOptions,
@@ -58,6 +59,8 @@ import {
   saleOrdersData,
   saleStatusMeta,
   saleStatusOrder,
+  taxLabel,
+  taxRatesOf,
   settleAmount,
   type AfterOrder,
   type AfterStatus,
@@ -145,15 +148,25 @@ function counterpart(
 }
 
 function SettleCell({ o }: { o: RentOrder | SaleOrder }) {
+  const statements = o.kind === "sale" ? (o.statements ?? []) : [];
+  const confirmed = statements.filter((s) => s.state === "已确认").length;
+  const pending = statements.some((s) => s.state === "待确认");
+  const reconcileText =
+    statements.length > 0
+      ? `${o.reconcile ?? "对账中"} · ${confirmed}/${statements.length} 期${pending ? " 待确认" : ""}`
+      : (o.reconcile ?? "—");
   return (
     <span className="flex flex-col text-xs">
       <span>{o.payTerm}</span>
       <span
         className={
-          o.reconcile === "待对账" ? "text-teal-700" : "text-muted-foreground"
+          o.reconcile === "待对账" || pending
+            ? "text-teal-700"
+            : "text-muted-foreground"
         }
+        title={reconcileText}
       >
-        {o.reconcile ?? "—"}
+        {reconcileText}
       </span>
     </span>
   );
@@ -1321,9 +1334,17 @@ function SaleOrders({ role }: { role: OrderRole }) {
     const kw = f.keyword.trim().toLowerCase();
     if (
       kw &&
-      ![o.id, o.goods.name, o.logistics ?? "", o.pickupNo ?? "", o.shop].some(
-        (v) => v.toLowerCase().includes(kw),
-      )
+      ![
+        o.id,
+        o.goods.name,
+        o.goods.code,
+        o.goods.listingNo ?? "",
+        o.contractNo ?? "",
+        o.logistics ?? "",
+        o.pickupNo ?? "",
+        o.shop,
+        ...(o.lines ?? []).flatMap((l) => [l.name, l.code, l.listingNo ?? ""]),
+      ].some((v) => v.toLowerCase().includes(kw))
     )
       return false;
     if (f.party && counterpart(o, role) !== f.party) return false;
@@ -1411,14 +1432,17 @@ function SaleOrders({ role }: { role: OrderRole }) {
     },
     {
       key: "goods",
-      label: "商品",
-      width: "minmax(180px,1.3fr)",
+      label: "商品 / 上架单",
+      width: "minmax(200px,1.4fr)",
       render: (o) => (
         <GoodsCell
           name={o.goods.name}
           spec={o.goods.spec}
           qty={o.quantity}
           unit={o.goods.unit}
+          code={o.goods.code}
+          listingNo={o.goods.listingNo}
+          extraCount={o.lines && o.lines.length > 1 ? o.lines.length - 1 : 0}
         />
       ),
     },
@@ -1470,15 +1494,15 @@ function SaleOrders({ role }: { role: OrderRole }) {
     },
     {
       key: "price",
-      label: role === "provider" ? "底价 / 成交价" : "单价",
-      width: "112px",
+      label: role === "provider" ? "底价 / 成交价" : "单价 / 税率",
+      width: "120px",
       render: (o) => (
         <MoneyCell
           main={`¥ ${o.unitPrice.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}/${o.goods.unit}`}
           sub={
             role === "provider"
               ? `底价 ¥ ${(o.basePrice ?? 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`
-              : undefined
+              : taxRatesOf(o).map(taxLabel).join(" / ")
           }
         />
       ),
@@ -1491,7 +1515,7 @@ function SaleOrders({ role }: { role: OrderRole }) {
           : role === "buyer"
             ? "应付金额"
             : "服务收益",
-      width: "112px",
+      width: "150px",
       align: "right",
       render: (o) =>
         role === "provider" ? (
@@ -1503,14 +1527,19 @@ function SaleOrders({ role }: { role: OrderRole }) {
         ) : (
           <MoneyCell
             main={fmtMoney(saleAmount(o))}
-            sub={o.freight ? `含运费 ${fmtMoney(o.freight)}` : "免运费"}
+            sub={[
+              o.freight ? `含运费 ${fmtMoney(o.freight)}` : "免运费",
+              goodsTax(o) > 0 ? `税额 ${fmtMoney(goodsTax(o))}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           />
         ),
     },
     {
       key: "settle",
-      label: "履约方式",
-      width: "84px",
+      label: "履约 / 对账",
+      width: "96px",
       render: (o) => <SettleCell o={o} />,
     },
     {
@@ -1614,7 +1643,7 @@ function SaleOrders({ role }: { role: OrderRole }) {
                 ? `商家发起线上合同，待 ${v.signer} 电子签署`
                 : "商家登记线下签署合同",
               by,
-              online ? v.no : `${v.no} · ${v.signedAt}`,
+              `${v.no} · ${v.template}${online ? "" : ` · ${v.signedAt}`}`,
             );
             commit(
               next,
@@ -1645,7 +1674,7 @@ function SaleOrders({ role }: { role: OrderRole }) {
           setStatus("");
         }}
         keywordLabel="订单"
-        keywordPlaceholder="订单号 / 商品名称 / 物流单号"
+        keywordPlaceholder="订单号 / 商品名称或编码 / 上架单号 / 合同编号 / 物流单号"
         partyLabel={role === "buyer" ? "卖方" : "买方"}
         partyOptions={parties}
         showSource={role === "seller"}
