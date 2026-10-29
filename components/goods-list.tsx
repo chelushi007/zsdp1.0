@@ -1,17 +1,19 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useId, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
+  Check,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
+  ImageIcon,
   Plus,
   Search,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   addEntrusts,
@@ -591,7 +593,7 @@ export function groupSpecs<T extends { name: string }>(
   return groups;
 }
 
-/** 分组行的编码列：单规格直接显示编码，多规格显示首个编码并标注数量 */
+/** 分组行的编��列：单规格直接显示编码，多规格显示首个编码并标注数量 */
 export function GroupCode({ codes }: { codes: string[] }) {
   return (
     <span className="flex flex-col font-mono text-xs leading-4 text-muted-foreground">
@@ -1046,7 +1048,199 @@ export const PROVIDERS = [
   "中建租赁服务（上海）有限公司",
   "筑友设备运营服务商",
   "鼎盛建材流通服务中心",
+  "华东绿色建材供应链服务有限公司",
+  "苏州市路桥周转设备租赁有限公司",
+  "浙江广厦机械设备运营服务中心",
+  "北方建工物资流通服务有限公司",
+  "南方模架科技服务商",
+  "中铁建材循环利用服务（武汉）有限公司",
 ];
+
+/** 模糊匹配：查询词连续出现，或各字符按顺序出现在名称中（如「华服」可命中「华建周转材料服务有限公司」） */
+function fuzzyMatch(text: string, query: string) {
+  const t = text.toLowerCase();
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  if (t.includes(q)) return true;
+  let i = 0;
+  for (const ch of t) if (ch === q[i]) i += 1;
+  return i >= q.length;
+}
+
+/** 服务商选择：文本框 + 下拉融合组件，输入模糊匹配，可勾选一家或多家，已选以标签形式留在输入框内 */
+function ProviderCombobox({
+  value,
+  onChange,
+  options = PROVIDERS,
+  placeholder = "输入服务商名称关键字搜索，或下拉选择",
+}: {
+  value: string[];
+  onChange: (next: string[]) => void;
+  options?: string[];
+  placeholder?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [cursor, setCursor] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listId = useId();
+  const filtered = options.filter((p) => fuzzyMatch(p, query));
+  const activeIndex = Math.min(cursor, Math.max(filtered.length - 1, 0));
+
+  const toggle = (p: string) => {
+    onChange(value.includes(p) ? value.filter((x) => x !== p) : [...value, p]);
+    setQuery("");
+    inputRef.current?.focus();
+  };
+  const remove = (p: string) => onChange(value.filter((x) => x !== p));
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setOpen(true);
+      setCursor((c) => Math.min(c + 1, filtered.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setCursor((c) => Math.max(c - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (open && filtered[activeIndex]) toggle(filtered[activeIndex]);
+      else setOpen(true);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    } else if (e.key === "Backspace" && query === "" && value.length > 0) {
+      remove(value[value.length - 1]);
+    }
+  };
+
+  return (
+    <div
+      className="relative"
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOpen(false);
+      }}
+    >
+      <div
+        className={cn(
+          "flex min-h-9 w-full cursor-text flex-wrap items-center gap-1 rounded border bg-background px-2 py-1 text-sm",
+          open ? "border-[#1890ff]" : "border-border",
+        )}
+        onClick={() => {
+          inputRef.current?.focus();
+          setOpen(true);
+        }}
+      >
+        {value.map((p) => (
+          <span
+            key={p}
+            className="flex max-w-full items-center gap-1 rounded bg-[#1890ff]/10 px-1.5 py-0.5 text-xs text-[#1890ff]"
+          >
+            <span className="truncate" title={p}>
+              {p}
+            </span>
+            <button
+              type="button"
+              aria-label={`移除 ${p}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                remove(p);
+              }}
+              className="rounded hover:bg-[#1890ff]/20"
+            >
+              <X className="size-3" aria-hidden />
+            </button>
+          </span>
+        ))}
+        <input
+          ref={inputRef}
+          role="combobox"
+          aria-label="服务商"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={
+            open && filtered[activeIndex] ? `${listId}-${activeIndex}` : undefined
+          }
+          value={query}
+          placeholder={value.length === 0 ? placeholder : "继续搜索添加"}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setCursor(0);
+            setOpen(true);
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+          className="h-6 min-w-[120px] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label={open ? "收起服务商列表" : "展开服务商列表"}
+          onClick={(e) => {
+            e.stopPropagation();
+            setOpen((o) => !o);
+            inputRef.current?.focus();
+          }}
+          className="ml-auto text-muted-foreground"
+        >
+          <ChevronDown
+            className={cn("size-4 transition-transform", open && "rotate-180")}
+            aria-hidden
+          />
+        </button>
+      </div>
+      {open && (
+        <ul
+          id={listId}
+          role="listbox"
+          aria-multiselectable
+          aria-label="服务商列表"
+          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded border border-border bg-popover py-1 text-sm shadow-md"
+        >
+          {filtered.length === 0 ? (
+            <li className="px-3 py-2 text-xs text-muted-foreground">
+              未找到与「{query}」匹配的服务商
+            </li>
+          ) : (
+            filtered.map((p, i) => {
+              const selected = value.includes(p);
+              return (
+                <li
+                  key={p}
+                  id={`${listId}-${i}`}
+                  role="option"
+                  aria-selected={selected}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseEnter={() => setCursor(i)}
+                  onClick={() => toggle(p)}
+                  className={cn(
+                    "flex cursor-pointer items-center gap-2 px-3 py-1.5",
+                    i === activeIndex && "bg-muted",
+                    selected && "text-[#1890ff]",
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex size-4 shrink-0 items-center justify-center rounded-sm border",
+                      selected
+                        ? "border-[#1890ff] bg-[#1890ff] text-white"
+                        : "border-border",
+                    )}
+                    aria-hidden
+                  >
+                    {selected && <Check className="size-3" />}
+                  </span>
+                  <span className="truncate">{p}</span>
+                </li>
+              );
+            })
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
 
 type EntrustDraftLine = {
   on: boolean;
@@ -1105,10 +1299,6 @@ function EntrustDialog({
   const toggleType = (t: BizType) =>
     setTypes((list) =>
       list.includes(t) ? list.filter((x) => x !== t) : [...list, t],
-    );
-  const toggleProvider = (p: string) =>
-    setProviders((list) =>
-      list.includes(p) ? list.filter((x) => x !== p) : [...list, p],
     );
   const setLine = (code: string, patch: Partial<EntrustDraftLine>) =>
     setLines((m) => ({ ...m, [code]: { ...m[code], ...patch } }));
@@ -1266,36 +1456,7 @@ function EntrustDialog({
               : "可选择一家或多家服务商"
           }
         >
-          <div
-            role="group"
-            aria-label="服务商"
-            className="grid grid-cols-2 gap-2"
-          >
-            {PROVIDERS.map((p) => {
-              const active = providers.includes(p);
-              return (
-                <button
-                  key={p}
-                  type="button"
-                  role="checkbox"
-                  aria-checked={active}
-                  title={p}
-                  onClick={() => toggleProvider(p)}
-                  className={cn(
-                    "flex h-9 items-center gap-1.5 truncate rounded border px-2.5 text-left text-xs transition-colors",
-                    active
-                      ? "border-[#1890ff] bg-[#1890ff]/5 text-[#1890ff]"
-                      : "border-border hover:border-[#1890ff]/50",
-                  )}
-                >
-                  {active && (
-                    <CheckCircle2 className="size-3.5 shrink-0" aria-hidden />
-                  )}
-                  <span className="truncate">{p}</span>
-                </button>
-              );
-            })}
-          </div>
+          <ProviderCombobox value={providers} onChange={setProviders} />
         </DialogField>
       </div>
 
@@ -1591,7 +1752,7 @@ function ListDialog({
       </div>
 
       <DialogField
-        label="租售方式"
+        label="租��方式"
         required
         hint="每张上架单对应一种租售方式；同一商品可多次上架"
       >
@@ -1652,7 +1813,7 @@ function ListDialog({
             />
             <span>规格型号</span>
             <span>可上架</span>
-            <span>{type === "sale" ? "销售单价" : "租金单价"}</span>
+            <span>{type === "sale" ? "销售单��" : "租金单价"}</span>
             <span>上架数量</span>
             <span>{type === "sale" ? "起订量" : "押金"}</span>
           </div>
@@ -2821,7 +2982,7 @@ function ListingDetail({
         >
           <span>商品编码</span>
           <span>规格型号</span>
-          <span>{rent ? "租金 / 押金" : "单价 / 起订量"}</span>
+          <span>{rent ? "租�� / 押金" : "单价 / 起订量"}</span>
           <span>上架数量</span>
           <span>{rent ? "已租" : "已售"}</span>
           <span>剩余</span>
