@@ -22,15 +22,26 @@ export function withEvent<T extends { updatedAt: string; timeline: TimelineItem[
 
 /* ---------- 操作定义 ---------- */
 
+export type ActionChoice = {
+  value: string
+  label: string
+  description?: string
+  tone?: 'primary' | 'danger'
+}
+
 export type ActionField = {
   key: string
   label: string
-  type?: 'text' | 'number' | 'date'
+  type?: 'text' | 'number' | 'date' | 'choice'
   placeholder?: string
   prefix?: string
   suffix?: string
   required?: boolean
   initial?: string
+  /** type 为 choice 时的选项 */
+  options?: ActionChoice[]
+  /** 根据已填写的值决定是否显示该字段（用于分支表单） */
+  visibleWhen?: (values: Record<string, string>) => boolean
 }
 
 export type ActionDef<T> = {
@@ -43,7 +54,9 @@ export type ActionDef<T> = {
   /** 履约环节分组 */
   group?: string
   fields?: ActionField[]
-  confirmLabel?: string
+  confirmLabel?: string | ((values: Record<string, string>) => string)
+  /** 根据已填写的值决定确认按钮语气（用于分支表单） */
+  confirmTone?: (values: Record<string, string>) => 'primary' | 'danger'
   apply: (o: T, values: Record<string, string>) => T
   toast: (o: T, values: Record<string, string>) => string
 }
@@ -59,11 +72,15 @@ export function ActionDialog<T>({
   onClose: () => void
   onConfirm: (values: Record<string, string>) => void
 }) {
-  const fields = action.fields ?? []
+  const allFields = action.fields ?? []
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(fields.map((f) => [f.key, f.initial ?? ''])),
+    Object.fromEntries(allFields.map((f) => [f.key, f.initial ?? ''])),
   )
+  const fields = allFields.filter((f) => !f.visibleWhen || f.visibleWhen(values))
   const missing = fields.filter((f) => f.required && !values[f.key]?.trim())
+  const tone = action.confirmTone?.(values) ?? action.tone
+  const confirmLabel =
+    typeof action.confirmLabel === 'function' ? action.confirmLabel(values) : action.confirmLabel
   const titleId = `order-action-${action.id}`
   return (
     <Modal
@@ -78,9 +95,9 @@ export function ActionDialog<T>({
           <Button
             disabled={missing.length > 0}
             onClick={() => onConfirm(values)}
-            className={action.tone === 'danger' ? 'bg-red-600 hover:bg-red-600/90' : PRIMARY_BTN}
+            className={tone === 'danger' ? 'bg-red-600 hover:bg-red-600/90' : PRIMARY_BTN}
           >
-            {action.confirmLabel ?? `确认${action.label}`}
+            {confirmLabel ?? `确认${action.label}`}
           </Button>
         </>
       }
@@ -88,7 +105,37 @@ export function ActionDialog<T>({
       {summary}
       {fields.map((f) => (
         <DialogField key={f.key} label={f.label} required={f.required}>
-          {f.type === 'date' ? (
+          {f.type === 'choice' ? (
+            <div role="radiogroup" aria-label={f.label} className="grid gap-2 sm:grid-cols-3">
+              {(f.options ?? []).map((opt) => {
+                const active = values[f.key] === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    onClick={() => setValues({ ...values, [f.key]: opt.value })}
+                    className={cn(
+                      'flex flex-col items-start gap-0.5 rounded border px-3 py-2 text-left text-sm transition-colors',
+                      active
+                        ? opt.tone === 'danger'
+                          ? 'border-red-500 bg-red-50 text-red-700'
+                          : 'border-[#1890ff] bg-[#e6f4ff] text-[#1890ff]'
+                        : 'border-border hover:border-[#1890ff]/60',
+                    )}
+                  >
+                    <span className="font-medium">{opt.label}</span>
+                    {opt.description && (
+                      <span className={cn('text-xs', active ? 'opacity-80' : 'text-muted-foreground')}>
+                        {opt.description}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          ) : f.type === 'date' ? (
             <input
               type="date"
               aria-label={f.label}

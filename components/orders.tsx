@@ -4,7 +4,7 @@ import { useState } from "react";
 import { FileText } from "lucide-react";
 import { ActionLink, bizMeta } from "@/components/goods-list";
 import { Select } from "@/components/shop-form-fields";
-import { SaleDetailModal } from "@/components/sale-order-detail";
+import { SaleDetailPage } from "@/components/sale-order-detail";
 import { SaleContractPage } from "@/components/sale-contract-page";
 import { SaleReconcilePage } from "@/components/sale-reconcile-page";
 import {
@@ -1023,60 +1023,96 @@ function saleActions(o: SaleOrder, role: OrderRole): ActionDef<SaleOrder>[] {
         toast: () => "出价已更新",
       });
     else {
+      const bid = o.bidPrice ?? o.unitPrice;
+      const unit = o.goods.unit;
       list.push({
-        id: "acceptBid",
+        id: "negotiate",
         group: "合同",
-        label: "接受出价",
-        confirmLabel: `按 ¥${o.bidPrice ?? o.unitPrice}/${o.goods.unit} 成交`,
-        apply: (x) =>
-          withEvent(
-            {
-              ...x,
-              status: afterNegotiated(x),
-              unitPrice: x.bidPrice ?? x.unitPrice,
-              reconcile: x.payTerm === "先款后货" ? "待对账" : x.reconcile,
-            },
-            `${by}接受出价，按 ¥${x.bidPrice ?? x.unitPrice}/${x.goods.unit} 成交`,
-            by,
-          ),
-        toast: () => "已成交",
-      });
-      list.push({
-        id: "counter",
-        group: "合同",
-        label: "还价",
+        label: "处理议价",
+        title: "处理买方议价",
+        tone: "primary",
         fields: [
           {
+            key: "decision",
+            label: "处理方式",
+            type: "choice",
+            required: true,
+            initial: "accept",
+            options: [
+              {
+                value: "accept",
+                label: "接受出价",
+                description: `按 ¥${bid.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}/${unit} 成交`,
+              },
+              {
+                value: "counter",
+                label: "还价",
+                description: "向买方提出新单价",
+              },
+              {
+                value: "reject",
+                label: "拒绝议价",
+                description: "关闭订单并告知原因",
+                tone: "danger",
+              },
+            ],
+          },
+          {
             key: "price",
-            label: `还价（¥/${o.goods.unit}）`,
+            label: `还价单价（¥/${unit}）`,
             type: "number",
             prefix: "¥",
             required: true,
             initial: String(o.unitPrice),
+            visibleWhen: (v) => v.decision === "counter",
+          },
+          {
+            key: "reason",
+            label: "拒绝原因",
+            required: true,
+            placeholder: "将同步给买方",
+            visibleWhen: (v) => v.decision === "reject",
           },
         ],
-        apply: (x, v) =>
-          withEvent(
-            { ...x, unitPrice: Number(v.price) || x.unitPrice },
-            `${by}还价 ¥${v.price}/${x.goods.unit}`,
+        confirmLabel: (v) =>
+          v.decision === "accept"
+            ? "确认成交"
+            : v.decision === "counter"
+              ? "发送还价"
+              : "确认拒绝",
+        confirmTone: (v) => (v.decision === "reject" ? "danger" : "primary"),
+        apply: (x, v) => {
+          const price = x.bidPrice ?? x.unitPrice;
+          if (v.decision === "counter")
+            return withEvent(
+              { ...x, unitPrice: Number(v.price) || x.unitPrice },
+              `${by}还价 ¥${v.price}/${x.goods.unit}`,
+              by,
+            );
+          if (v.decision === "reject")
+            return withEvent(
+              { ...x, status: "cancelled" },
+              `${by}拒绝议价`,
+              by,
+              v.reason,
+            );
+          return withEvent(
+            {
+              ...x,
+              status: afterNegotiated(x),
+              unitPrice: price,
+              reconcile: x.payTerm === "先款后货" ? "待对账" : x.reconcile,
+            },
+            `${by}接受出价，按 ¥${price}/${x.goods.unit} 成交`,
             by,
-          ),
-        toast: () => "还价已发送",
-      });
-      list.push({
-        id: "rejectBid",
-        group: "合同",
-        label: "拒绝议价",
-        tone: "danger",
-        fields: [{ key: "reason", label: "拒绝原因", required: true }],
-        apply: (x, v) =>
-          withEvent(
-            { ...x, status: "cancelled" },
-            `${by}拒绝议价`,
-            by,
-            v.reason,
-          ),
-        toast: () => "已拒绝议价",
+          );
+        },
+        toast: (_x, v) =>
+          v.decision === "accept"
+            ? "已成交"
+            : v.decision === "counter"
+              ? "还价已发送"
+              : "已拒绝议价",
       });
     }
   }
@@ -1494,27 +1530,19 @@ function SaleOrders({ role }: { role: OrderRole }) {
     },
     {
       key: "price",
-      label: role === "provider" ? "底价 / 成交价" : "单价 / 税率",
+      label: "底价 / 成交价",
       width: "120px",
+      roles: ["provider"],
       render: (o) => (
         <MoneyCell
           main={`¥ ${o.unitPrice.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}/${o.goods.unit}`}
-          sub={
-            role === "provider"
-              ? `底价 ¥ ${(o.basePrice ?? 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`
-              : taxRatesOf(o).map(taxLabel).join(" / ")
-          }
+          sub={`底价 ¥ ${(o.basePrice ?? 0).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`}
         />
       ),
     },
     {
       key: "amount",
-      label:
-        role === "seller"
-          ? "应收金额"
-          : role === "buyer"
-            ? "应付金额"
-            : "服务收益",
+      label: role === "provider" ? "服务收益" : "订单金额",
       width: "150px",
       align: "right",
       render: (o) =>
@@ -1528,11 +1556,9 @@ function SaleOrders({ role }: { role: OrderRole }) {
           <MoneyCell
             main={fmtMoney(saleAmount(o))}
             sub={[
-              o.freight ? `含运费 ${fmtMoney(o.freight)}` : "免运费",
-              goodsTax(o) > 0 ? `税额 ${fmtMoney(goodsTax(o))}` : null,
-            ]
-              .filter(Boolean)
-              .join(" · ")}
+              taxRatesOf(o).map(taxLabel).join(" / "),
+              o.freight ? `运费 ${fmtMoney(o.freight)}` : "免运费",
+            ].join(" · ")}
           />
         ),
     },
@@ -1579,6 +1605,19 @@ function SaleOrders({ role }: { role: OrderRole }) {
       ),
     },
   ];
+
+  if (detailRow)
+    return (
+      <>
+        <SaleDetailPage
+          key={detailRow.id}
+          order={detailRow}
+          role={role}
+          onBack={() => setDetailId(null)}
+        />
+        <Toast message={toast} />
+      </>
+    );
 
   if (reconcileRow)
     return (
@@ -1709,14 +1748,6 @@ function SaleOrders({ role }: { role: OrderRole }) {
         />
       </div>
 
-      {detailRow && (
-        <SaleDetailModal
-          key={detailRow.id}
-          order={detailRow}
-          role={role}
-          onClose={() => setDetailId(null)}
-        />
-      )}
       {dialog && dialogRow && (
         <ActionDialog
           key={dialog.action.id + dialogRow.id}

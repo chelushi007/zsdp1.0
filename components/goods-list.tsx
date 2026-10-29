@@ -605,7 +605,7 @@ export function groupSpecs<T extends { name: string }>(
   return groups;
 }
 
-/** 分组���的编码列：单规格直接显示编码，多规格显示首个编码并标注数量 */
+/** 分组后的编码列：单规格直接显示编码，多规格显示首个编码并标注数量 */
 export function GroupCode({ codes }: { codes: string[] }) {
   return (
     <span className="flex flex-col font-mono text-xs leading-4 text-muted-foreground">
@@ -2679,7 +2679,7 @@ function FilterPanel({
           onClick={onSearch}
         >
           <Search data-icon="inline-start" />
-          ��询
+          查询
         </Button>
         <Button variant="outline" onClick={onReset}>
           重置
