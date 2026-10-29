@@ -41,9 +41,14 @@ type EntrustStatus = "pending" | "accepted" | "listed" | "off" | "returned";
 
 type MarkupMode = "percent" | "fixed";
 
-/** 服务商上架记录：在商家底价基础上加价对外销售 / 出租 */
+type ApprovalStatus = "pending" | "approved";
+
+/** 服务商上架记录：在委托价基础上加价对外销售 / 出租；提交后需平台审批，审批通过前可编辑 */
 type ProviderListing = {
   id: string;
+  /** 上架单号：同一次上架的多个规格共用 */
+  batch: string;
+  approval: ApprovalStatus;
   type: BizType;
   status: "on" | "off";
   basePrice: number;
@@ -164,6 +169,10 @@ const seed: EntrustedGoods[] = [
     listings: [
       {
         id: "PL240920001",
+
+        batch: "PL240920001",
+
+        approval: "approved",
         listedAt: "2024-09-20 10:30",
         type: "rent",
         status: "on",
@@ -198,6 +207,10 @@ const seed: EntrustedGoods[] = [
     listings: [
       {
         id: "PL240920002",
+
+        batch: "PL240920002",
+
+        approval: "approved",
         listedAt: "2024-09-20 10:35",
         type: "rent",
         status: "on",
@@ -249,6 +262,10 @@ const seed: EntrustedGoods[] = [
     listings: [
       {
         id: "PL240928001",
+
+        batch: "PL240928001",
+
+        approval: "pending",
         listedAt: "2024-09-28 14:05",
         type: "sale",
         status: "on",
@@ -332,6 +349,10 @@ const seed: EntrustedGoods[] = [
     listings: [
       {
         id: "PL240805001",
+
+        batch: "PL240805001",
+
+        approval: "approved",
         listedAt: "2024-08-05 09:15",
         type: "sale",
         status: "off",
@@ -496,13 +517,13 @@ function GoodsSummary({ goods }: { goods: EntrustedGoods }) {
   );
 }
 
-/** 底价行：展示商家给出的底价，服务商不可修改 */
+/** 委托价行：展示商家给出的委托价，服务商不可修改 */
 function BasePriceRow({ goods }: { goods: EntrustedGoods }) {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-1 rounded border border-dashed border-border px-3 py-2 text-xs">
       <span>
         <span className="text-muted-foreground">
-          {bizMeta[goods.type].label}底价{" "}
+          {bizMeta[goods.type].label}委托价{" "}
         </span>
         <span className="tabular-nums">
           ¥ {fmtPrice(goods.basePrice)} {priceSuffix(goods)}
@@ -550,10 +571,10 @@ function AcceptDialog({
       <GoodsSummary goods={goods} />
       <BasePriceRow goods={goods} />
       <p className="text-sm leading-relaxed text-muted-foreground">
-        受理后该商品进入「待上架」，可在底价基础上加价上架
+        受理后该商品进入「待上架」，可在委托价基础上加价上架
         {bizMeta[goods.type].label}，上架数量合计不得超过受托数量{" "}
         {goods.quantity.toLocaleString()} {goods.unit}
-        。加价差额为您的服务收益，底价部分结算给委托方。
+        。加价差额为您的服务收益，委托价部分结算给委托方。
       </p>
     </Modal>
   );
@@ -631,82 +652,126 @@ function ReturnDialog({
   );
 }
 
-/** 上架：按受托的租售方式，在商家底价基础上加价后对外上架 */
+type ListDraftLine = {
+  on: boolean;
+  markupValue: string;
+  quantity: string;
+  minOrder: string;
+};
+
+function markupPrice(base: number, mode: MarkupMode, v: string) {
+  const n = Number(v);
+  if (v === "" || n < 0) return base;
+  return round2(mode === "percent" ? base * (1 + n / 100) : base + n);
+}
+
+/** 上架：以整个受托商品为单位生成一张上架单，引用委托明细按规格分别加价、定量；提交后待平台审批 */
 function ListDialog({
-  goods,
+  items,
   onClose,
   onConfirm,
 }: {
-  goods: EntrustedGoods;
+  items: EntrustedGoods[];
   onClose: () => void;
-  onConfirm: (l: ProviderListing) => void;
+  onConfirm: (created: { id: string; listing: ProviderListing }[]) => void;
 }) {
-  const available = goods.quantity - lockedQty(goods);
-  const type = goods.type;
+  const head = items[0];
+  const type = head.type;
+  const relist = items.every((g) => g.status === "off");
   const [markupMode, setMarkupMode] = useState<MarkupMode>("percent");
-  const [markupValue, setMarkupValue] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [minOrder, setMinOrder] = useState("");
   const [minDays, setMinDays] = useState("");
+  const [lines, setLines] = useState<Record<string, ListDraftLine>>(() =>
+    Object.fromEntries(
+      items.map((g) => {
+        const available = g.quantity - lockedQty(g);
+        return [
+          g.id,
+          {
+            on: available > 0,
+            markupValue: "",
+            quantity: available > 0 ? String(available) : "",
+            minOrder: "",
+          },
+        ];
+      }),
+    ),
+  );
+  const setLine = (id: string, patch: Partial<ListDraftLine>) =>
+    setLines((m) => ({ ...m, [id]: { ...m[id], ...patch } }));
+  const allOn = items.every((g) => lines[g.id].on);
+  const toggleAll = () =>
+    setLines((m) =>
+      Object.fromEntries(
+        Object.entries(m).map(([c, d]) => [c, { ...d, on: !allOn }]),
+      ),
+    );
 
-  const base = goods.basePrice;
-  const markup = Number(markupValue);
-  const markupOk = markupValue !== "" && markup >= 0;
-  const price = markupOk
-    ? round2(
-        markupMode === "percent" ? base * (1 + markup / 100) : base + markup,
-      )
-    : base;
-  const profit = round2(price - base);
-  const profitRate = base > 0 ? round2((profit / base) * 100) : 0;
-
-  const qty = Number(quantity);
-  const qtyOk = Number.isInteger(qty) && qty > 0 && qty <= available;
-  const qtyHint =
-    quantity && !qtyOk
-      ? qty > available
-        ? `超出受托数量：受托 ${goods.quantity.toLocaleString()} ${goods.unit}，上架中已占用 ${lockedQty(goods).toLocaleString()} ${goods.unit}，最多还可上架 ${available.toLocaleString()} ${goods.unit}`
-        : "请输入大于 0 的整数"
-      : `受托 ${goods.quantity.toLocaleString()} ${goods.unit}，上架中 ${lockedQty(goods).toLocaleString()} ${goods.unit}，可上架 ${available.toLocaleString()} ${goods.unit}`;
-  const ok = markupOk && qtyOk && (type === "sale" || Number(minDays) > 0);
+  const lineState = items.map((g) => {
+    const d = lines[g.id];
+    const available = g.quantity - lockedQty(g);
+    const qty = Number(d.quantity);
+    const qtyOk =
+      !d.on ||
+      (d.quantity !== "" && Number.isInteger(qty) && qty > 0 && qty <= available);
+    const markupOk = !d.on || (d.markupValue !== "" && Number(d.markupValue) >= 0);
+    const price = markupPrice(g.basePrice, markupMode, d.markupValue);
+    const profit = round2(price - g.basePrice);
+    return { g, d, available, qty, qtyOk, markupOk, price, profit };
+  });
+  const included = lineState.filter((x) => x.d.on);
+  const ok =
+    included.length > 0 &&
+    lineState.every((x) => x.qtyOk && x.markupOk) &&
+    (type === "sale" || Number(minDays) > 0);
+  const totalQty = included.reduce((s, x) => s + x.qty, 0);
+  const totalProfit = included.reduce((s, x) => s + x.profit * x.qty, 0);
 
   const submit = () => {
     if (!ok) return;
-    const id = `PL${new Date().toISOString().slice(2, 10).replace(/-/g, "")}${String(goods.listings.length + 1).padStart(3, "0")}`;
-    const common = {
-      id,
-      listedAt: nowStamp(),
-      type,
-      status: "on" as const,
-      basePrice: base,
-      markupMode,
-      markupValue: markup,
-      price,
-      quantity: qty,
-      used: 0,
-    };
+    const stamp = new Date().toISOString().slice(2, 10).replace(/-/g, "");
+    const batches = new Set(items.flatMap((g) => g.listings.map((l) => l.batch)));
+    const batch = `PS${stamp}${String(batches.size + 1).padStart(3, "0")}`;
     onConfirm(
-      type === "sale"
-        ? { ...common, minOrder: minOrder ? Number(minOrder) : undefined }
-        : {
-            ...common,
-            period: "天",
-            deposit: goods.deposit,
-            minDays: Number(minDays),
-          },
+      included.map(({ g, d, qty, price }, i) => {
+        const common = {
+          id: `PL${stamp}${String(batches.size + 1).padStart(3, "0")}${String(i + 1).padStart(2, "0")}`,
+          batch,
+          approval: "pending" as const,
+          listedAt: nowStamp(),
+          type,
+          status: "on" as const,
+          basePrice: g.basePrice,
+          markupMode,
+          markupValue: Number(d.markupValue),
+          price,
+          quantity: qty,
+          used: 0,
+        };
+        const listing: ProviderListing =
+          type === "sale"
+            ? { ...common, minOrder: d.minOrder ? Number(d.minOrder) : undefined }
+            : { ...common, period: "天", deposit: g.deposit, minDays: Number(minDays) };
+        return { id: g.id, listing };
+      }),
     );
   };
 
-  const unitSuffix = priceSuffix(goods);
+  const unitSuffix = priceSuffix(head);
+  const cols = `24px minmax(130px,1fr) 100px 120px minmax(130px,1fr) 120px${type === "sale" ? " 110px" : ""}`;
 
   return (
     <Modal
-      title={goods.status === "off" ? "重新上架" : "加价上架"}
+      title={relist ? "重新上架" : "加价上架"}
       titleId="provider-list-dialog-title"
-      width="max-w-[560px]"
+      width="max-w-[900px]"
       onClose={onClose}
       footer={
         <>
+          <span className="mr-auto text-xs text-muted-foreground">
+            {included.length > 0
+              ? `将生成 1 张上架单：${included.length} 个规格共 ${totalQty.toLocaleString()} ${head.unit}，预计服务收益 ¥ ${fmtPrice(round2(totalProfit))}；提交后待平台审批`
+              : "上架以整个受托商品为单位，按规格分别加价、定量"}
+          </span>
           <Button variant="outline" size="sm" onClick={onClose}>
             取消
           </Button>
@@ -716,28 +781,38 @@ function ListDialog({
             disabled={!ok}
             onClick={submit}
           >
-            确认上架
+            提交上架
           </Button>
         </>
       }
     >
-      <GoodsSummary goods={goods} />
+      <div className="grid gap-3 rounded bg-muted/40 px-3 py-2 text-xs sm:grid-cols-5">
+        <span className="flex min-w-0 flex-col gap-0.5 sm:col-span-2">
+          <span className="text-muted-foreground">商品</span>
+          <span className="truncate font-medium" title={head.name}>
+            {head.name}
+          </span>
+        </span>
+        <span className="flex min-w-0 flex-col gap-0.5">
+          <span className="text-muted-foreground">委托方</span>
+          <span className="truncate" title={head.seller}>
+            {head.seller}
+          </span>
+        </span>
+        <span className="flex flex-col items-start gap-0.5">
+          <span className="text-muted-foreground">租售方式</span>
+          <Tag className={bizMeta[type].className}>{bizMeta[type].label}</Tag>
+        </span>
+        <span className="flex flex-col gap-0.5">
+          <span className="text-muted-foreground">规格 / 单位</span>
+          <span>
+            {items.length} 个 · {head.unit}
+          </span>
+        </span>
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <DialogField label="租售方式" hint="按委托方授权的方式上架，不可更改">
-          <div className="flex h-9 items-center rounded border border-border bg-muted/40 px-3 text-sm">
-            <Tag className={bizMeta[type].className}>{bizMeta[type].label}</Tag>
-          </div>
-        </DialogField>
-        <DialogField label="商家底价">
-          <div className="flex h-9 items-center rounded border border-border bg-muted/40 px-3 text-sm tabular-nums">
-            ¥ {fmtPrice(base)}{" "}
-            <span className="ml-1 text-xs text-muted-foreground">
-              {unitSuffix}
-            </span>
-          </div>
-        </DialogField>
-        <DialogField label="加价方式" required>
+        <DialogField label="加价方式" required hint="上架单内全部规格采用同一加价方式">
           <div
             role="radiogroup"
             aria-label="加价方式"
@@ -762,78 +837,125 @@ function ListDialog({
             ))}
           </div>
         </DialogField>
-        <DialogField
-          label={markupMode === "percent" ? "加价比例" : "加价金额"}
-          required
-          hint="在商家底价基础上加价，差额为服务收益"
-        >
-          <DialogInput
-            label="加价"
-            type="number"
-            value={markupValue}
-            onChange={setMarkupValue}
-            placeholder="0"
-            prefix={markupMode === "fixed" ? "+ ¥" : "+"}
-            suffix={markupMode === "percent" ? "%" : unitSuffix}
-          />
-        </DialogField>
-        <DialogField label={type === "sale" ? "对外售价" : "对外租金"}>
-          <div className="flex h-9 items-center justify-between rounded border border-[#1890ff]/40 bg-[#1890ff]/5 px-3 text-sm tabular-nums">
-            <span className="font-medium text-[#1890ff]">
-              ¥ {fmtPrice(price)}{" "}
-              <span className="text-xs font-normal text-muted-foreground">
-                {unitSuffix}
-              </span>
-            </span>
-            <span className="text-xs text-muted-foreground">
-              收益 ¥ {fmtPrice(profit)}（{profitRate}%）
-            </span>
-          </div>
-        </DialogField>
-        {type === "sale" ? (
-          <DialogField label="起订量">
+        {type === "rent" && (
+          <DialogField label="最短租期" required hint="押金按委托方约定收取，不参与加价">
             <DialogInput
-              label="起订量"
+              label="最短租期"
               type="number"
-              value={minOrder}
-              onChange={setMinOrder}
-              placeholder="不限"
-              suffix={goods.unit}
+              value={minDays}
+              onChange={setMinDays}
+              placeholder="0"
+              suffix="天"
+              invalid={minDays !== "" && Number(minDays) <= 0}
             />
           </DialogField>
-        ) : (
-          <>
-            <DialogField label="押金" hint="按委托方约定收取，不参与加价">
-              <div className="flex h-9 items-center rounded border border-border bg-muted/40 px-3 text-sm tabular-nums">
-                ¥ {fmtPrice(goods.deposit ?? 0)}{" "}
-                <span className="ml-1 text-xs text-muted-foreground">
-                  / {goods.unit}
-                </span>
-              </div>
-            </DialogField>
-            <DialogField label="最短租期" required>
-              <DialogInput
-                label="最短租期"
-                type="number"
-                value={minDays}
-                onChange={setMinDays}
-                placeholder="0"
-                suffix="天"
-              />
-            </DialogField>
-          </>
         )}
-        <DialogField label="上架数量" required hint={qtyHint}>
-          <DialogInput
-            label="上架数量"
-            type="number"
-            value={quantity}
-            onChange={setQuantity}
-            placeholder="0"
-            suffix={goods.unit}
-          />
-        </DialogField>
       </div>
+
+      <DialogField
+        label="上架明细"
+        required
+        hint={`引用委托明细，勾选需要上架的规格并分别填写加价与数量；对外价 = 委托价 + 加价，差额为服务收益。已选 ${included.length} / ${items.length} 个规格`}
+      >
+        <div className="overflow-x-auto rounded border border-border">
+          <div
+            className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
+            style={{ gridTemplateColumns: cols }}
+          >
+            <input
+              type="checkbox"
+              aria-label={allOn ? "取消全选规格" : "全选规格"}
+              checked={allOn}
+              onChange={toggleAll}
+              className="accent-[#1890ff]"
+            />
+            <span>规格型号</span>
+            <span>委托价</span>
+            <span>{markupMode === "percent" ? "加价比例" : "加价金额"}</span>
+            <span>{type === "sale" ? "对外售价" : "对外租金"}</span>
+            <span>上架数量</span>
+            {type === "sale" && <span>起订量</span>}
+          </div>
+          {lineState.map(({ g, d, available, qtyOk, markupOk, price, profit }) => (
+            <div
+              key={g.id}
+              className={cn(
+                "grid items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-0",
+                !d.on && "text-muted-foreground",
+              )}
+              style={{ gridTemplateColumns: cols }}
+            >
+              <input
+                type="checkbox"
+                aria-label={`上架 ${g.spec}`}
+                checked={d.on}
+                disabled={available <= 0}
+                onChange={(e) => setLine(g.id, { on: e.target.checked })}
+                className="accent-[#1890ff]"
+              />
+              <span className="flex min-w-0 flex-col leading-4">
+                <span className="truncate font-medium" title={g.spec}>
+                  {g.spec}
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  {g.code} · 可上架 {available.toLocaleString()} {g.unit}
+                </span>
+              </span>
+              <span className="flex flex-col text-xs leading-4 tabular-nums">
+                <span>¥ {fmtPrice(g.basePrice)}</span>
+                <span className="text-[11px] text-muted-foreground">{unitSuffix}</span>
+              </span>
+              <DialogInput
+                label={`${g.spec} 加价`}
+                type="number"
+                value={d.markupValue}
+                onChange={(v) => setLine(g.id, { markupValue: v })}
+                placeholder="0"
+                prefix={markupMode === "fixed" ? "+ ¥" : "+"}
+                suffix={markupMode === "percent" ? "%" : undefined}
+                invalid={!markupOk}
+                disabled={!d.on}
+              />
+              <span
+                className={cn(
+                  "flex h-9 flex-col justify-center rounded border px-2 text-xs leading-4 tabular-nums",
+                  d.on
+                    ? "border-[#1890ff]/40 bg-[#1890ff]/5"
+                    : "border-border bg-muted/40",
+                )}
+              >
+                <span className={cn("text-sm font-medium", d.on && "text-[#1890ff]")}>
+                  ¥ {fmtPrice(price)}
+                </span>
+                <span className="text-[11px] text-muted-foreground">
+                  收益 ¥ {fmtPrice(profit)} {unitSuffix}
+                </span>
+              </span>
+              <DialogInput
+                label={`${g.spec} 上架数量`}
+                type="number"
+                value={d.quantity}
+                onChange={(v) => setLine(g.id, { quantity: v })}
+                placeholder="0"
+                suffix={g.unit}
+                invalid={!qtyOk}
+                disabled={!d.on}
+              />
+              {type === "sale" && (
+                <DialogInput
+                  label={`${g.spec} 起订量`}
+                  type="number"
+                  value={d.minOrder}
+                  onChange={(v) => setLine(g.id, { minOrder: v })}
+                  placeholder="不限"
+                  suffix={g.unit}
+                  disabled={!d.on}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+      </DialogField>
     </Modal>
   );
 }
@@ -843,18 +965,18 @@ type ListingEditPatch = Pick<
   "markupMode" | "markupValue" | "price" | "quantity" | "minOrder" | "minDays"
 >;
 
-/** 编辑：带入商品与委托信息（不可改），调整当前上架中记录的加价、交易条件与上架数量 */
+/** 编辑上架记录：仅上架单待审批时可编辑，带入商品与委托信息（不可改），调整该规格记录的加价、交易条件与上架数量 */
 function EditDialog({
   goods,
+  listing,
   onClose,
   onConfirm,
 }: {
   goods: EntrustedGoods;
+  listing: ProviderListing;
   onClose: () => void;
   onConfirm: (listingId: string, patch: ListingEditPatch) => void;
 }) {
-  const listing =
-    goods.listings.find((l) => l.status === "on") ?? goods.listings[0];
   const type = goods.type;
   const base = goods.basePrice;
   const unitSuffix = priceSuffix(goods);
@@ -873,8 +995,6 @@ function EditDialog({
   const [minDays, setMinDays] = useState(
     listing?.minDays ? String(listing.minDays) : "",
   );
-
-  if (!listing) return null;
 
   const otherLocked = lockedQty(goods) - (listing.status === "on" ? listing.quantity : 0);
   const available = goods.quantity - otherLocked;
@@ -910,7 +1030,7 @@ function EditDialog({
 
   return (
     <Modal
-      title="编辑上架信息"
+      title={`编辑上架记录 ${listing.id}`}
       titleId="provider-edit-dialog-title"
       width="max-w-[600px]"
       onClose={onClose}
@@ -947,7 +1067,7 @@ function EditDialog({
         </span>
         <span className="flex flex-col gap-0.5">
           <span className="text-muted-foreground">
-            {bizMeta[type].label}底价
+            {bizMeta[type].label}委托价
           </span>
           <span className="tabular-nums">
             ¥ {fmtPrice(base)} {unitSuffix}
@@ -994,7 +1114,7 @@ function EditDialog({
         <DialogField
           label={markupMode === "percent" ? "加价比例" : "加价金额"}
           required
-          hint="商家底价由委托方给定，服务商只能调整加价"
+          hint="委托价由委托方给定，服务商只能调整加价"
         >
           <DialogInput
             label="加价"
@@ -1119,82 +1239,107 @@ function OffDialog({
 
 type Action = "detail" | "edit" | "accept" | "return" | "list" | "off";
 
+/** 商品级操作：受理 / 退回 / 上架以整个受托商品为单位；编辑在上架记录中进行（待审批时）；下架按规格 */
 function Actions({
-  goods,
+  items,
   onAction,
-  hideDetail,
 }: {
-  goods: EntrustedGoods;
+  items: EntrustedGoods[];
   onAction: (a: Action) => void;
-  hideDetail?: boolean;
 }) {
-  const detailLink = hideDetail ? null : (
-    <ActionLink onClick={() => onAction("detail")}>详情</ActionLink>
+  const head = items[0];
+  const single = items.length === 1;
+  const detailLink = <ActionLink onClick={() => onAction("detail")}>详情</ActionLink>;
+  const returnLink = (
+    <ActionLink tone="danger" onClick={() => onAction("return")}>
+      退回
+    </ActionLink>
+  );
+  const canList = items.some(
+    (g) => isAccepted(g) && g.quantity - lockedQty(g) > 0,
   );
   const map: Record<EntrustStatus, React.ReactNode> = {
     pending: (
       <>
         {detailLink}
         <ActionLink onClick={() => onAction("accept")}>受理</ActionLink>
-        <ActionLink tone="danger" onClick={() => onAction("return")}>
-          退回
-        </ActionLink>
+        {returnLink}
       </>
     ),
     accepted: (
       <>
         {detailLink}
-        <ActionLink onClick={() => onAction("list")}>上架</ActionLink>
-        <ActionLink tone="danger" onClick={() => onAction("return")}>
-          退回
-        </ActionLink>
+        {canList && <ActionLink onClick={() => onAction("list")}>上架</ActionLink>}
+        {returnLink}
       </>
     ),
     listed: (
       <>
         {detailLink}
-        <ActionLink onClick={() => onAction("edit")}>编辑</ActionLink>
-        <ActionLink onClick={() => onAction("list")}>上架</ActionLink>
-        <ActionLink tone="danger" onClick={() => onAction("off")}>
-          下架
-        </ActionLink>
+        {canList && <ActionLink onClick={() => onAction("list")}>上架</ActionLink>}
+        {single && (
+          <ActionLink tone="danger" onClick={() => onAction("off")}>
+            下架
+          </ActionLink>
+        )}
       </>
     ),
     off: (
       <>
         {detailLink}
-        <ActionLink onClick={() => onAction("list")}>重新上架</ActionLink>
-        <ActionLink tone="danger" onClick={() => onAction("return")}>
-          退回
-        </ActionLink>
+        {canList && <ActionLink onClick={() => onAction("list")}>重新上架</ActionLink>}
+        {returnLink}
       </>
     ),
-    returned: detailLink ?? (
-      <span className="text-xs text-muted-foreground">—</span>
-    ),
+    returned: detailLink,
   };
   return (
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      {map[goods.status]}
+      {map[head.status]}
     </span>
   );
 }
 
 const columns =
-  "36px 100px minmax(170px,1.4fr) minmax(110px,1fr) 72px 112px 84px 84px 80px 80px 88px 100px minmax(130px,1fr)";
+  "36px 100px minmax(170px,1.4fr) minmax(110px,1fr) 72px 92px 92px 90px 90px 88px 100px minmax(140px,1fr)";
 const specSummaryColumns =
-  "108px minmax(150px,1.2fr) 64px 120px 90px 90px 96px minmax(170px,1fr)";
+  "108px minmax(150px,1.2fr) 64px 130px 100px 100px 100px 110px";
 const listingColumns =
-  "120px 128px 72px minmax(140px,1fr) minmax(150px,1fr) 100px 80px 120px";
+  "118px 118px minmax(120px,1fr) minmax(140px,1fr) minmax(150px,1fr) 100px 96px 120px";
 
-/** 一组同名受托商品的全部上架记录：多规格时在行内标注编码与规格，仅展示对外价格 */
-function GroupListingTable({ items }: { items: EntrustedGoods[] }) {
-  const rows = items.flatMap((g) => g.listings.map((l) => ({ g, l })));
-  const multi = items.length > 1;
+const approvalMeta: Record<ApprovalStatus, { label: string; className: string }> = {
+  pending: {
+    label: "待审批",
+    className: "bg-amber-50 text-amber-700 ring-amber-200",
+  },
+  approved: {
+    label: "已审批",
+    className: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  },
+};
+
+/** 一组同名受托商品的全部上架记录：按规格逐条展示，待审批记录可编辑；readonly 时仅查看 */
+function GroupListingTable({
+  items,
+  readonly,
+  onEdit,
+  onOff,
+  onRelist,
+}: {
+  items: EntrustedGoods[];
+  readonly?: boolean;
+  onEdit?: (goodsId: string, listingId: string) => void;
+  onOff?: (goodsId: string, listingId: string) => void;
+  onRelist?: () => void;
+}) {
+  const rows = items
+    .flatMap((g) => g.listings.map((l) => ({ g, l })))
+    .sort((a, b) => b.l.listedAt.localeCompare(a.l.listedAt));
   const cols = listingColumns;
   const types = new Set(rows.map((r) => r.l.type));
   const onlyRent = types.size === 1 && types.has("rent");
   const onlySale = types.size === 1 && types.has("sale");
+  const batches = new Set(rows.map((r) => r.l.batch)).size;
   if (rows.length === 0)
     return (
       <div className="rounded border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
@@ -1206,7 +1351,8 @@ function GroupListingTable({ items }: { items: EntrustedGoods[] }) {
       <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs">
         <span className="font-medium">上架记录</span>
         <span className="text-muted-foreground">
-          共 {rows.length} 条{multi ? ` · ${items.length} 个规格` : ""}
+          共 {batches} 张上架单 · {rows.length} 条规格记录
+          {rows.some((r) => r.l.approval === "pending") ? " · 待审批记录可编辑" : ""}
         </span>
       </div>
       <div
@@ -1215,39 +1361,48 @@ function GroupListingTable({ items }: { items: EntrustedGoods[] }) {
       >
         <span>上架单号</span>
         <span>上架时间</span>
-        <span>租售方式</span>
+        <span>规格型号</span>
         <span>{onlyRent ? "对外租金" : onlySale ? "对外售价" : "对外价格"}</span>
         <span>
           {onlyRent ? "押金 / 最短租期" : onlySale ? "起订量" : "交易条件"}
         </span>
         <span>{onlyRent ? "已租 / 上架" : onlySale ? "已售 / 上架" : "成交 / 上架"}</span>
         <span>状态</span>
-        <span>操作</span>
+        <span>{readonly ? "审批" : "操作"}</span>
       </div>
       {rows.map(({ g, l }) => {
         const suffix =
           l.type === "sale" ? `/ ${g.unit}` : `/ ${g.unit} / ${l.period}`;
+        const ap = approvalMeta[l.approval];
         return (
           <div
             key={l.id}
             className="grid items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-0"
             style={{ gridTemplateColumns: cols }}
           >
-            <span className="font-mono text-xs text-muted-foreground">
-              {l.id}
+            <span className="flex flex-col font-mono text-xs leading-4 text-muted-foreground">
+              <span>{l.batch}</span>
+              <span className="text-[11px]">{l.id}</span>
             </span>
             <span className="font-mono text-xs text-muted-foreground">
               {l.listedAt}
             </span>
-            <Tag className={bizMeta[l.type].className}>
-              {bizMeta[l.type].label}
-            </Tag>
+            <span className="flex min-w-0 flex-col leading-4">
+              <span className="truncate text-xs font-medium" title={g.spec}>
+                {g.spec}
+              </span>
+              <span className="flex">
+                <Tag className={bizMeta[l.type].className}>
+                  {bizMeta[l.type].label}
+                </Tag>
+              </span>
+            </span>
             <span className="flex flex-col leading-tight">
               <span className="tabular-nums">
                 ¥ {fmtPrice(l.price)} {suffix}
               </span>
               <span className="text-[11px] text-muted-foreground tabular-nums">
-                底价 ¥ {fmtPrice(l.basePrice)} ·{" "}
+                委托价 ¥ {fmtPrice(l.basePrice)} ·{" "}
                 {l.markupMode === "percent"
                   ? `加价 ${l.markupValue}%`
                   : `加价 ¥ ${fmtPrice(l.markupValue)}`}
@@ -1263,23 +1418,38 @@ function GroupListingTable({ items }: { items: EntrustedGoods[] }) {
             <span className="tabular-nums">
               {l.used.toLocaleString()} / {l.quantity.toLocaleString()} {g.unit}
             </span>
-            <Tag
-              className={
-                l.status === "on"
-                  ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
-                  : "bg-muted text-muted-foreground ring-border"
-              }
-            >
-              {l.status === "on" ? "上架中" : "已下架"}
-            </Tag>
-            <span className="flex items-center gap-3">
-              <ActionLink>详情</ActionLink>
-              {l.status === "on" ? (
-                <ActionLink tone="danger">下架</ActionLink>
-              ) : (
-                <ActionLink>重新上架</ActionLink>
+            <span className="flex flex-wrap gap-1">
+              <Tag
+                className={
+                  l.status === "on"
+                    ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                    : "bg-muted text-muted-foreground ring-border"
+                }
+              >
+                {l.status === "on" ? "上架中" : "已下架"}
+              </Tag>
+              {!readonly && l.status === "on" && l.approval === "pending" && (
+                <Tag className={ap.className}>{ap.label}</Tag>
               )}
             </span>
+            {readonly ? (
+              <span className="flex">
+                <Tag className={ap.className}>{ap.label}</Tag>
+              </span>
+            ) : (
+              <span className="flex items-center gap-3">
+                {l.status === "on" && l.approval === "pending" && (
+                  <ActionLink onClick={() => onEdit?.(g.id, l.id)}>编辑</ActionLink>
+                )}
+                {l.status === "on" ? (
+                  <ActionLink tone="danger" onClick={() => onOff?.(g.id, l.id)}>
+                    下架
+                  </ActionLink>
+                ) : (
+                  <ActionLink onClick={onRelist}>重新上架</ActionLink>
+                )}
+              </span>
+            )}
           </div>
         );
       })}
@@ -1339,16 +1509,13 @@ function FilterRow({
   );
 }
 
-/** 规格明细：同名受托商品下各规格的委托方式、底价、数量与受理 / 运营状态，可带出上架记录 */
-/** 受托商品详情页：委托单信息、规格与数量、全部上架记录；受理 / 退回按委托单整体操作 */
+/** 受托商品详情页：只读——委托信息、委托明细（各规格委托价 / 数量 / 运营状态）与全部上架记录；受理 / 退回 / 上架 / 下架等业务操作在列表与上架记录中进行 */
 function EntrustDetail({
   group,
   onBack,
-  onAction,
 }: {
   group: SpecGroup<EntrustedGoods>;
   onBack: () => void;
-  onAction: (g: EntrustedGoods, a: Action) => void;
 }) {
   const items = group.items;
   const head = items[0];
@@ -1404,47 +1571,9 @@ function EntrustDetail({
           </span>
         }
         actions={
-          head.status === "pending" ? (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onAction(head, "return")}
-              >
-                退回委托
-              </Button>
-              <Button
-                size="sm"
-                className={PRIMARY_BTN}
-                onClick={() => onAction(head, "accept")}
-              >
-                受理委托
-              </Button>
-            </>
-          ) : single && accepted ? (
-            <>
-              {head.status === "listed" && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => onAction(head, "edit")}
-                >
-                  编辑
-                </Button>
-              )}
-              <Button
-                size="sm"
-                className={PRIMARY_BTN}
-                onClick={() => onAction(head, "list")}
-              >
-                {head.status === "off" ? "重新上架" : "上架"}
-              </Button>
-            </>
-          ) : !single && accepted ? (
-            <span className="text-xs text-muted-foreground">
-              上架 / 编辑 / 下架请在下方「规格与数量」中按规格进行
-            </span>
-          ) : null
+          <span className="text-xs text-muted-foreground">
+            详情仅供查看，受理 / 退回 / 上架 / 下架请回到列表操作
+          </span>
         }
       />
 
@@ -1503,7 +1632,7 @@ function EntrustDetail({
             {types.map((t) => bizMeta[t].label).join(" / ")}
           </DescItem>
           {single && (
-            <DescItem label="商家底价">
+            <DescItem label="委托价">
               <span className="tabular-nums">
                 ¥ {fmtPrice(head.basePrice)} {priceSuffix(head)}
                 {head.type === "rent" && head.deposit !== undefined
@@ -1529,12 +1658,11 @@ function EntrustDetail({
         </div>
       </DetailSection>
 
-      {!single && (
-        <DetailSection
-          title="规格与数量"
-          extra="受理 / 退回针对整个商品；上架、编辑、下架按规格操作"
-          flush
-        >
+      <DetailSection
+        title="委托明细"
+        extra={`${items.length} 个规格 · 受托 ${totalQty.toLocaleString()} ${head.unit}；上架以整个商品为单位引用明细，按规格分别加价、定量`}
+        flush
+      >
           <div
             className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground"
             style={{ gridTemplateColumns: specSummaryColumns }}
@@ -1542,11 +1670,11 @@ function EntrustDetail({
             <span>商品编码</span>
             <span>规格型号</span>
             <span>方式</span>
-            <span>商家底价</span>
+            <span>委托价</span>
             <span>受托数量</span>
             <span>上架数量</span>
+            <span>可上架</span>
             <span>运营状态</span>
-            <span>操作</span>
           </div>
           {items.map((g) => {
             const op = operationMeta(g);
@@ -1583,37 +1711,34 @@ function EntrustDetail({
                 <span className="tabular-nums">
                   {lockedQty(g).toLocaleString()} {g.unit}
                 </span>
+                <span className="tabular-nums">
+                  {(g.quantity - lockedQty(g)).toLocaleString()} {g.unit}
+                </span>
                 <span className="flex min-w-0 flex-col items-start gap-1">
                   {op ? (
                     <Tag className={op.className}>{op.label}</Tag>
                   ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
+                    <span className="text-xs text-muted-foreground">
+                      {g.status === "returned"
+                        ? "已退回"
+                        : g.status === "pending"
+                          ? "待受理"
+                          : "待上架"}
+                    </span>
                   )}
                 </span>
-                {accepted ? (
-                  <Actions
-                    goods={g}
-                    hideDetail
-                    onAction={(a) => onAction(g, a)}
-                  />
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    {g.status === "returned" ? "已退回" : "待受理"}
-                  </span>
-                )}
               </div>
             );
           })}
         </DetailSection>
-      )}
 
       <DetailSection
         title="上架记录"
-        extra="在商家底价基础上加价对外上架，差额为服务收益"
+        extra="在委托价基础上加价对外上架，差额为服务收益；提交后待平台审批，审批通过前可在列表的上架记录中编辑"
         flush
       >
         <div className="p-3">
-          <GroupListingTable items={items} />
+          <GroupListingTable items={items} readonly />
         </div>
       </DetailSection>
     </div>
@@ -1630,6 +1755,7 @@ export function ProviderGoods() {
   const [dialog, setDialog] = useState<{
     action: Exclude<Action, "detail">;
     id: string;
+    listingId?: string;
   } | null>(null);
   /** 同一委托单下的全部规格：受理 / 退回按委托单整体生效 */
   const orderIds = (g: EntrustedGoods) =>
@@ -1646,6 +1772,13 @@ export function ProviderGoods() {
   const dialogGoods = dialog
     ? goods.find((g) => g.id === dialog.id)
     : undefined;
+  const dialogItems = dialogGoods
+    ? goods.filter((g) => orderKey(g) === orderKey(dialogGoods))
+    : [];
+  const dialogListing =
+    dialogGoods && dialog?.listingId
+      ? dialogGoods.listings.find((l) => l.id === dialog.listingId)
+      : undefined;
 
   const update = (
     id: string | string[],
@@ -1701,6 +1834,29 @@ export function ProviderGoods() {
     if (action === "detail") setDetailKey(orderKey(g));
     else setDialog({ action, id: g.id });
   };
+  const editListing = (goodsId: string, listingId: string) =>
+    setDialog({ action: "edit", id: goodsId, listingId });
+  /** 按规格下架单条上架记录；该规格无上架中记录时运营状态转为已下架 */
+  const offListing = (goodsId: string, listingId: string) => {
+    const g = goods.find((x) => x.id === goodsId);
+    if (!g) return;
+    update(
+      goodsId,
+      (x) => {
+        const listings = x.listings.map((l) =>
+          l.id === listingId ? { ...l, status: "off" as const } : l,
+        );
+        const anyOn = listings.some((l) => l.status === "on");
+        return {
+          ...x,
+          listings,
+          status: anyOn ? x.status : "off",
+          statusNote: anyOn ? x.statusNote : "服务商按规格下架",
+        };
+      },
+      `已下架上架记录 ${listingId}：${g.name}（${g.spec}）`,
+    );
+  };
 
   const typeLabel = draft.type ? bizMeta[draft.type].label : "";
   const groups = groupOrders(visible);
@@ -1714,7 +1870,6 @@ export function ProviderGoods() {
         <EntrustDetail
           group={detailGroup}
           onBack={() => setDetailKey(null)}
-          onAction={handleAction}
         />
       ) : (
         <>
@@ -1836,7 +1991,7 @@ export function ProviderGoods() {
                 );
               })}
               <span className="ml-auto pr-2 text-muted-foreground">
-                同一委托单的多个规格归为一行，点击编码前的角标展开查看上架记录
+                同一委托单的多个规格归为一行，点击编码前的角标展开查看上架记录；待审批的上架记录可在其中编辑
               </span>
             </div>
 
@@ -1851,7 +2006,6 @@ export function ProviderGoods() {
                   <span>商品名称</span>
                   <span>委托方</span>
                   <span>委托方式</span>
-                  <span>商家底价</span>
                   <span>委托时间</span>
                   <span>受托时间</span>
                   <span>受托数量</span>
@@ -1876,9 +2030,6 @@ export function ProviderGoods() {
                     (n, g) => n + g.listings.length,
                     0,
                   );
-                  const prices = items.map((g) => g.basePrice);
-                  const minPrice = Math.min(...prices);
-                  const maxPrice = Math.max(...prices);
                   const entrustedAt = items.map((g) => g.entrustedAt).sort()[0];
                   const acceptedAt = items
                     .map((g) => g.acceptedAt)
@@ -1940,27 +2091,6 @@ export function ProviderGoods() {
                             {bizMeta[grp.type].label}
                           </Tag>
                         </span>
-                        <span className="flex flex-col text-xs tabular-nums">
-                          {single ? (
-                            <>
-                              <span>
-                                ¥ {fmtPrice(head.basePrice)} {priceSuffix(head)}
-                              </span>
-                              {head.type === "rent" &&
-                                head.deposit !== undefined && (
-                                  <span className="text-[11px] text-muted-foreground">
-                                    押金 ¥ {fmtPrice(head.deposit)}
-                                  </span>
-                                )}
-                            </>
-                          ) : (
-                            <span>
-                              {minPrice === maxPrice
-                                ? `¥ ${fmtPrice(minPrice)}`
-                                : `¥ ${fmtPrice(minPrice)} ~ ${fmtPrice(maxPrice)}`}
-                            </span>
-                          )}
-                        </span>
                         <span className="font-mono text-xs text-muted-foreground">
                           {entrustedAt}
                         </span>
@@ -2000,42 +2130,22 @@ export function ProviderGoods() {
                             meta={statusMeta}
                           />
                         </span>
-                        {single ? (
-                          <Actions
-                            goods={head}
-                            onAction={(action) => handleAction(head, action)}
-                          />
-                        ) : (
-                          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <ActionLink
-                              onClick={() => handleAction(head, "detail")}
-                            >
-                              详情
-                            </ActionLink>
-                            {head.status === "pending" ? (
-                              <>
-                                <ActionLink
-                                  onClick={() => handleAction(head, "accept")}
-                                >
-                                  受理
-                                </ActionLink>
-                                <ActionLink
-                                  tone="danger"
-                                  onClick={() => handleAction(head, "return")}
-                                >
-                                  退回
-                                </ActionLink>
-                              </>
-                            ) : null}
-                          </span>
-                        )}
+                        <Actions
+                          items={items}
+                          onAction={(action) => handleAction(head, action)}
+                        />
                       </div>
                       {open && (
                         <div
                           id={`provider-listings-${head.id}`}
                           className="border-b border-border bg-muted/20 px-4 py-3 pl-[84px]"
                         >
-                          <GroupListingTable items={items} />
+                          <GroupListingTable
+                            items={items}
+                            onEdit={editListing}
+                            onOff={offListing}
+                            onRelist={() => handleAction(head, "list")}
+                          />
                         </div>
                       )}
                     </Fragment>
@@ -2093,10 +2203,11 @@ export function ProviderGoods() {
           }
         />
       )}
-      {dialog?.action === "edit" && dialogGoods && (
+      {dialog?.action === "edit" && dialogGoods && dialogListing && (
         <EditDialog
-          key={dialogGoods.id}
+          key={dialogListing.id}
           goods={dialogGoods}
+          listing={dialogListing}
           onClose={() => setDialog(null)}
           onConfirm={(listingId, patch) =>
             update(
@@ -2114,21 +2225,28 @@ export function ProviderGoods() {
       )}
       {dialog?.action === "list" && dialogGoods && (
         <ListDialog
-          key={dialogGoods.id}
-          goods={dialogGoods}
+          key={orderKey(dialogGoods)}
+          items={dialogItems.filter((g) => isAccepted(g))}
           onClose={() => setDialog(null)}
-          onConfirm={(l) =>
+          onConfirm={(created) => {
+            const byId = new Map(created.map((c) => [c.id, c.listing]));
+            const qty = created.reduce((s, c) => s + c.listing.quantity, 0);
             update(
-              dialogGoods.id,
-              (g) => ({
-                ...g,
-                status: "listed",
-                statusNote: undefined,
-                listings: [l, ...g.listings],
-              }),
-              `已上架：${dialogGoods.name}（${bizMeta[l.type].label} ¥ ${fmtPrice(l.price)}）`,
-            )
-          }
+              created.map((c) => c.id),
+              (g) => {
+                const l = byId.get(g.id);
+                return l
+                  ? {
+                      ...g,
+                      status: "listed",
+                      statusNote: undefined,
+                      listings: [l, ...g.listings],
+                    }
+                  : g;
+              },
+              `已提交上架单 ${created[0].listing.batch}：${dialogGoods.name}（${bizMeta[dialogGoods.type].label} ${created.length} 个规格共 ${qty.toLocaleString()} ${dialogGoods.unit}，待平台审批）`,
+            );
+          }}
         />
       )}
       {dialog?.action === "off" && dialogGoods && (

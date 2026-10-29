@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ImageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   addEntrusts,
@@ -27,9 +28,12 @@ import { Select, categoryTree } from "@/components/shop-form-fields";
 export type BizType = "sale" | "rent";
 type ListingStatus = "on" | "off";
 
-/** 上架记录：一个商品可多次上架，每条记录对应一种租售方式 */
+/** 上架记录：一次上架生成一张上架单，按规格拆成多条记录，共用上架单号与运营规则 */
 type Listing = {
   id: string;
+  /** 上架单号 */
+  batch: string;
+  createdAt?: string;
   type: BizType;
   status: ListingStatus;
   price: number;
@@ -74,6 +78,12 @@ type Goods = {
   /** 违规下架 / 审核驳回的原因说明 */
   statusNote?: string;
   listings: Listing[];
+  /** 以下为商品级信息（与发布表单一致），同名商品的各规格共用 */
+  location?: string;
+  images?: string[];
+  banAreas?: string[];
+  freight?: string;
+  description?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -89,9 +99,20 @@ const goodsData: Goods[] = [
     unit: "张",
     stock: 6000,
     status: "active",
+    location: "上海市 松江区 车墩镇 北松公路 1688 号堆场",
+    images: ["/images/goods-bamboo-plywood.png"],
+    banAreas: ["西藏自治区", "新疆维吾尔自治区", "海南省 三沙市"],
+    freight: "按件计费：首 200 张 ¥ 600，每续 100 张加收 ¥ 200；订单满 ¥ 50,000 包邮",
+    description:
+      "优质楠竹为基材，双面覆酚醛膜，表面光洁、脱模容易，可重复使用 8–12 次。适用于高层住宅、桥梁墩柱等现浇混凝土模板工程。板材含水率 ≤ 12%，静曲强度 ≥ 50 MPa，出厂附检测报告。",
     listings: [
       {
         id: "L240302001",
+
+        batch: "S240302001",
+        createdAt: "2024-03-02",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "sale",
         status: "on",
         price: 128,
@@ -101,6 +122,11 @@ const goodsData: Goods[] = [
       },
       {
         id: "L240302002",
+
+        batch: "S240302002",
+        createdAt: "2024-03-02",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "rent",
         status: "on",
         price: 0.6,
@@ -127,6 +153,11 @@ const goodsData: Goods[] = [
     listings: [
       {
         id: "L240315001",
+
+        batch: "S240315001",
+        createdAt: "2024-03-15",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "rent",
         status: "on",
         price: 0.045,
@@ -138,6 +169,11 @@ const goodsData: Goods[] = [
       },
       {
         id: "L240110003",
+
+        batch: "S240110003",
+        createdAt: "2024-01-10",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "rent",
         status: "off",
         price: 0.05,
@@ -153,6 +189,12 @@ const goodsData: Goods[] = [
   },
   {
     code: "G2024040003",
+    location: "江苏省 苏州市 吴江区 汾湖高新区 周转材料基地",
+    images: ["/images/goods-steel-strut.png"],
+    banAreas: [],
+    freight: "按距离计费：50km 内起步 ¥ 1,200 / 车，超出部分 ¥ 12 / km；可自提",
+    description:
+      "Φ609×16 钢支撑采用 Q235B 无缝钢管，配套法兰、活络头与预应力千斤顶，可按 9m / 12m 标准节与 6m 调节节自由组合，适用于地铁车站、深基坑内支撑体系。出租含进出场质检，归还按损耗标准结算。",
     shop: "华东建设工程有限公司周转材料店",
     name: "钢支撑 Φ609×16 基坑内支撑",
     spec: "9m 标准节",
@@ -164,6 +206,11 @@ const goodsData: Goods[] = [
     listings: [
       {
         id: "L240408001",
+
+        batch: "S240408001",
+        createdAt: "2024-04-08",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "sale",
         status: "off",
         price: 5800,
@@ -173,6 +220,11 @@ const goodsData: Goods[] = [
       },
       {
         id: "L240408002",
+
+        batch: "S240408002",
+        createdAt: "2024-04-08",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "rent",
         status: "on",
         price: 12,
@@ -199,6 +251,11 @@ const goodsData: Goods[] = [
     listings: [
       {
         id: "L240408003",
+
+        batch: "S240408002",
+        createdAt: "2024-04-08",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "rent",
         status: "on",
         price: 12,
@@ -225,6 +282,11 @@ const goodsData: Goods[] = [
     listings: [
       {
         id: "L240408004",
+
+        batch: "S240408001",
+        createdAt: "2024-04-08",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "sale",
         status: "on",
         price: 5600,
@@ -249,6 +311,11 @@ const goodsData: Goods[] = [
     listings: [
       {
         id: "L240520001",
+
+        batch: "S240520001",
+        createdAt: "2024-05-20",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "sale",
         status: "off",
         price: 365,
@@ -273,6 +340,11 @@ const goodsData: Goods[] = [
     listings: [
       {
         id: "L240611001",
+
+        batch: "S240611001",
+        createdAt: "2024-06-11",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "rent",
         status: "off",
         price: 280,
@@ -299,6 +371,11 @@ const goodsData: Goods[] = [
     listings: [
       {
         id: "L240703001",
+
+        batch: "S240703001",
+        createdAt: "2024-07-03",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "sale",
         status: "on",
         price: 4280,
@@ -308,6 +385,11 @@ const goodsData: Goods[] = [
       },
       {
         id: "L240703002",
+
+        batch: "S240703002",
+        createdAt: "2024-07-03",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "rent",
         status: "on",
         price: 9.5,
@@ -334,6 +416,11 @@ const goodsData: Goods[] = [
     listings: [
       {
         id: "L241022001",
+
+        batch: "S241022001",
+        createdAt: "2024-10-22",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "sale",
         status: "on",
         price: 186,
@@ -359,6 +446,11 @@ const goodsData: Goods[] = [
     listings: [
       {
         id: "L240816001",
+
+        batch: "S240816001",
+        createdAt: "2024-08-16",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "rent",
         status: "off",
         price: 0.35,
@@ -386,6 +478,11 @@ const goodsData: Goods[] = [
     listings: [
       {
         id: "L240905001",
+
+        batch: "S240905001",
+        createdAt: "2024-09-05",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "sale",
         status: "off",
         price: 16800,
@@ -395,6 +492,11 @@ const goodsData: Goods[] = [
       },
       {
         id: "L240905002",
+
+        batch: "S240905002",
+        createdAt: "2024-09-05",
+        taxRate: "13%",
+        payTerm: "先款后货",
         type: "rent",
         status: "off",
         price: 980,
@@ -724,69 +826,60 @@ export function ActionLink({
 
 type GoodsAction = "detail" | "edit" | "list" | "off" | "entrust";
 
+function canList(items: Goods[]) {
+  return items.some((g) => g.status === "active" || g.status === "off");
+}
+
+/** 商品级操作：上架 / 委托以整个商品（含全部规格）为单位；编辑在详情页进行；下架按规格 */
 function GoodsActions({
-  goods,
+  items,
   onAction,
-  hideDetail,
-  showEntrust,
 }: {
-  goods: Goods;
+  items: Goods[];
   onAction: (a: GoodsAction) => void;
-  hideDetail?: boolean;
-  /** 委托以整个商品为单位，仅在商品级操作列显示 */
-  showEntrust?: boolean;
 }) {
-  const detailLink = hideDetail ? null : (
-    <ActionLink onClick={() => onAction("detail")}>详情</ActionLink>
-  );
-  const entrustLink = showEntrust ? (
-    <ActionLink onClick={() => onAction("entrust")}>委托</ActionLink>
-  ) : null;
-  const actions: Record<GoodsStatus, React.ReactNode> = {
-    draft: (
-      <>
-        <ActionLink onClick={() => onAction("edit")}>编辑</ActionLink>
+  const head = items[0];
+  const single = items.length === 1;
+  const detailLink = <ActionLink onClick={() => onAction("detail")}>详情</ActionLink>;
+  if (head.status === "draft")
+    return (
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {detailLink}
         <ActionLink>提交审核</ActionLink>
         <ActionLink tone="danger">删除</ActionLink>
-      </>
-    ),
-    active: (
-      <>
-        {detailLink}
-        <ActionLink onClick={() => onAction("edit")}>编辑</ActionLink>
-        <ActionLink onClick={() => onAction("list")}>上架</ActionLink>
-        {entrustLink}
-        <ActionLink tone="danger" onClick={() => onAction("off")}>
-          下架
-        </ActionLink>
-      </>
-    ),
-    off: (
-      <>
-        {detailLink}
-        <ActionLink onClick={() => onAction("edit")}>编辑</ActionLink>
-        <ActionLink onClick={() => onAction("list")}>重新上架</ActionLink>
-        {entrustLink}
-      </>
-    ),
-    violation: (
-      <>
+      </span>
+    );
+  if (head.status === "violation")
+    return (
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {detailLink}
         <ActionLink>查看违规原因</ActionLink>
         <ActionLink>整改后重新提交</ActionLink>
-      </>
-    ),
-    rejected: (
-      <>
+      </span>
+    );
+  if (head.status === "rejected")
+    return (
+      <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {detailLink}
-        <ActionLink onClick={() => onAction("edit")}>编辑</ActionLink>
         <ActionLink>重新提交审核</ActionLink>
-      </>
-    ),
-  };
+      </span>
+    );
   return (
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-      {actions[goods.status]}
+      {detailLink}
+      {canList(items) && (
+        <ActionLink onClick={() => onAction("list")}>
+          {head.status === "off" && single ? "重新上架" : "上架"}
+        </ActionLink>
+      )}
+      {canEntrust(items) && (
+        <ActionLink onClick={() => onAction("entrust")}>委托</ActionLink>
+      )}
+      {single && head.status === "active" && (
+        <ActionLink tone="danger" onClick={() => onAction("off")}>
+          下架
+        </ActionLink>
+      )}
     </span>
   );
 }
@@ -907,6 +1000,7 @@ export function DialogInput({
   suffix,
   type = "text",
   invalid,
+  disabled,
 }: {
   label: string;
   value: string;
@@ -916,18 +1010,21 @@ export function DialogInput({
   suffix?: string;
   type?: "text" | "number";
   invalid?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <div
       className={cn(
         "flex h-9 items-center rounded border bg-background text-sm focus-within:border-[#1890ff]",
         invalid ? "border-red-400" : "border-border",
+        disabled && "bg-muted/40 text-muted-foreground",
       )}
     >
       {prefix && <span className="pl-3 text-muted-foreground">{prefix}</span>}
       <input
         aria-label={label}
         aria-invalid={invalid || undefined}
+        disabled={disabled}
         type={type}
         min={type === "number" ? 0 : undefined}
         value={value}
@@ -942,26 +1039,6 @@ export function DialogInput({
   );
 }
 
-function GoodsSummary({ goods }: { goods: Goods }) {
-  return (
-    <div className="flex items-center gap-3 rounded bg-muted/40 px-3 py-2 text-sm">
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="truncate font-medium">{goods.name}</span>
-        <span className="truncate text-xs text-muted-foreground">
-          {goods.code} · {goods.spec}
-        </span>
-      </span>
-      <span className="shrink-0 text-xs text-muted-foreground">
-        总库存{" "}
-        <span className="tabular-nums text-foreground">
-          {goods.stock.toLocaleString()}
-        </span>{" "}
-        {goods.unit}
-      </span>
-    </div>
-  );
-}
-
 export const PRIMARY_BTN = "bg-[#1890ff] hover:bg-[#1890ff]/90";
 
 export const PROVIDERS = [
@@ -972,6 +1049,7 @@ export const PROVIDERS = [
 ];
 
 type EntrustDraftLine = {
+  on: boolean;
   quantity: string;
   salePrice: string;
   rentPrice: string;
@@ -1011,6 +1089,7 @@ function EntrustDialog({
         return [
           g.code,
           {
+            on: availableOf(g) > 0,
             quantity: String(availableOf(g)),
             salePrice: sale ? String(sale.price) : "",
             rentPrice: rent
@@ -1035,13 +1114,21 @@ function EntrustDialog({
     setLines((m) => ({ ...m, [code]: { ...m[code], ...patch } }));
 
   const k = Math.max(providers.length, 1);
+  const allOn = items.every((g) => lines[g.code].on);
+  const toggleAll = () =>
+    setLines((m) =>
+      Object.fromEntries(
+        Object.entries(m).map(([c, d]) => [c, { ...d, on: !allOn }]),
+      ),
+    );
   const lineState = items.map((g) => {
     const d = lines[g.code];
     const qty = Number(d.quantity);
     const available = availableOf(g);
-    const qtyFilled = d.quantity !== "";
-    const qtyOk = !qtyFilled || (Number.isInteger(qty) && qty >= 0 && qty * k <= available);
-    const included = qtyFilled && qty > 0;
+    const qtyOk =
+      !d.on ||
+      (d.quantity !== "" && Number.isInteger(qty) && qty > 0 && qty * k <= available);
+    const included = d.on;
     const saleOk = !included || !types.includes("sale") || Number(d.salePrice) > 0;
     const rentOk =
       !included ||
@@ -1090,7 +1177,7 @@ function EntrustDialog({
     );
   };
 
-  const cols = `minmax(140px,1fr) 80px 120px${types.includes("sale") ? " 120px" : ""}${types.includes("rent") ? " 130px 110px" : ""}`;
+  const cols = `24px minmax(130px,1fr) 80px 120px${types.includes("sale") ? " 120px" : ""}${types.includes("rent") ? " 130px 110px" : ""}`;
 
   return (
     <Modal
@@ -1102,8 +1189,8 @@ function EntrustDialog({
         <>
           <span className="mr-auto text-xs text-muted-foreground">
             {providers.length > 0 && anyIncluded
-              ? `将生成 ${providers.length} 张委托单，每张委托 ${totalQty.toLocaleString()} ${head.unit}`
-              : "委托以整个商品为单位，含全部规格"}
+              ? `将生成 ${providers.length} 张委托单，每张委托 ${lineState.filter((x) => x.included).length} 个规格共 ${totalQty.toLocaleString()} ${head.unit}`
+              : "委托以整个商品为单位，可全部或部分规格委托"}
           </span>
           <Button variant="outline" size="sm" onClick={onClose}>
             取消
@@ -1213,15 +1300,22 @@ function EntrustDialog({
       </div>
 
       <DialogField
-        label="委托数量与委托价"
+        label="委托明细"
         required
-        hint="委托价默认取该规格的发布价，可按规格修改；数量填 0 表示该规格不委托"
+        hint={`勾选需要委托的规格，可全部委托或部分委托；委托价默认取该规格的发布价，可按规格修改。已选 ${lineState.filter((x) => x.included).length} / ${items.length} 个规格`}
       >
         <div className="overflow-x-auto rounded border border-border">
           <div
             className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
             style={{ gridTemplateColumns: cols }}
           >
+            <input
+              type="checkbox"
+              aria-label={allOn ? "取消全选规格" : "全选规格"}
+              checked={allOn}
+              onChange={toggleAll}
+              className="accent-[#1890ff]"
+            />
             <span>规格型号</span>
             <span>可委托</span>
             <span>委托数量</span>
@@ -1236,9 +1330,19 @@ function EntrustDialog({
           {lineState.map(({ g, d, available, qtyOk, included, saleOk, rentOk }) => (
             <div
               key={g.code}
-              className="grid items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-0"
+              className={cn(
+                "grid items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-0",
+                !included && "text-muted-foreground",
+              )}
               style={{ gridTemplateColumns: cols }}
             >
+              <input
+                type="checkbox"
+                aria-label={`委托 ${g.spec}`}
+                checked={d.on}
+                onChange={(e) => setLine(g.code, { on: e.target.checked })}
+                className="accent-[#1890ff]"
+              />
               <span className="flex min-w-0 flex-col leading-4">
                 <span className="truncate font-medium" title={g.spec}>
                   {g.spec}
@@ -1258,10 +1362,12 @@ function EntrustDialog({
                 placeholder="0"
                 suffix={g.unit}
                 invalid={!qtyOk}
+                disabled={!d.on}
               />
               {types.includes("sale") && (
                 <DialogInput
                   label={`${g.spec} 出售委托价`}
+                  disabled={!d.on}
                   type="number"
                   value={d.salePrice}
                   onChange={(v) => setLine(g.code, { salePrice: v })}
@@ -1275,6 +1381,7 @@ function EntrustDialog({
                 <>
                   <DialogInput
                     label={`${g.spec} 出租委托价`}
+                    disabled={!d.on}
                     type="number"
                     value={d.rentPrice}
                     onChange={(v) => setLine(g.code, { rentPrice: v })}
@@ -1285,6 +1392,7 @@ function EntrustDialog({
                   />
                   <DialogInput
                     label={`${g.spec} 押金`}
+                    disabled={!d.on}
                     type="number"
                     value={d.rentDeposit}
                     onChange={(v) => setLine(g.code, { rentDeposit: v })}
@@ -1306,23 +1414,63 @@ const TAX_RATES = ["不含税", "1%", "3%", "6%", "9%", "13%"];
 const PAY_TERMS = ["先款后货", "货到付款"] as const;
 type PayTerm = (typeof PAY_TERMS)[number];
 
-/** 上架：为商品新增一条上架记录，并在此确定该租售方式的运营规则（税率、结算、议价、租期等） */
+type ListDraftLine = {
+  on: boolean;
+  price: string;
+  quantity: string;
+  minOrder: string;
+  deposit: string;
+};
+
+function initListLines(items: Goods[], type: BizType) {
+  return Object.fromEntries(
+    items.map((g) => {
+      const available = g.stock - lockedStock(g);
+      const last = defaultPrice(g, type);
+      return [
+        g.code,
+        {
+          on: available > 0,
+          price: last ? String(last.price) : "",
+          quantity: available > 0 ? String(available) : "",
+          minOrder: last?.minOrder !== undefined ? String(last.minOrder) : "",
+          deposit: last?.deposit !== undefined ? String(last.deposit) : "",
+        } satisfies ListDraftLine,
+      ];
+    }),
+  ) as Record<string, ListDraftLine>;
+}
+
+function nextBatchId(items: Goods[]) {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  const batches = new Set(items.flatMap((g) => g.listings.map((l) => l.batch)));
+  return `S${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}${String(batches.size + 1).padStart(3, "0")}`;
+}
+
+/** 上架：以整个商品为单位生成一张上架单，引用商品明细按规格分别定价、定量；运营规则（税率、结算、议价、租期等）为上架单共用 */
 function ListDialog({
-  goods,
+  items,
   onClose,
   onConfirm,
 }: {
-  goods: Goods;
+  items: Goods[];
   onClose: () => void;
-  onConfirm: (l: Listing) => void;
+  onConfirm: (created: { code: string; listing: Listing }[]) => void;
 }) {
-  const available = goods.stock - lockedStock(goods);
-  const [type, setType] = useState<BizType>("sale");
-  const [price, setPrice] = useState("");
-  const [quantity, setQuantity] = useState("");
-  const [minOrder, setMinOrder] = useState("");
+  const head = items[0];
+  const relist = items.every((g) => g.status === "off");
+  const [type, setTypeState] = useState<BizType>("sale");
+  const [lines, setLines] = useState<Record<string, ListDraftLine>>(() =>
+    initListLines(items, "sale"),
+  );
+  const setType = (t: BizType) => {
+    setTypeState(t);
+    setLines(initListLines(items, t));
+  };
+  const setLine = (code: string, patch: Partial<ListDraftLine>) =>
+    setLines((m) => ({ ...m, [code]: { ...m[code], ...patch } }));
   const [period, setPeriod] = useState<"天" | "月">("天");
-  const [deposit, setDeposit] = useState("");
   const [minDays, setMinDays] = useState("");
   const [maxDays, setMaxDays] = useState("");
   const [taxRate, setTaxRate] = useState("13%");
@@ -1330,55 +1478,87 @@ function ListDialog({
   const [negotiable, setNegotiable] = useState(false);
   const [lossRule, setLossRule] = useState("");
 
-  const qty = Number(quantity);
-  const qtyOk = qty > 0 && qty <= available;
+  const allOn = items.every((g) => lines[g.code].on);
+  const toggleAll = () =>
+    setLines((m) =>
+      Object.fromEntries(
+        Object.entries(m).map(([c, d]) => [c, { ...d, on: !allOn }]),
+      ),
+    );
+
+  const lineState = items.map((g) => {
+    const d = lines[g.code];
+    const available = g.stock - lockedStock(g);
+    const qty = Number(d.quantity);
+    const qtyOk =
+      !d.on ||
+      (d.quantity !== "" && Number.isInteger(qty) && qty > 0 && qty <= available);
+    const priceOk = !d.on || Number(d.price) > 0;
+    const depositOk =
+      !d.on || type === "sale" || (d.deposit !== "" && Number(d.deposit) >= 0);
+    return { g, d, available, qty, qtyOk, priceOk, depositOk };
+  });
+  const included = lineState.filter((x) => x.d.on);
   const rentOk =
-    Number(deposit) >= 0 &&
-    deposit !== "" &&
-    Number(minDays) > 0 &&
-    (maxDays === "" || Number(maxDays) >= Number(minDays));
+    type === "sale" ||
+    (Number(minDays) > 0 && (maxDays === "" || Number(maxDays) >= Number(minDays)));
   const ok =
-    Number(price) > 0 &&
-    qtyOk &&
+    included.length > 0 &&
+    lineState.every((x) => x.qtyOk && x.priceOk && x.depositOk) &&
     Boolean(taxRate) &&
-    (type === "sale" || rentOk);
+    rentOk;
+  const totalQty = included.reduce((s, x) => s + x.qty, 0);
 
   const submit = () => {
     if (!ok) return;
-    const id = `L${new Date().toISOString().slice(2, 10).replace(/-/g, "")}${String(goods.listings.length + 1).padStart(3, "0")}`;
-    const common = {
-      id,
-      status: "on" as const,
-      price: Number(price),
-      quantity: qty,
-      used: 0,
-      taxRate,
-      payTerm,
-      negotiable,
-    };
+    const batch = nextBatchId(items);
+    const createdAt = new Date().toISOString().slice(0, 10);
     onConfirm(
-      type === "sale"
-        ? { ...common, type, minOrder: minOrder ? Number(minOrder) : undefined }
-        : {
-            ...common,
-            type,
-            period,
-            deposit: Number(deposit),
-            minDays: Number(minDays),
-            maxDays: maxDays ? Number(maxDays) : undefined,
-            lossRule: lossRule.trim() || undefined,
-          },
+      included.map(({ g, d, qty }, i) => {
+        const common = {
+          id: `L${batch.slice(1)}${String(i + 1).padStart(2, "0")}`,
+          batch,
+          createdAt,
+          status: "on" as const,
+          price: Number(d.price),
+          quantity: qty,
+          used: 0,
+          taxRate,
+          payTerm,
+          negotiable,
+        };
+        const listing: Listing =
+          type === "sale"
+            ? { ...common, type, minOrder: d.minOrder ? Number(d.minOrder) : undefined }
+            : {
+                ...common,
+                type,
+                period,
+                deposit: Number(d.deposit),
+                minDays: Number(minDays),
+                maxDays: maxDays ? Number(maxDays) : undefined,
+                lossRule: lossRule.trim() || undefined,
+              };
+        return { code: g.code, listing };
+      }),
     );
   };
 
+  const cols = `24px minmax(130px,1fr) 80px 130px 120px 120px`;
+
   return (
     <Modal
-      title={goods.status === "off" ? "重新上架" : "新增上架"}
+      title={relist ? "重新上架" : "新增上架"}
       titleId="list-dialog-title"
-      width="max-w-[640px]"
+      width="max-w-[860px]"
       onClose={onClose}
       footer={
         <>
+          <span className="mr-auto text-xs text-muted-foreground">
+            {included.length > 0
+              ? `将生成 1 张上架单：${bizMeta[type].label} ${included.length} 个规格，共 ${totalQty.toLocaleString()} ${head.unit}`
+              : "上架以整个商品为单位，按规格分别定价、定量"}
+          </span>
           <Button variant="outline" size="sm" onClick={onClose}>
             取消
           </Button>
@@ -1393,11 +1573,27 @@ function ListDialog({
         </>
       }
     >
-      <GoodsSummary goods={goods} />
+      <div className="grid gap-3 rounded bg-muted/40 px-3 py-2 text-xs sm:grid-cols-4">
+        <span className="flex min-w-0 flex-col gap-0.5 sm:col-span-2">
+          <span className="text-muted-foreground">商品</span>
+          <span className="truncate font-medium" title={head.name}>
+            {head.name}
+          </span>
+        </span>
+        <span className="flex flex-col gap-0.5">
+          <span className="text-muted-foreground">规格</span>
+          <span>{items.length} 个</span>
+        </span>
+        <span className="flex flex-col gap-0.5">
+          <span className="text-muted-foreground">计量单位</span>
+          <span>{head.unit}</span>
+        </span>
+      </div>
+
       <DialogField
         label="租售方式"
         required
-        hint="同一商品可多次上架，每条上架记录对应一种租售方式及其运营规则"
+        hint="每张上架单对应一种租售方式；同一商品可多次上架"
       >
         <div
           role="radiogroup"
@@ -1437,97 +1633,129 @@ function ListDialog({
         </div>
       </DialogField>
 
-      <ListGroup title="价格与数量">
-        <div className="grid gap-4 sm:grid-cols-2">
-          {type === "rent" && (
-            <DialogField label="计租周期" required>
-              <div
-                role="radiogroup"
-                aria-label="计租周期"
-                className="flex h-9 items-center gap-4 text-sm"
-              >
-                {(["天", "月"] as const).map((p) => (
-                  <label key={p} className="flex items-center gap-1.5">
-                    <input
-                      type="radio"
-                      name="list-period"
-                      checked={period === p}
-                      onChange={() => setPeriod(p)}
-                      className="accent-[#1890ff]"
-                    />
-                    按{p}
-                  </label>
-                ))}
-              </div>
-            </DialogField>
-          )}
-          <DialogField
-            label={type === "sale" ? "销售单价" : "租金单价"}
-            required
+      <DialogField
+        label="上架明细"
+        required
+        hint={`引用商品明细，勾选需要上架的规格并分别填写价格与数量；价格默认取该规格最近一次${bizMeta[type].label}的发布价。已选 ${included.length} / ${items.length} 个规格`}
+      >
+        <div className="overflow-x-auto rounded border border-border">
+          <div
+            className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
+            style={{ gridTemplateColumns: cols }}
           >
-            <DialogInput
-              label="单价"
-              type="number"
-              value={price}
-              onChange={setPrice}
-              placeholder="0.00"
-              prefix="¥"
-              suffix={
-                type === "sale"
-                  ? `/ ${goods.unit}`
-                  : `/ ${goods.unit} / ${period}`
-              }
+            <input
+              type="checkbox"
+              aria-label={allOn ? "取消全选规格" : "全选规格"}
+              checked={allOn}
+              onChange={toggleAll}
+              className="accent-[#1890ff]"
             />
-          </DialogField>
-          {type === "sale" ? (
-            <DialogField label="起订量">
-              <DialogInput
-                label="起订量"
-                type="number"
-                value={minOrder}
-                onChange={setMinOrder}
-                placeholder="不限"
-                suffix={goods.unit}
+            <span>规格型号</span>
+            <span>可上架</span>
+            <span>{type === "sale" ? "销售单价" : "租金单价"}</span>
+            <span>上架数量</span>
+            <span>{type === "sale" ? "起订量" : "押金"}</span>
+          </div>
+          {lineState.map(({ g, d, available, qtyOk, priceOk, depositOk }) => (
+            <div
+              key={g.code}
+              className={cn(
+                "grid items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-0",
+                !d.on && "text-muted-foreground",
+              )}
+              style={{ gridTemplateColumns: cols }}
+            >
+              <input
+                type="checkbox"
+                aria-label={`上架 ${g.spec}`}
+                checked={d.on}
+                disabled={available <= 0}
+                onChange={(e) => setLine(g.code, { on: e.target.checked })}
+                className="accent-[#1890ff]"
               />
-            </DialogField>
-          ) : (
-            <DialogField label="押金" required hint="归还验收合格后退还">
+              <span className="flex min-w-0 flex-col leading-4">
+                <span className="truncate font-medium" title={g.spec}>
+                  {g.spec}
+                </span>
+                <span className="font-mono text-[11px] text-muted-foreground">
+                  {g.code}
+                </span>
+              </span>
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {available.toLocaleString()} {g.unit}
+              </span>
               <DialogInput
-                label="押金"
+                label={`${g.spec} 单价`}
                 type="number"
-                value={deposit}
-                onChange={setDeposit}
+                value={d.price}
+                onChange={(v) => setLine(g.code, { price: v })}
                 placeholder="0.00"
                 prefix="¥"
-                suffix={`/ ${goods.unit}`}
+                suffix={type === "sale" ? `/ ${g.unit}` : `/ ${g.unit} / ${period}`}
+                invalid={!priceOk}
+                disabled={!d.on}
               />
-            </DialogField>
-          )}
-          <DialogField
-            label="上架数量"
-            required
-            hint={
-              quantity && !qtyOk
-                ? `不可超过可上架库存 ${available.toLocaleString()} ${goods.unit}`
-                : `可上架库存 ${available.toLocaleString()} ${goods.unit}（总库存减去上架中记录占用）`
-            }
-          >
-            <DialogInput
-              label="上架数量"
-              type="number"
-              value={quantity}
-              onChange={setQuantity}
-              placeholder="0"
-              suffix={goods.unit}
-            />
-          </DialogField>
+              <DialogInput
+                label={`${g.spec} 上架数量`}
+                type="number"
+                value={d.quantity}
+                onChange={(v) => setLine(g.code, { quantity: v })}
+                placeholder="0"
+                suffix={g.unit}
+                invalid={!qtyOk}
+                disabled={!d.on}
+              />
+              {type === "sale" ? (
+                <DialogInput
+                  label={`${g.spec} 起订量`}
+                  type="number"
+                  value={d.minOrder}
+                  onChange={(v) => setLine(g.code, { minOrder: v })}
+                  placeholder="不限"
+                  suffix={g.unit}
+                  disabled={!d.on}
+                />
+              ) : (
+                <DialogInput
+                  label={`${g.spec} 押金`}
+                  type="number"
+                  value={d.deposit}
+                  onChange={(v) => setLine(g.code, { deposit: v })}
+                  placeholder="0.00"
+                  prefix="¥"
+                  invalid={!depositOk}
+                  disabled={!d.on}
+                />
+              )}
+            </div>
+          ))}
         </div>
-      </ListGroup>
+      </DialogField>
 
-      <ListGroup title={type === "sale" ? "出售规则" : "出租规则"}>
+      <ListGroup title={type === "sale" ? "出售规则（上架单共用）" : "出租规则（上架单共用）"}>
         <div className="grid gap-4 sm:grid-cols-2">
           {type === "rent" && (
             <>
+              <DialogField label="计租周期" required>
+                <div
+                  role="radiogroup"
+                  aria-label="计租周期"
+                  className="flex h-9 items-center gap-4 text-sm"
+                >
+                  {(["天", "月"] as const).map((p) => (
+                    <label key={p} className="flex items-center gap-1.5">
+                      <input
+                        type="radio"
+                        name="list-period"
+                        checked={period === p}
+                        onChange={() => setPeriod(p)}
+                        className="accent-[#1890ff]"
+                      />
+                      按{p}
+                    </label>
+                  ))}
+                </div>
+              </DialogField>
               <DialogField label="最短租期" required>
                 <DialogInput
                   label="最短租期"
@@ -1536,6 +1764,7 @@ function ListDialog({
                   onChange={setMinDays}
                   placeholder="0"
                   suffix={period}
+                  invalid={minDays !== "" && Number(minDays) <= 0}
                 />
               </DialogField>
               <DialogField
@@ -1654,58 +1883,76 @@ const CATEGORY_OPTIONS: Record<string, string[]> = {
 };
 const UNIT_OPTIONS = ["张", "根", "套", "块", "米", "吨", "台", "个", "箱"];
 
-export type GoodsEditPatch = Pick<
-  Goods,
-  "name" | "spec" | "category" | "subCategory" | "unit" | "stock"
->;
+export type GoodsEditPatch = {
+  name: string;
+  category: string;
+  subCategory: string;
+  unit: string;
+  location: string;
+  lines: { code: string; spec: string; stock: number }[];
+};
 
 const SELECT_CLS =
   "h-9 w-full rounded border border-border bg-background px-3 text-sm focus:border-[#1890ff] focus:outline-none";
 
-/** 编辑商品：带入当前商品信息，可修改名称 / 规格 / 品类 / 单位 / 库存；编码、店铺与上架记录不可改 */
+const editLineColumns = "118px minmax(160px,1fr) 110px 140px";
+
+/** 编辑商品：基于商品详情以整个商品为单位编辑，名称 / 品类 / 单位 / 所在地共用，商品明细按规格修改规格型号与库存；编码、店铺与上架记录不可改 */
 function EditDialog({
-  goods,
+  items,
   onClose,
   onConfirm,
 }: {
-  goods: Goods;
+  items: Goods[];
   onClose: () => void;
   onConfirm: (patch: GoodsEditPatch) => void;
 }) {
-  const locked = lockedStock(goods);
-  const [name, setName] = useState(goods.name);
-  const [spec, setSpec] = useState(goods.spec);
-  const [category, setCategory] = useState(goods.category);
-  const [subCategory, setSubCategory] = useState(goods.subCategory);
-  const [unit, setUnit] = useState(goods.unit);
-  const [stock, setStock] = useState(String(goods.stock));
+  const head = items[0];
+  const [name, setName] = useState(head.name);
+  const [category, setCategory] = useState(head.category);
+  const [subCategory, setSubCategory] = useState(head.subCategory);
+  const [unit, setUnit] = useState(head.unit);
+  const [location, setLocation] = useState(head.location ?? "");
+  const [lines, setLines] = useState<Record<string, { spec: string; stock: string }>>(
+    () =>
+      Object.fromEntries(
+        items.map((g) => [g.code, { spec: g.spec, stock: String(g.stock) }]),
+      ),
+  );
+  const setLine = (code: string, patch: Partial<{ spec: string; stock: string }>) =>
+    setLines((m) => ({ ...m, [code]: { ...m[code], ...patch } }));
 
-  const subOptions = CATEGORY_OPTIONS[category] ?? [goods.subCategory];
-  const stockNum = Number(stock);
-  const stockOk = stock !== "" && Number.isInteger(stockNum) && stockNum >= 0;
-  const belowLocked = stockOk && stockNum < locked;
-  const unitLocked = goods.listings.length > 0;
+  const subOptions = CATEGORY_OPTIONS[category] ?? [head.subCategory];
+  const unitLocked = items.some((g) => g.listings.length > 0);
+  const lineState = items.map((g) => {
+    const d = lines[g.code];
+    const locked = lockedStock(g);
+    const stockNum = Number(d.stock);
+    const stockOk = d.stock !== "" && Number.isInteger(stockNum) && stockNum >= 0;
+    const belowLocked = stockOk && stockNum < locked;
+    const specOk = d.spec.trim() !== "";
+    const changed = d.spec.trim() !== g.spec || stockNum !== g.stock;
+    return { g, d, locked, stockNum, stockOk, belowLocked, specOk, changed };
+  });
   const changed =
-    name.trim() !== goods.name ||
-    spec.trim() !== goods.spec ||
-    category !== goods.category ||
-    subCategory !== goods.subCategory ||
-    unit !== goods.unit ||
-    stockNum !== goods.stock;
+    name.trim() !== head.name ||
+    category !== head.category ||
+    subCategory !== head.subCategory ||
+    unit !== head.unit ||
+    location.trim() !== (head.location ?? "") ||
+    lineState.some((x) => x.changed);
   const ok =
     name.trim() !== "" &&
-    spec.trim() !== "" &&
     subCategory !== "" &&
-    stockOk &&
-    !belowLocked &&
+    lineState.every((x) => x.stockOk && !x.belowLocked && x.specOk) &&
     changed;
-  const statusMeta = goodsStatusMeta[goods.status];
+  const statusMeta = goodsStatusMeta[head.status];
 
   return (
     <Modal
       title="编辑商品"
       titleId="edit-dialog-title"
-      width="max-w-[640px]"
+      width="max-w-[860px]"
       onClose={onClose}
       footer={
         <>
@@ -1719,11 +1966,15 @@ function EditDialog({
             onClick={() =>
               onConfirm({
                 name: name.trim(),
-                spec: spec.trim(),
                 category,
                 subCategory,
                 unit,
-                stock: stockNum,
+                location: location.trim(),
+                lines: lineState.map(({ g, d, stockNum }) => ({
+                  code: g.code,
+                  spec: d.spec.trim(),
+                  stock: stockNum,
+                })),
               })
             }
           >
@@ -1735,12 +1986,14 @@ function EditDialog({
       <div className="grid gap-3 rounded bg-muted/40 px-3 py-2 text-xs sm:grid-cols-4">
         <span className="flex flex-col gap-0.5">
           <span className="text-muted-foreground">商品编码</span>
-          <span className="font-mono">{goods.code}</span>
+          <span className="font-mono">
+            {items.length === 1 ? head.code : `${head.code} 等 ${items.length} 个`}
+          </span>
         </span>
         <span className="flex min-w-0 flex-col gap-0.5 sm:col-span-2">
           <span className="text-muted-foreground">所属店铺</span>
-          <span className="truncate" title={goods.shop}>
-            {goods.shop}
+          <span className="truncate" title={head.shop}>
+            {head.shop}
           </span>
         </span>
         <span className="flex flex-col items-start gap-0.5">
@@ -1749,101 +2002,132 @@ function EditDialog({
         </span>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="sm:col-span-2">
-          <DialogField label="商品名称" required>
-            <DialogInput label="商品名称" value={name} onChange={setName} />
+      <ListGroup title="基本信息">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <DialogField label="商品名称" required>
+              <DialogInput label="商品名称" value={name} onChange={setName} />
+            </DialogField>
+          </div>
+          <DialogField label="一级品类" required>
+            <select
+              aria-label="一级品类"
+              value={category}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setSubCategory(CATEGORY_OPTIONS[e.target.value]?.[0] ?? "");
+              }}
+              className={SELECT_CLS}
+            >
+              {Object.keys(CATEGORY_OPTIONS).map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </DialogField>
-        </div>
-        <div className="sm:col-span-2">
+          <DialogField label="二级品类" required>
+            <select
+              aria-label="二级品类"
+              value={subCategory}
+              onChange={(e) => setSubCategory(e.target.value)}
+              className={SELECT_CLS}
+            >
+              {subOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+          </DialogField>
           <DialogField
-            label="规格型号"
+            label="计量单位"
             required
-            hint="同名商品按规格分别计库存；修改规格不会影响已有上架记录"
+            hint={
+              unitLocked
+                ? "已有上架记录按该单位计价，单位不可修改"
+                : "上架后单位将随价格固定"
+            }
           >
-            <DialogInput label="规格型号" value={spec} onChange={setSpec} />
+            <select
+              aria-label="计量单位"
+              value={unit}
+              disabled={unitLocked}
+              onChange={(e) => setUnit(e.target.value)}
+              className={cn(
+                SELECT_CLS,
+                unitLocked && "cursor-not-allowed bg-muted/40 text-muted-foreground",
+              )}
+            >
+              {Array.from(new Set([head.unit, ...UNIT_OPTIONS])).map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </DialogField>
+          <DialogField label="商品所在地" hint="省 / 市 / 区县 + 具体地址">
+            <DialogInput
+              label="商品所在地"
+              value={location}
+              onChange={setLocation}
+              placeholder="如：上海市 松江区 车墩镇 北松公路 1688 号堆场"
+            />
           </DialogField>
         </div>
-        <DialogField label="一级品类" required>
-          <select
-            aria-label="一级品类"
-            value={category}
-            onChange={(e) => {
-              setCategory(e.target.value);
-              setSubCategory(CATEGORY_OPTIONS[e.target.value]?.[0] ?? "");
-            }}
-            className={SELECT_CLS}
-          >
-            {Object.keys(CATEGORY_OPTIONS).map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </DialogField>
-        <DialogField label="二级品类" required>
-          <select
-            aria-label="二级品类"
-            value={subCategory}
-            onChange={(e) => setSubCategory(e.target.value)}
-            className={SELECT_CLS}
-          >
-            {subOptions.map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
-        </DialogField>
-        <DialogField
-          label="计量单位"
-          required
-          hint={
-            unitLocked
-              ? "已有上架记录按该单位计价，单位不可修改"
-              : "上架后单位将随价格固定"
-          }
-        >
-          <select
-            aria-label="计量单位"
-            value={unit}
-            disabled={unitLocked}
-            onChange={(e) => setUnit(e.target.value)}
-            className={cn(
-              SELECT_CLS,
-              unitLocked && "cursor-not-allowed bg-muted/40 text-muted-foreground",
-            )}
-          >
-            {Array.from(new Set([goods.unit, ...UNIT_OPTIONS])).map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </select>
-        </DialogField>
-        <DialogField
-          label="总库存"
-          required
-          hint={
-            belowLocked
-              ? `上架中记录已占用 ${locked.toLocaleString()} ${goods.unit}，库存不可低于该值`
-              : `上架中记录占用 ${locked.toLocaleString()} ${goods.unit}，可上架 ${Math.max(stockOk ? stockNum - locked : goods.stock - locked, 0).toLocaleString()} ${goods.unit}`
-          }
-        >
-          <DialogInput
-            label="总库存"
-            type="number"
-            value={stock}
-            onChange={setStock}
-            placeholder="0"
-            suffix={goods.unit}
-          />
-        </DialogField>
-      </div>
+      </ListGroup>
 
-      {goods.statusNote && (
+      <ListGroup title={`商品明细（${items.length} 个规格）`}>
+        <div className="overflow-x-auto rounded border border-border">
+          <div
+            className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
+            style={{ gridTemplateColumns: editLineColumns }}
+          >
+            <span>商品编码</span>
+            <span>规格型号</span>
+            <span>上架占用</span>
+            <span>总库存</span>
+          </div>
+          {lineState.map(({ g, d, locked, stockOk, belowLocked, specOk }) => (
+            <div
+              key={g.code}
+              className="grid items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-0"
+              style={{ gridTemplateColumns: editLineColumns }}
+            >
+              <span className="font-mono text-xs text-muted-foreground">
+                {g.code}
+              </span>
+              <DialogInput
+                label={`${g.code} 规格型号`}
+                value={d.spec}
+                onChange={(v) => setLine(g.code, { spec: v })}
+                invalid={!specOk}
+              />
+              <span className="text-xs tabular-nums text-muted-foreground">
+                {locked.toLocaleString()} {g.unit}
+              </span>
+              <DialogInput
+                label={`${g.code} 总库存`}
+                type="number"
+                value={d.stock}
+                onChange={(v) => setLine(g.code, { stock: v })}
+                placeholder="0"
+                suffix={g.unit}
+                invalid={!stockOk || belowLocked}
+              />
+            </div>
+          ))}
+        </div>
+        {lineState.some((x) => x.belowLocked) && (
+          <span className="text-xs text-red-600">
+            总库存不可低于上架中记录已占用的数量
+          </span>
+        )}
+      </ListGroup>
+
+      {head.statusNote && (
         <div className="rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-          {statusMeta.label}说明：{goods.statusNote}
+          {statusMeta.label}说明：{head.statusNote}
         </div>
       )}
     </Modal>
@@ -1852,7 +2136,7 @@ function EditDialog({
 
 const OFF_REASONS = [
   "库存不足",
-  "价格调整",
+  "价��调整",
   "暂停经营",
   "商品信息变更",
   "其他",
@@ -2102,9 +2386,11 @@ function matches(g: Goods, f: Filters, records: EntrustRecord[]) {
 const columns =
   "48px 118px minmax(170px,1.5fr) minmax(130px,1fr) 120px 90px minmax(100px,0.8fr) 80px 92px minmax(150px,1fr)";
 const listingColumns =
-  "120px 72px minmax(160px,1fr) 100px 110px 80px 130px";
+  "116px 92px 72px minmax(170px,1.2fr) 110px 110px 84px 120px";
 const specSummaryColumns =
-  "118px minmax(160px,1.2fr) 100px 100px minmax(100px,0.8fr) minmax(220px,1fr)";
+  "118px minmax(160px,1.2fr) 100px 100px 100px 100px minmax(100px,0.8fr) 80px";
+const batchLineColumns =
+  "118px minmax(160px,1.2fr) minmax(150px,1fr) 110px 110px 110px 80px";
 const entrustColumns =
   "110px 92px minmax(170px,1fr) 90px 110px minmax(200px,1.2fr) 80px 90px";
 
@@ -2258,12 +2544,62 @@ function listingUsedHeader(listings: Listing[]) {
 }
 
 /** 一组同名商品的全部上架记录：多规格时在行内标注编码与规格，记录按规格顺序排列 */
-function GroupListingTable({ items }: { items: Goods[] }) {
-  const rows = items.flatMap((g) => g.listings.map((l) => ({ g, l })));
-  const multi = items.length > 1;
-  const mixed = new Set(rows.map((r) => r.l.type)).size > 1;
-  const cols = listingColumns;
-  if (rows.length === 0)
+type ListingBatch = {
+  id: string;
+  type: BizType;
+  createdAt?: string;
+  rows: { g: Goods; l: Listing }[];
+};
+
+/** 把各规格的上架记录按上架单号归并 */
+function batchesOf(items: Goods[]): ListingBatch[] {
+  const map = new Map<string, ListingBatch>();
+  for (const g of items)
+    for (const l of g.listings) {
+      const b = map.get(l.batch);
+      if (b) b.rows.push({ g, l });
+      else map.set(l.batch, { id: l.batch, type: l.type, createdAt: l.createdAt, rows: [{ g, l }] });
+    }
+  return [...map.values()].sort((a, b) =>
+    (b.createdAt ?? "").localeCompare(a.createdAt ?? ""),
+  );
+}
+
+type BatchStatus = "on" | "off" | "partial";
+function batchStatus(b: ListingBatch): BatchStatus {
+  const on = b.rows.filter((r) => r.l.status === "on").length;
+  return on === 0 ? "off" : on === b.rows.length ? "on" : "partial";
+}
+const batchStatusMeta: Record<BatchStatus, { label: string; className: string }> = {
+  on: listingStatusMeta.on,
+  partial: {
+    label: "部分下架",
+    className: "bg-amber-50 text-amber-700 ring-amber-200",
+  },
+  off: listingStatusMeta.off,
+};
+
+function fmtListingPrice(l: Listing, unit: string) {
+  return `¥ ${fmtPrice(l.price)} / ${unit}${l.type === "rent" && l.period ? ` / ${l.period}` : ""}`;
+}
+
+/** 一组同名商品的全部上架记录：每张上架单一行，行内按规格列出价格与数量 */
+function GroupListingTable({
+  items,
+  onDetail,
+  onOff,
+  onRelist,
+}: {
+  items: Goods[];
+  onDetail: (batchId: string) => void;
+  onOff: (batchId: string) => void;
+  onRelist: () => void;
+}) {
+  const batches = batchesOf(items);
+  const head = items[0];
+  const rows = batches.flatMap((b) => b.rows.map((r) => r.l));
+  const mixed = new Set(rows.map((l) => l.type)).size > 1;
+  if (batches.length === 0)
     return (
       <div className="rounded border border-dashed border-border px-3 py-6 text-center text-xs text-muted-foreground">
         暂无上架记录，可在操作列点击「上架」创建
@@ -2274,71 +2610,91 @@ function GroupListingTable({ items }: { items: Goods[] }) {
       <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-xs">
         <span className="font-medium">上架记录</span>
         <span className="text-muted-foreground">
-          共 {rows.length} 条
-          {multi ? ` · ${items.length} 个规格` : ""}
+          共 {batches.length} 张上架单 · {rows.length} 条规格记录
         </span>
       </div>
       <div
         className="grid items-center gap-3 border-b border-border bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground"
-        style={{ gridTemplateColumns: cols }}
+        style={{ gridTemplateColumns: listingColumns }}
       >
         <span>上架单号</span>
+        <span>上架时间</span>
         <span>租售方式</span>
         <span>价格</span>
         <span>上架数量</span>
-        <span>{listingUsedHeader(rows.map((r) => r.l))}</span>
+        <span>{listingUsedHeader(rows)}</span>
         <span>状态</span>
         <span>操作</span>
       </div>
-      {rows.map(({ g, l }) => {
-        const meta = bizMeta[l.type];
+      {batches.map((b) => {
+        const meta = bizMeta[b.type];
+        const st = batchStatusMeta[batchStatus(b)];
+        const multi = b.rows.length > 1;
+        const qty = b.rows.reduce((s, r) => s + r.l.quantity, 0);
+        const used = b.rows.reduce((s, r) => s + r.l.used, 0);
+        const first = b.rows[0].l;
         return (
           <div
-            key={l.id}
-            className="grid items-center gap-3 border-b border-border px-3 py-2 text-sm last:border-0"
-            style={{ gridTemplateColumns: cols }}
+            key={b.id}
+            className="grid items-start gap-3 border-b border-border px-3 py-2 text-sm last:border-0"
+            style={{ gridTemplateColumns: listingColumns }}
           >
+            <span className="font-mono text-xs text-muted-foreground">{b.id}</span>
             <span className="font-mono text-xs text-muted-foreground">
-              {l.id}
+              {b.createdAt ?? "—"}
             </span>
-            <Tag className={meta.className}>{meta.label}</Tag>
-            <span className="flex flex-col leading-tight">
-              <span className="tabular-nums">
-                ¥ {fmtPrice(l.price)} / {g.unit}
-                {l.type === "rent" && l.period ? ` / ${l.period}` : ""}
-              </span>
-              {(l.taxRate || l.payTerm || l.negotiable) && (
+            <span className="flex">
+              <Tag className={meta.className}>{meta.label}</Tag>
+            </span>
+            <span className="flex min-w-0 flex-col text-xs leading-5 tabular-nums">
+              {b.rows.map(({ g, l }) => (
+                <span key={l.id} className="truncate">
+                  {multi && <span className="text-muted-foreground">{g.spec}：</span>}
+                  {fmtListingPrice(l, g.unit)}
+                </span>
+              ))}
+              {(first.taxRate || first.payTerm || first.negotiable) && (
                 <span className="text-[11px] text-muted-foreground">
                   {[
-                    l.taxRate && `税率 ${l.taxRate}`,
-                    l.payTerm,
-                    l.negotiable && "可议价",
+                    first.taxRate && `税率 ${first.taxRate}`,
+                    first.payTerm,
+                    first.negotiable && "可议价",
                   ]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
               )}
             </span>
-            <span className="tabular-nums">
-              {l.quantity.toLocaleString()} {g.unit}
+            <span className="flex flex-col text-xs leading-5 tabular-nums">
+              <span className="text-sm">
+                {qty.toLocaleString()} {head.unit}
+              </span>
+              {multi &&
+                b.rows.map(({ g, l }) => (
+                  <span key={l.id} className="text-muted-foreground">
+                    {g.spec}：{l.quantity.toLocaleString()}
+                  </span>
+                ))}
             </span>
             <span className="tabular-nums">
               {mixed && (
                 <span className="mr-1 text-xs text-muted-foreground">
-                  {usedLabel(l.type)}
+                  {usedLabel(b.type)}
                 </span>
               )}
-              {l.used.toLocaleString()} {g.unit}
+              {used.toLocaleString()} {head.unit}
             </span>
-            <Tag className={listingStatusMeta[l.status].className}>
-              {listingStatusMeta[l.status].label}
-            </Tag>
+            <span className="flex">
+              <Tag className={st.className}>{st.label}</Tag>
+            </span>
             <span className="flex items-center gap-3">
-              <ActionLink>详情</ActionLink>
-              {l.status === "on" ? (
-                <ActionLink tone="danger">下架</ActionLink>
+              <ActionLink onClick={() => onDetail(b.id)}>详情</ActionLink>
+              {batchStatus(b) !== "off" ? (
+                <ActionLink tone="danger" onClick={() => onOff(b.id)}>
+                  下架
+                </ActionLink>
               ) : (
-                <ActionLink>重新上架</ActionLink>
+                <ActionLink onClick={onRelist}>重新上架</ActionLink>
               )}
             </span>
           </div>
@@ -2348,19 +2704,193 @@ function GroupListingTable({ items }: { items: Goods[] }) {
   );
 }
 
-/** 商品详情页：基本信息、库存构成、全部上架记录与委托信息 */
+/** 上架单详情：商品上架后的完整信息——运营规则、按规格的价格 / 数量 / 成交与状态 */
+function ListingDetail({
+  group,
+  batch,
+  onBack,
+  onOff,
+  onOffLine,
+}: {
+  group: SpecGroup<Goods>;
+  batch: ListingBatch;
+  onBack: () => void;
+  onOff: (batchId: string) => void;
+  onOffLine: (listingId: string) => void;
+}) {
+  const head = group.items[0];
+  const first = batch.rows[0].l;
+  const meta = bizMeta[batch.type];
+  const st = batchStatusMeta[batchStatus(batch)];
+  const qty = batch.rows.reduce((s, r) => s + r.l.quantity, 0);
+  const used = batch.rows.reduce((s, r) => s + r.l.used, 0);
+  const onQty = batch.rows
+    .filter((r) => r.l.status === "on")
+    .reduce((s, r) => s + r.l.quantity - r.l.used, 0);
+  const rent = batch.type === "rent";
+  return (
+    <div className="flex flex-col gap-4">
+      <DetailHeader
+        title={`上架单 ${batch.id}`}
+        onBack={onBack}
+        tags={
+          <>
+            <Tag className={meta.className}>{meta.label}</Tag>
+            <Tag className={st.className}>{st.label}</Tag>
+          </>
+        }
+        subtitle={
+          <span className="flex flex-wrap gap-x-3 gap-y-1">
+            <span>{group.name}</span>
+            <span>{head.shop}</span>
+            <span>上架时间：{batch.createdAt ?? "—"}</span>
+            <span>计量单位：{head.unit}</span>
+          </span>
+        }
+        actions={
+          batchStatus(batch) !== "off" ? (
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+              onClick={() => onOff(batch.id)}
+            >
+              整单下架
+            </Button>
+          ) : undefined
+        }
+      />
+
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="上架数量"
+          value={qty}
+          unit={head.unit}
+          hint={`${batch.rows.length} 个规格`}
+        />
+        <StatCard
+          label={rent ? "累计已租" : "累计已售"}
+          value={used}
+          unit={head.unit}
+          hint={qty ? `成交率 ${Math.round((used / qty) * 100)}%` : undefined}
+        />
+        <StatCard
+          label="在售 / 在租可用"
+          value={onQty}
+          unit={head.unit}
+          hint="上架中规格的剩余数量"
+        />
+        <StatCard
+          label="规格状态"
+          value={`${batch.rows.filter((r) => r.l.status === "on").length} / ${batch.rows.length}`}
+          unit="上架中"
+        />
+      </div>
+
+      <DetailSection title={rent ? "出租规则" : "出售规则"} extra="上架单内全部规格共用">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <DescItem label="租售方式">{meta.label}</DescItem>
+          {rent && <DescItem label="计租周期">按{first.period ?? "天"}</DescItem>}
+          {rent && (
+            <DescItem label="租期">
+              {first.minDays ?? "—"} {first.period ?? "天"} 起
+              {first.maxDays ? `，最长 ${first.maxDays} ${first.period ?? "天"}` : "，不限最长"}
+            </DescItem>
+          )}
+          <DescItem label="税率">{first.taxRate ?? "—"}</DescItem>
+          <DescItem label="结算方式">{first.payTerm ?? "—"}</DescItem>
+          <DescItem label="议价">
+            {first.negotiable ? `支持${rent ? "租" : "买"}方发起议价` : "不支持"}
+          </DescItem>
+          {rent && (
+            <div className="sm:col-span-2 xl:col-span-4">
+              <DescItem label="损耗赔付标准">{first.lossRule ?? "—"}</DescItem>
+            </div>
+          )}
+        </div>
+      </DetailSection>
+
+      <DetailSection
+        title="上架明细"
+        extra="引用商品明细，按规格分别定价、定量；可按规格单独下架"
+        flush
+      >
+        <div
+          className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground"
+          style={{ gridTemplateColumns: batchLineColumns }}
+        >
+          <span>商品编码</span>
+          <span>规格型号</span>
+          <span>{rent ? "租金 / 押金" : "单价 / 起订量"}</span>
+          <span>上架数量</span>
+          <span>{rent ? "已租" : "已售"}</span>
+          <span>剩余</span>
+          <span>状态</span>
+        </div>
+        {batch.rows.map(({ g, l }) => {
+          const m = listingStatusMeta[l.status];
+          return (
+            <div
+              key={l.id}
+              className="grid items-center gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0"
+              style={{ gridTemplateColumns: batchLineColumns }}
+            >
+              <span className="font-mono text-xs text-muted-foreground">{g.code}</span>
+              <span className="truncate font-medium" title={g.spec}>
+                {g.spec}
+              </span>
+              <span className="flex flex-col text-xs leading-5 tabular-nums">
+                <span className="text-sm">{fmtListingPrice(l, g.unit)}</span>
+                <span className="text-muted-foreground">
+                  {rent
+                    ? `押金 ¥ ${fmtPrice(l.deposit ?? 0)} / ${g.unit}`
+                    : l.minOrder
+                      ? `起订 ${l.minOrder.toLocaleString()} ${g.unit}`
+                      : "起订量不限"}
+                </span>
+              </span>
+              <span className="tabular-nums">
+                {l.quantity.toLocaleString()} {g.unit}
+              </span>
+              <span className="tabular-nums">
+                {l.used.toLocaleString()} {g.unit}
+              </span>
+              <span className="tabular-nums">
+                {(l.quantity - l.used).toLocaleString()} {g.unit}
+              </span>
+              <span className="flex items-center gap-3">
+                <Tag className={m.className}>{m.label}</Tag>
+                {l.status === "on" && (
+                  <ActionLink tone="danger" onClick={() => onOffLine(l.id)}>
+                    下架
+                  </ActionLink>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </DetailSection>
+    </div>
+  );
+}
+
+/** 商品详情页：与发布表单对应——基本信息与图片、商品明细、区域禁售、运费、商品详情，以及上架 / 委托记录；编辑、上架、委托均在此以整个商品为单位操作 */
 function GoodsDetail({
   group,
   entrusts,
   onBack,
   onAction,
   onCancelEntrust,
+  onListingDetail,
+  onOffBatch,
 }: {
   group: SpecGroup<Goods>;
   entrusts: EntrustRecord[];
   onBack: () => void;
   onAction: (g: Goods, a: GoodsAction) => void;
   onCancelEntrust: (id: string) => void;
+  onListingDetail: (batchId: string) => void;
+  onOffBatch: (batchId: string) => void;
 }) {
   const items = group.items;
   const head = items[0];
@@ -2369,6 +2899,7 @@ function GoodsDetail({
   const totalStock = items.reduce((s, g) => s + g.stock, 0);
   const lockedTotal = items.reduce((s, g) => s + lockedStock(g), 0);
   const onListings = allListings.filter((l) => l.status === "on");
+  const batches = batchesOf(items);
   const saleUsed = allListings
     .filter((l) => l.type === "sale")
     .reduce((s, l) => s + l.used, 0);
@@ -2384,8 +2915,8 @@ function GoodsDetail({
     .map((g) => g.updatedAt)
     .sort()
     .at(-1);
-  const canList = head.status === "active" || head.status === "off";
-  const statusMeta = goodsStatusMeta[head.status];
+  const editable = head.status !== "violation";
+  const images = head.images ?? [];
 
   return (
     <div className="flex flex-col gap-4">
@@ -2394,11 +2925,9 @@ function GoodsDetail({
         onBack={onBack}
         tags={
           <>
-            {!single && (
-              <Tag className="bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/20">
-                {items.length} 规格
-              </Tag>
-            )}
+            <Tag className="bg-[#1890ff]/10 text-[#1890ff] ring-[#1890ff]/20">
+              {items.length} 规格
+            </Tag>
             <StatusSummary
               statuses={items.map((g) => g.status)}
               order={goodsStatusOrder}
@@ -2420,6 +2949,15 @@ function GoodsDetail({
         }
         actions={
           <>
+            {editable && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onAction(head, "edit")}
+              >
+                编辑商品
+              </Button>
+            )}
             {canEntrust(items) && (
               <Button
                 variant="outline"
@@ -2429,16 +2967,7 @@ function GoodsDetail({
                 委托服务商
               </Button>
             )}
-            {single && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => onAction(head, "edit")}
-              >
-                编辑商品
-              </Button>
-            )}
-            {single && canList && (
+            {canList(items) && (
               <Button
                 size="sm"
                 className={PRIMARY_BTN}
@@ -2456,17 +2985,13 @@ function GoodsDetail({
           label="总库存"
           value={totalStock}
           unit={head.unit}
-          hint={
-            single
-              ? `上架占用 ${lockedTotal.toLocaleString()} · 可上架 ${(totalStock - lockedTotal).toLocaleString()} ${head.unit}`
-              : `${items.length} 个规格合计 · 可上架 ${(totalStock - lockedTotal).toLocaleString()} ${head.unit}`
-          }
+          hint={`${items.length} 个规格合计 · 上架占用 ${lockedTotal.toLocaleString()} · 可上架 ${(totalStock - lockedTotal).toLocaleString()} ${head.unit}`}
         />
         <StatCard
-          label="上架记录"
-          value={allListings.length}
-          unit="条"
-          hint={`上架中 ${onListings.length} 条 · 占用库存 ${onListings.reduce((s, l) => s + l.quantity, 0).toLocaleString()} ${head.unit}`}
+          label="上架单"
+          value={batches.length}
+          unit="张"
+          hint={`上架中 ${onListings.length} 条规格记录 · 占用库存 ${onListings.reduce((s, l) => s + l.quantity, 0).toLocaleString()} ${head.unit}`}
         />
         <StatCard
           label="累计已售 / 已租"
@@ -2486,115 +3011,165 @@ function GoodsDetail({
       </div>
 
       <DetailSection title="基本信息">
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <DescItem label="商品名称">{group.name}</DescItem>
-          {single && <DescItem label="规格型号">{head.spec}</DescItem>}
-          <DescItem label="商品编码">
-            <span className="font-mono text-xs">
-              {items.map((g) => g.code).join("、")}
-            </span>
-          </DescItem>
-          <DescItem label="所属店铺">{head.shop}</DescItem>
-          <DescItem label="品类">
-            {head.category} / {head.subCategory}
-          </DescItem>
-          <DescItem label="计量单位">{head.unit}</DescItem>
-          {single ? (
-            <DescItem label="商品状态">
-              <span className="flex flex-col items-start gap-1">
-                <Tag className={statusMeta.className}>{statusMeta.label}</Tag>
-                {head.statusNote && (
-                  <span className="text-xs text-muted-foreground">
-                    {head.statusNote}
-                  </span>
-                )}
-              </span>
+        <div className="flex flex-col gap-4 lg:flex-row">
+          <div className="flex shrink-0 gap-2">
+            {images.length > 0 ? (
+              images.map((src) => (
+                <img
+                  key={src}
+                  src={src}
+                  alt={`${group.name} 商品图`}
+                  className="size-28 rounded border border-border object-cover"
+                />
+              ))
+            ) : (
+              <div className="flex size-28 flex-col items-center justify-center gap-1 rounded border border-dashed border-border text-[11px] text-muted-foreground">
+                <ImageIcon className="size-5" aria-hidden />
+                暂无图片
+              </div>
+            )}
+          </div>
+          <div className="grid flex-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="sm:col-span-2 xl:col-span-3">
+              <DescItem label="商品名称">{group.name}</DescItem>
+            </div>
+            <DescItem label="所属店铺">{head.shop}</DescItem>
+            <DescItem label="品类">
+              {head.category} / {head.subCategory}
             </DescItem>
-          ) : (
-            <DescItem label="规格数量">{items.length} 个</DescItem>
-          )}
-          <DescItem label="创建时间">
-            <span className="font-mono text-xs">{createdAt}</span>
-          </DescItem>
-          <DescItem label="最近更新">
-            <span className="font-mono text-xs">{updatedAt}</span>
-          </DescItem>
+            <DescItem label="计量单位">{head.unit}</DescItem>
+            <div className="sm:col-span-2 xl:col-span-3">
+              <DescItem label="商品所在地">{head.location ?? "—"}</DescItem>
+            </div>
+            <DescItem label="创建时间">
+              <span className="font-mono text-xs">{createdAt}</span>
+            </DescItem>
+            <DescItem label="最近更新">
+              <span className="font-mono text-xs">{updatedAt}</span>
+            </DescItem>
+            {head.statusNote && (
+              <DescItem label="状态说明">
+                <span className="text-xs text-muted-foreground">{head.statusNote}</span>
+              </DescItem>
+            )}
+          </div>
         </div>
       </DetailSection>
 
-      {!single && (
-        <DetailSection
-          title="规格与库存"
-          extra="每个规格独立计库存与状态；编辑 / 上架 / 下架按规格操作，委托以整个商品为单位"
-          flush
+      <DetailSection
+        title="商品明细"
+        extra={`${items.length} 个规格 · 总库存 ${totalStock.toLocaleString()} ${head.unit}；上架 / 委托以整个商品为单位引用明细，下架按规格操作`}
+        flush
+      >
+        <div
+          className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground"
+          style={{ gridTemplateColumns: specSummaryColumns }}
         >
-          <div
-            className="grid items-center gap-3 border-b border-border bg-muted/40 px-4 py-2 text-xs font-medium text-muted-foreground"
-            style={{ gridTemplateColumns: specSummaryColumns }}
-          >
-            <span>商品编码</span>
-            <span>规格型号</span>
-            <span>总库存</span>
-            <span>可上架</span>
-            <span>状态</span>
-            <span>操作</span>
-          </div>
-          {items.map((g) => {
-            const locked = lockedStock(g);
-            const m = goodsStatusMeta[g.status];
-            return (
-              <div
-                key={g.code}
-                className="grid items-center gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0"
-                style={{ gridTemplateColumns: specSummaryColumns }}
-              >
-                <span className="font-mono text-xs text-muted-foreground">
-                  {g.code}
-                </span>
-                <span className="truncate font-medium" title={g.spec}>
-                  {g.spec}
-                </span>
-                <span className="tabular-nums">
-                  {g.stock.toLocaleString()} {g.unit}
-                </span>
-                <span className="tabular-nums">
-                  {(g.stock - locked).toLocaleString()} {g.unit}
-                </span>
-                <span className="flex min-w-0 flex-col items-start gap-1">
-                  <Tag className={m.className}>{m.label}</Tag>
-                  {g.statusNote && (
-                    <span
-                      className="line-clamp-1 text-[11px] leading-4 text-muted-foreground"
-                      title={g.statusNote}
-                    >
-                      {g.statusNote}
-                    </span>
-                  )}
-                </span>
-                <GoodsActions
-                  goods={g}
-                  hideDetail
-                  onAction={(a) => onAction(g, a)}
-                />
-              </div>
-            );
-          })}
+          <span>商品编码</span>
+          <span>规格型号</span>
+          <span>总库存</span>
+          <span>上架占用</span>
+          <span>委托中</span>
+          <span>可上架</span>
+          <span>状态</span>
+          <span>操作</span>
+        </div>
+        {items.map((g) => {
+          const locked = lockedStock(g);
+          const entrusted = entrustedQty(g.code, entrusts);
+          const m = goodsStatusMeta[g.status];
+          return (
+            <div
+              key={g.code}
+              className="grid items-center gap-3 border-b border-border px-4 py-2.5 text-sm last:border-0"
+              style={{ gridTemplateColumns: specSummaryColumns }}
+            >
+              <span className="font-mono text-xs text-muted-foreground">{g.code}</span>
+              <span className="truncate font-medium" title={g.spec}>
+                {g.spec}
+              </span>
+              <span className="tabular-nums">
+                {g.stock.toLocaleString()} {g.unit}
+              </span>
+              <span className="tabular-nums">
+                {locked.toLocaleString()} {g.unit}
+              </span>
+              <span className="tabular-nums">
+                {entrusted.toLocaleString()} {g.unit}
+              </span>
+              <span className="tabular-nums">
+                {Math.max(g.stock - locked - entrusted, 0).toLocaleString()} {g.unit}
+              </span>
+              <span className="flex min-w-0 flex-col items-start gap-1">
+                <Tag className={m.className}>{m.label}</Tag>
+                {g.statusNote && (
+                  <span
+                    className="line-clamp-1 text-[11px] leading-4 text-muted-foreground"
+                    title={g.statusNote}
+                  >
+                    {g.statusNote}
+                  </span>
+                )}
+              </span>
+              <span className="flex items-center gap-3">
+                {g.status === "active" ? (
+                  <ActionLink tone="danger" onClick={() => onAction(g, "off")}>
+                    下架
+                  </ActionLink>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                )}
+              </span>
+            </div>
+          );
+        })}
+      </DetailSection>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <DetailSection title="区域禁售">
+          {head.banAreas === undefined ? (
+            <span className="text-sm text-muted-foreground">未设置</span>
+          ) : head.banAreas.length === 0 ? (
+            <span className="text-sm text-muted-foreground">未启用区域禁售，全国可售</span>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {head.banAreas.map((a) => (
+                <Tag key={a} className="bg-muted text-foreground ring-border">
+                  {a}
+                </Tag>
+              ))}
+            </div>
+          )}
         </DetailSection>
-      )}
+        <DetailSection title="运费设置">
+          <span className="text-sm">{head.freight ?? <span className="text-muted-foreground">未设置</span>}</span>
+        </DetailSection>
+      </div>
+
+      <DetailSection title="商品详情">
+        <p className="text-sm leading-6">
+          {head.description ?? <span className="text-muted-foreground">暂无详情描述</span>}
+        </p>
+      </DetailSection>
 
       <DetailSection
         title="上架记录"
-        extra="同一商品可多次上架，每条记录对应一种租售方式及其运营规则"
+        extra="每次上架生成一张上架单，引用商品明细按规格定价、定量；点击详情查看上架后的完整信息"
         flush
       >
         <div className="p-3">
-          <GroupListingTable items={items} />
+          <GroupListingTable
+            items={items}
+            onDetail={onListingDetail}
+            onOff={onOffBatch}
+            onRelist={() => onAction(head, "list")}
+          />
         </div>
       </DetailSection>
 
       <DetailSection
         title="委托记录"
-        extra="委托以整个商品为单位，可委托给多家服务商；待受理的委托可撤回，服务商受理后由其加价上架"
+        extra="委托以整个商品为单位，可全部或部分规格委托给多家服务商；待受理的委托可撤回，服务商受理后由其加价上架"
         flush
       >
         <div className="p-3">
@@ -2619,6 +3194,7 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
     code: string;
   } | null>(null);
   const [detailName, setDetailName] = useState<string | null>(null);
+  const [detailBatch, setDetailBatch] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const records = useEntrusts();
 
@@ -2664,6 +3240,39 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
     }
     setDialog({ action, code: g.code });
   };
+  /** 整单下架：上架单内全部规格记录下架 */
+  const offBatch = (batchId: string) => {
+    setGoods((list) =>
+      list.map((g) =>
+        g.listings.some((l) => l.batch === batchId)
+          ? {
+              ...g,
+              updatedAt: now(),
+              listings: g.listings.map((l) =>
+                l.batch === batchId ? { ...l, status: "off" as const } : l,
+              ),
+            }
+          : g,
+      ),
+    );
+    notify(`已下架上架单 ${batchId}`);
+  };
+  const offLine = (listingId: string) => {
+    setGoods((list) =>
+      list.map((g) =>
+        g.listings.some((l) => l.id === listingId)
+          ? {
+              ...g,
+              updatedAt: now(),
+              listings: g.listings.map((l) =>
+                l.id === listingId ? { ...l, status: "off" as const } : l,
+              ),
+            }
+          : g,
+      ),
+    );
+    notify("已下架该规格");
+  };
 
   const visible = goods.filter((g) => matches(g, applied, records));
   const isFiltered = Object.values(applied).some(Boolean);
@@ -2686,16 +3295,34 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
   const detailGroup = detailName
     ? groupSpecs(goods.filter((g) => g.name === detailName))[0]
     : undefined;
+  const batchGroup = detailBatch
+    ? groupSpecs(
+        goods.filter((g) => g.listings.some((l) => l.batch === detailBatch)),
+      )[0]
+    : undefined;
+  const batch = batchGroup
+    ? batchesOf(batchGroup.items).find((b) => b.id === detailBatch)
+    : undefined;
 
   return (
     <div className="flex flex-col gap-4">
-      {detailGroup ? (
+      {batchGroup && batch ? (
+        <ListingDetail
+          group={batchGroup}
+          batch={batch}
+          onBack={() => setDetailBatch(null)}
+          onOff={offBatch}
+          onOffLine={offLine}
+        />
+      ) : detailGroup ? (
         <GoodsDetail
           group={detailGroup}
           entrusts={entrustsOf(detailGroup.name, records)}
           onBack={() => setDetailName(null)}
           onAction={handleAction}
           onCancelEntrust={cancelEntrust}
+          onListingDetail={setDetailBatch}
+          onOffBatch={offBatch}
         />
       ) : (
         <>
@@ -2893,35 +3520,22 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
                             {createdAt.slice(11)}
                           </span>
                         </span>
-                        {single ? (
-                          <GoodsActions
-                            goods={head}
-                            showEntrust
-                            onAction={(a) => handleAction(head, a)}
-                          />
-                        ) : (
-                          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <ActionLink
-                              onClick={() => handleAction(head, "detail")}
-                            >
-                              详情
-                            </ActionLink>
-                            {canEntrust(items) && (
-                              <ActionLink
-                                onClick={() => handleAction(head, "entrust")}
-                              >
-                                委托
-                              </ActionLink>
-                            )}
-                          </span>
-                        )}
+                        <GoodsActions
+                          items={items}
+                          onAction={(a) => handleAction(head, a)}
+                        />
                       </div>
                       {open && (
                         <div
                           id={`listings-${head.code}`}
                           className="flex flex-col gap-3 border-b border-border bg-muted/20 px-4 py-3 pl-[84px]"
                         >
-                          <GroupListingTable items={items} />
+                          <GroupListingTable
+                            items={items}
+                            onDetail={setDetailBatch}
+                            onOff={offBatch}
+                            onRelist={() => handleAction(head, "list")}
+                          />
                           {entrusts.length > 0 && (
                             <EntrustTable
                               records={entrusts}
@@ -2949,15 +3563,30 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
 
       {dialog?.action === "list" && dialogGoods && (
         <ListDialog
-          goods={dialogGoods}
+          key={dialogGoods.name}
+          items={dialogItems}
           onClose={() => setDialog(null)}
-          onConfirm={(l) =>
-            updateGoods(
-              dialogGoods.code,
-              (g) => ({ ...g, status: "active", listings: [l, ...g.listings] }),
-              `已上架：${dialogGoods.name}（${bizMeta[l.type].label} ${l.quantity.toLocaleString()} ${dialogGoods.unit}）`,
-            )
-          }
+          onConfirm={(created) => {
+            const byCode = new Map(created.map((c) => [c.code, c.listing]));
+            setGoods((list) =>
+              list.map((g) => {
+                const l = byCode.get(g.code);
+                return l
+                  ? {
+                      ...g,
+                      status: "active" as const,
+                      statusNote: undefined,
+                      updatedAt: now(),
+                      listings: [l, ...g.listings],
+                    }
+                  : g;
+              }),
+            );
+            const qty = created.reduce((s, c) => s + c.listing.quantity, 0);
+            notify(
+              `已上架：${dialogGoods.name}（上架单 ${created[0].listing.batch}，${bizMeta[created[0].listing.type].label} ${created.length} 个规格共 ${qty.toLocaleString()} ${dialogGoods.unit}）`,
+            );
+          }}
         />
       )}
       {dialog?.action === "entrust" && dialogGoods && (
@@ -2977,15 +3606,30 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
       )}
       {dialog?.action === "edit" && dialogGoods && (
         <EditDialog
-          key={dialogGoods.code}
-          goods={dialogGoods}
+          key={dialogGoods.name}
+          items={dialogItems}
           onClose={() => setDialog(null)}
           onConfirm={(patch) => {
-            updateGoods(
-              dialogGoods.code,
-              (g) => ({ ...g, ...patch }),
-              `已保存：${patch.name}（${patch.spec}）`,
+            const byCode = new Map(patch.lines.map((l) => [l.code, l]));
+            setGoods((list) =>
+              list.map((g) => {
+                const l = byCode.get(g.code);
+                return l
+                  ? {
+                      ...g,
+                      name: patch.name,
+                      category: patch.category,
+                      subCategory: patch.subCategory,
+                      unit: patch.unit,
+                      location: patch.location || undefined,
+                      spec: l.spec,
+                      stock: l.stock,
+                      updatedAt: now(),
+                    }
+                  : g;
+              }),
             );
+            notify(`已保存：${patch.name}（${patch.lines.length} 个规格）`);
             if (detailName === dialogGoods.name && patch.name !== detailName)
               setDetailName(patch.name);
           }}
