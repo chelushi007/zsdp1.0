@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ShopCreate, ShopInfo } from '@/components/shop-info'
+import { ShopInfo } from '@/components/shop-info'
 import { GoodsList } from '@/components/goods-list'
 import { GoodsPublish } from '@/components/goods-publish'
 import { ProviderGoods } from '@/components/provider-goods'
@@ -184,12 +184,33 @@ function HubLayout({ node, onNavigate }: { node: MenuNode; onNavigate: (id: stri
   )
 }
 
+/** 商品管理：列表与发布商品在同一入口内切换 */
+function GoodsManage({ onTitleChange }: { onTitleChange: (title: string | null) => void }) {
+  const [view, setView] = useState<'list' | 'publish'>('list')
+  const go = (next: 'list' | 'publish') => {
+    setView(next)
+    onTitleChange(next === 'publish' ? '发布商品' : null)
+  }
+  if (view === 'publish') {
+    return <GoodsPublish onBack={() => go('list')} onSubmitted={() => go('list')} />
+  }
+  return <GoodsList onCreate={() => go('publish')} onTitleChange={onTitleChange} />
+}
+
 export function PageCanvas({ path, onNavigate }: Props) {
   const node = path[path.length - 1]
   const isDashboard = node.id.endsWith('dashboard') || node.id === 'portal'
   const isHub = Boolean(node.children?.length)
   const [subTitle, setSubTitle] = useState<string | null>(null)
-  const title = node.id === 'seller-shop-info' && subTitle ? subTitle : node.label
+  const [titleNode, setTitleNode] = useState(node.id)
+  if (titleNode !== node.id) {
+    setTitleNode(node.id)
+    setSubTitle(null)
+  }
+  const title =
+    (node.id === 'seller-shop' || node.id === 'seller-goods' || node.id === 'provider-goods') && subTitle
+      ? subTitle
+      : node.label
   const ordersRoute = parseOrdersRoute(node.id)
 
   return (
@@ -199,20 +220,12 @@ export function PageCanvas({ path, onNavigate }: Props) {
         <p className="text-sm text-muted-foreground">{node.description ?? '页面说明待补充'}</p>
       </header>
 
-      {node.id === 'seller-shop-info' ? (
+      {node.id === 'seller-shop' ? (
         <ShopInfo key={node.id} onTitleChange={setSubTitle} />
-      ) : node.id === 'seller-shop-create' ? (
-        <ShopCreate key={node.id} onDone={() => onNavigate('seller-shop-info')} />
-      ) : node.id === 'seller-goods-list' ? (
-        <GoodsList key={node.id} onCreate={() => onNavigate('seller-goods-publish')} />
-      ) : node.id === 'seller-goods-publish' ? (
-        <GoodsPublish
-          key={node.id}
-          onBack={() => onNavigate('seller-goods-list')}
-          onSubmitted={() => onNavigate('seller-goods-list')}
-        />
+      ) : node.id === 'seller-goods' ? (
+        <GoodsManage key={node.id} onTitleChange={setSubTitle} />
       ) : node.id === 'provider-goods' ? (
-        <ProviderGoods key={node.id} />
+        <ProviderGoods key={node.id} onTitleChange={setSubTitle} />
       ) : ordersRoute ? (
         <OrdersPage key={node.id} role={ordersRoute.role} kind={ordersRoute.kind} />
       ) : isHub ? (

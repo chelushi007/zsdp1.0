@@ -49,20 +49,12 @@ export const menuTree: MenuNode[] = [
       {
         id: 'seller-shop',
         label: '店铺管理',
-        description: '店铺基础信息、装修与资质维护',
-        children: [
-        { id: 'seller-shop-info', label: '店铺信息', description: '店铺名称、简介、联系方式与营业状态' },
-        { id: 'seller-shop-create', label: '新增店铺', description: '填写店铺基本信息、主营类目与企业资料，发布新店铺' },
-        ],
+        description: '店铺列表、新增店铺、店铺信息维护与开通 / 关闭',
       },
       {
         id: 'seller-goods',
         label: '商品管理',
-        description: '租赁与销售商品的发布、上下架与库存',
-        children: [
-          { id: 'seller-goods-list', label: '商品列表', description: '全部商品的查询、上下架与批量操作' },
-        { id: 'seller-goods-publish', label: '发布商品', description: '新增商品，设置运营方式、价格与押金' },
-        ],
+        description: '全部商品的查询、上下架、批量操作与发布商品',
       },
       ...workbenchCommon('seller', '商家'),
     ],

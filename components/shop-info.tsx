@@ -8,8 +8,6 @@ import {
   CategoryPicker,
   Select,
   categoryTree,
-  CompanyImagesUploader,
-  COMPANY_IMAGES_MIN,
   LogoUploader,
   MAX_CATEGORIES,
   RegionCascader,
@@ -40,6 +38,8 @@ type Shop = {
   openedAt: string | null
   contact: string
   phone: string
+  /** 联系邮箱，非必填 */
+  email?: string
   unit: UnitPath
   orgLevel: OrgLevel
   categories: string[]
@@ -48,9 +48,6 @@ type Shop = {
   intro: string
   businessHours: string
   hasLogo: boolean
-  companyIntro: string
-  companyImages: number
-  license: string
   createdAt: string
   updatedAt: string
 }
@@ -77,6 +74,7 @@ const shops: Shop[] = [
     openedAt: '2024-03-01 10:20',
     contact: '王敏',
     phone: '138 0011 2233',
+    email: 'wangmin@hdjs.example.com',
     unit: [CURRENT_UNIT],
     orgLevel: 'self',
     categories: ['模板类', '支护类', '脚手架类'],
@@ -85,10 +83,6 @@ const shops: Shop[] = [
     intro: '建筑模板、支护、脚手架等循环物资的租赁与销售，支持整体方案配置。',
     businessHours: '周一至周六 09:00 - 18:00',
     hasLogo: true,
-    companyIntro:
-      '成立于 2012 年，专注建筑循环物资周转服务，自有 20,000 ㎡ 堆场，服务施工企业 800 余家，提供配送、安拆、回收一站式服务。',
-    companyImages: 6,
-    license: '91310115MA1K3XXXXX',
     createdAt: '2024-02-26 15:02',
     updatedAt: '2024-09-18 09:41',
   },
@@ -99,6 +93,7 @@ const shops: Shop[] = [
     openedAt: '2024-04-15 14:05',
     contact: '李强',
     phone: '139 2233 4455',
+    email: 'liqiang@hdjs.example.com',
     unit: [CURRENT_UNIT],
     orgLevel: 'self',
     categories: ['脚手架类', '支护类', '拼装类', '型材类'],
@@ -107,9 +102,6 @@ const shops: Shop[] = [
     intro: '盘扣脚手架、钢支撑、拼装式围挡等短租与长租。',
     businessHours: '全年无休 08:00 - 20:00',
     hasLogo: true,
-    companyIntro: '华东地区循环物资租赁服务商，物资保有量 3 万吨，提供安拆班组与现场巡检。',
-    companyImages: 12,
-    license: '91310117MA1J2XXXXX',
     createdAt: '2024-04-10 11:30',
     updatedAt: '2024-10-02 16:12',
   },
@@ -128,9 +120,6 @@ const shops: Shop[] = [
     intro: '临电电缆、配电箱等周转物资租赁与二手销售。',
     businessHours: '周一至周五 09:30 - 18:30',
     hasLogo: false,
-    companyIntro: '临时用电物资全生命周期服务商，提供租赁、检测与回收。',
-    companyImages: 1,
-    license: '91310104MA1H5XXXXX',
     createdAt: '2024-06-20 09:12',
     updatedAt: '2024-06-20 09:12',
   },
@@ -149,9 +138,6 @@ const shops: Shop[] = [
     intro: '施工轨道、钢型材等循环物资租赁。',
     businessHours: '周一至周日 08:30 - 21:00',
     hasLogo: true,
-    companyIntro: '苏州区域循环物资服务网点，覆盖苏锡常施工项目。',
-    companyImages: 4,
-    license: '91320594MA1G8XXXXX',
     createdAt: '2023-08-05 10:00',
     updatedAt: '2024-07-30 18:20',
   },
@@ -162,6 +148,7 @@ const shops: Shop[] = [
     openedAt: null,
     contact: '周丽',
     phone: '135 9988 7766',
+    email: 'shop04@hdjs.example.com',
     unit: [CURRENT_UNIT, '杭州分公司'],
     orgLevel: 'sub',
     categories: ['房屋建筑类', '模板类', '其他材料'],
@@ -170,9 +157,6 @@ const shops: Shop[] = [
     intro: '活动板房、集装箱房及配套建筑物资租售。',
     businessHours: '周一至周日 09:00 - 19:00',
     hasLogo: false,
-    companyIntro: '杭州区域临建设施与循环物资服务网点。',
-    companyImages: 0,
-    license: '91330108MA1F6XXXXX',
     createdAt: '2024-10-08 13:45',
     updatedAt: '2024-10-08 13:45',
   },
@@ -191,9 +175,6 @@ const shops: Shop[] = [
     intro: '项目周边模板、支护物资就近周转租赁。',
     businessHours: '周一至周六 09:00 - 17:30',
     hasLogo: true,
-    companyIntro: '项目部级循环物资周转点，项目竣工后已关闭。',
-    companyImages: 3,
-    license: '91330402MA1E4XXXXX',
     createdAt: '2022-12-28 09:00',
     updatedAt: '2024-05-16 14:08',
   },
@@ -652,10 +633,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-export function ShopCreate({ onDone }: { onDone: () => void }) {
-  return <ShopForm onBack={onDone} backLabel="返回店铺信息" />
-}
-
 function ShopForm({
   shop,
   onBack,
@@ -670,11 +647,9 @@ function ShopForm({
   const [region, setRegion] = useState<Region>(shop?.region ?? { province: '', city: '', district: '' })
   const [detailAddress, setDetailAddress] = useState(shop?.detailAddress ?? '')
   const [hasLogo, setHasLogo] = useState(shop?.hasLogo ?? false)
-  const [companyImages, setCompanyImages] = useState(shop?.companyImages ?? 0)
   const [agreed, setAgreed] = useState(isEdit)
 
-  const imagesOk = companyImages >= COMPANY_IMAGES_MIN
-  const canPublish = agreed && imagesOk && categories.length > 0
+  const canPublish = agreed && categories.length > 0
 
   return (
     <div className="flex flex-col gap-4">
@@ -714,20 +689,6 @@ function ShopForm({
         </div>
       </Section>
 
-      <Section title="企业信息介绍">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="企业简介" required span>
-            <Textarea
-              placeholder="介绍企业背景、规模、服务能力与优势等，建议 100 - 500 字"
-              value={shop?.companyIntro}
-            />
-          </Field>
-          <Field label="企业图片" required span>
-            <CompanyImagesUploader count={companyImages} onChange={setCompanyImages} />
-          </Field>
-        </div>
-      </Section>
-
       <Section title="联系人信息">
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="联系人" required>
@@ -736,18 +697,8 @@ function ShopForm({
           <Field label="联系人电话" required>
             <Input placeholder="请输入手机号" value={shop?.phone} />
           </Field>
-        </div>
-      </Section>
-
-      <Section title="资质信息">
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="统一社会信用代码" required>
-            <Input placeholder="请输入 18 位统一社会信用代码" value={shop?.license} />
-          </Field>
-          <Field label="营业执照" required>
-            <span className="flex h-9 items-center rounded border border-dashed border-border px-3 text-xs text-muted-foreground/60">
-              点击上传营业执照扫描件
-            </span>
+          <Field label="联系邮箱" hint="用于接收订单、对账等通知">
+            <Input placeholder="请输入联系邮箱（选填）" value={shop?.email} />
           </Field>
         </div>
       </Section>
@@ -780,13 +731,11 @@ function ShopForm({
         <p className="text-xs text-muted-foreground">
           {!agreed
             ? '勾选同意开店须知后方可发布'
-            : !imagesOk
-              ? `企业图片至少上传 ${COMPANY_IMAGES_MIN} 张后方可发布`
-              : categories.length === 0
-                ? '请选择主营类目后发布'
-                : isEdit
-                  ? '发布后修改立即生效'
-                  : '仅保存时店铺状态为「未开通」，可在列表中开通'}
+            : categories.length === 0
+              ? '请选择主营类目后发布'
+              : isEdit
+                ? '发布后修改立即生效'
+                : '仅保存时店铺状态为「未开通」，可在列表中开通'}
         </p>
       </div>
     </div>
@@ -846,7 +795,6 @@ function DetailActions({ shop, onEdit, onClose }: { shop: Shop; onEdit: () => vo
 const timeline: Record<ShopStatus, [string, string][]> = {
   open: [
     ['店铺开通', '审核通过，店铺上线运营'],
-    ['资质审核通过', '营业执照与信用代码核验通过'],
     ['提交开通申请', '完善店铺信息并提交'],
     ['创建店铺', '保存基础信息'],
   ],
@@ -969,63 +917,14 @@ function ShopDetail({
               <DescItem label="店铺简介" value={shop.intro} span />
             </dl>
           </Section>
-          <Section title="企业信息介绍">
-            <dl className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <DescItem
-                label={`企业图片（${shop.companyImages} 张）`}
-                value={
-                  shop.companyImages < COMPANY_IMAGES_MIN ? (
-                    <span className="text-amber-600">不足 {COMPANY_IMAGES_MIN} 张，发布前需补充</span>
-                  ) : (
-                    <span className="text-emerald-700">已满足要求</span>
-                  )
-                }
-              />
-              <DescItem label="企业简介" value={shop.companyIntro} span />
-              {shop.companyImages > 0 && (
-                <DescItem
-                  label="图片预览"
-                  span
-                  value={
-                    <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-                      {Array.from({ length: Math.min(shop.companyImages, 6) }).map((_, i) => (
-                        <span
-                          key={i}
-                          className={cn(
-                            'relative flex aspect-video items-center justify-center rounded border text-[11px]',
-                            i === 0
-                              ? 'border-[#1890ff] bg-[#1890ff]/10 text-[#1890ff]'
-                              : 'border-border bg-muted text-muted-foreground',
-                          )}
-                        >
-                          {i === 0 ? '正门实景' : `图片 ${i + 1}`}
-                          {i === 5 && shop.companyImages > 6 && (
-                            <span className="absolute inset-0 flex items-center justify-center rounded bg-black/55 text-xs text-white">
-                              +{shop.companyImages - 6}
-                            </span>
-                          )}
-                        </span>
-                      ))}
-                    </div>
-                  }
-                />
-              )}
-            </dl>
-          </Section>
           <Section title="联系人信息">
             <dl className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               <DescItem label="联系人" value={shop.contact} />
               <DescItem label="联系人电话" value={<span className="tabular-nums">{shop.phone}</span>} />
-            </dl>
-          </Section>
-          <Section title="资质信息">
-            <dl className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              <DescItem label="统一社会信用代码" value={<span className="font-mono">{shop.license}</span>} />
               <DescItem
-                label="营业执照"
-                value={<span className="inline-block h-16 w-24 rounded border border-border bg-muted" aria-label="营业执照图片" />}
+                label="联系邮箱"
+                value={shop.email ? <span className="break-all">{shop.email}</span> : <span className="text-muted-foreground">未填写</span>}
               />
-              <DescItem label="资质状态" value={shop.status === 'pending' ? '待核验' : '已核验'} />
             </dl>
           </Section>
         </div>
@@ -1090,7 +989,7 @@ export function ShopInfo({ onTitleChange }: { onTitleChange?: (title: string) =>
     setMode(next)
     onTitleChange?.(
       next.type === 'list'
-        ? '店铺信息'
+        ? '店铺管理'
         : next.type === 'create'
           ? '新增店铺'
           : next.type === 'edit'
