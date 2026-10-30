@@ -207,7 +207,10 @@ export function PageCanvas({ path, onNavigate }: Props) {
     setTitleNode(node.id)
     setSubTitle(null)
   }
-  const title = (node.id === 'seller-shop' || node.id === 'seller-goods') && subTitle ? subTitle : node.label
+  const title =
+    (node.id === 'seller-shop' || node.id === 'seller-goods' || node.id === 'provider-goods') && subTitle
+      ? subTitle
+      : node.label
   const ordersRoute = parseOrdersRoute(node.id)
 
   return (
@@ -222,7 +225,7 @@ export function PageCanvas({ path, onNavigate }: Props) {
       ) : node.id === 'seller-goods' ? (
         <GoodsManage key={node.id} onTitleChange={setSubTitle} />
       ) : node.id === 'provider-goods' ? (
-        <ProviderGoods key={node.id} />
+        <ProviderGoods key={node.id} onTitleChange={setSubTitle} />
       ) : ordersRoute ? (
         <OrdersPage key={node.id} role={ordersRoute.role} kind={ordersRoute.kind} />
       ) : isHub ? (

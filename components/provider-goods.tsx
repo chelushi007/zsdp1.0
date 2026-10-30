@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -668,10 +668,12 @@ function markupPrice(base: number, mode: MarkupMode, v: string) {
 /** 上架：以整个受托商品为单位生成一张上架单，引用委托明细按规格分别加价、定量；提交后待平台审批 */
 function ListDialog({
   items,
+  backLabel,
   onClose,
   onConfirm,
 }: {
   items: EntrustedGoods[];
+  backLabel?: string;
   onClose: () => void;
   onConfirm: (created: { id: string; listing: ProviderListing }[]) => void;
 }) {
@@ -763,7 +765,8 @@ function ListDialog({
     <Modal
       title={relist ? "重新上架" : "加价上架"}
       titleId="provider-list-dialog-title"
-      width="max-w-[900px]"
+      mode="page"
+      backLabel={backLabel}
       onClose={onClose}
       footer={
         <>
@@ -1011,7 +1014,7 @@ function EditDialog({
   const qtyHint =
     quantity && !qtyOk
       ? qty > available
-        ? `受托 ${goods.quantity.toLocaleString()} ${goods.unit}，其他上架中记录占用 ${otherLocked.toLocaleString()} ${goods.unit}，本条最多 ${available.toLocaleString()} ${goods.unit}`
+        ? `受托 ${goods.quantity.toLocaleString()} ${goods.unit}��其他上架中记录占用 ${otherLocked.toLocaleString()} ${goods.unit}，本条最多 ${available.toLocaleString()} ${goods.unit}`
         : qty < listing.used
           ? `本条已成交 ${listing.used.toLocaleString()} ${goods.unit}，上架数量不可低于该值`
           : "请输入大于 0 的整数"
@@ -1745,7 +1748,12 @@ function EntrustDetail({
   );
 }
 
-export function ProviderGoods() {
+export function ProviderGoods({
+  onTitleChange,
+}: {
+  /** 页内打开上架时同步页面标题 */
+  onTitleChange?: (title: string | null) => void;
+}) {
   const [local, setGoods] = useState<EntrustedGoods[]>(seed);
   const records = useEntrusts();
   const goods = mergeRows(local, records);
@@ -1864,9 +1872,49 @@ export function ProviderGoods() {
     ? groupOrders(goods.filter((g) => orderKey(g) === detailKey))[0]
     : undefined;
 
+  const listItems =
+    dialog?.action === "list" && dialogGoods
+      ? dialogItems.filter((g) => isAccepted(g))
+      : [];
+  const listPage = dialogGoods && listItems.length > 0;
+  const pageTitle = listPage
+    ? listItems.every((g) => g.status === "off")
+      ? "重新上架"
+      : "加价上架"
+    : null;
+  useEffect(() => {
+    onTitleChange?.(pageTitle);
+  }, [pageTitle, onTitleChange]);
+
   return (
     <div className="flex flex-col gap-4">
-      {detailGroup ? (
+      {listPage ? (
+        <ListDialog
+          key={orderKey(dialogGoods)}
+          items={listItems}
+          backLabel={detailGroup ? "返回委托详情" : "返回商品列表"}
+          onClose={() => setDialog(null)}
+          onConfirm={(created) => {
+            const byId = new Map(created.map((c) => [c.id, c.listing]));
+            const qty = created.reduce((s, c) => s + c.listing.quantity, 0);
+            update(
+              created.map((c) => c.id),
+              (g) => {
+                const l = byId.get(g.id);
+                return l
+                  ? {
+                      ...g,
+                      status: "listed",
+                      statusNote: undefined,
+                      listings: [l, ...g.listings],
+                    }
+                  : g;
+              },
+              `已提交上架单 ${created[0].listing.batch}：${dialogGoods.name}（${bizMeta[dialogGoods.type].label} ${created.length} 个规格共 ${qty.toLocaleString()} ${dialogGoods.unit}，待平台审批）`,
+            );
+          }}
+        />
+      ) : detailGroup ? (
         <EntrustDetail
           group={detailGroup}
           onBack={() => setDetailKey(null)}
@@ -2221,32 +2269,6 @@ export function ProviderGoods() {
               `已保存：${dialogGoods.name}（对外价 ¥ ${fmtPrice(patch.price)}）`,
             )
           }
-        />
-      )}
-      {dialog?.action === "list" && dialogGoods && (
-        <ListDialog
-          key={orderKey(dialogGoods)}
-          items={dialogItems.filter((g) => isAccepted(g))}
-          onClose={() => setDialog(null)}
-          onConfirm={(created) => {
-            const byId = new Map(created.map((c) => [c.id, c.listing]));
-            const qty = created.reduce((s, c) => s + c.listing.quantity, 0);
-            update(
-              created.map((c) => c.id),
-              (g) => {
-                const l = byId.get(g.id);
-                return l
-                  ? {
-                      ...g,
-                      status: "listed",
-                      statusNote: undefined,
-                      listings: [l, ...g.listings],
-                    }
-                  : g;
-              },
-              `已提交上架单 ${created[0].listing.batch}：${dialogGoods.name}（${bizMeta[dialogGoods.type].label} ${created.length} 个规格共 ${qty.toLocaleString()} ${dialogGoods.unit}，待平台审批）`,
-            );
-          }}
         />
       )}
       {dialog?.action === "off" && dialogGoods && (
