@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Plus, Search } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { ShopCreate, ShopInfo } from '@/components/shop-info'
+import { ShopInfo } from '@/components/shop-info'
 import { GoodsList } from '@/components/goods-list'
 import { GoodsPublish } from '@/components/goods-publish'
 import { ProviderGoods } from '@/components/provider-goods'
@@ -189,7 +189,7 @@ export function PageCanvas({ path, onNavigate }: Props) {
   const isDashboard = node.id.endsWith('dashboard') || node.id === 'portal'
   const isHub = Boolean(node.children?.length)
   const [subTitle, setSubTitle] = useState<string | null>(null)
-  const title = node.id === 'seller-shop-info' && subTitle ? subTitle : node.label
+  const title = node.id === 'seller-shop' && subTitle ? subTitle : node.label
   const ordersRoute = parseOrdersRoute(node.id)
 
   return (
@@ -199,10 +199,8 @@ export function PageCanvas({ path, onNavigate }: Props) {
         <p className="text-sm text-muted-foreground">{node.description ?? '页面说明待补充'}</p>
       </header>
 
-      {node.id === 'seller-shop-info' ? (
+      {node.id === 'seller-shop' ? (
         <ShopInfo key={node.id} onTitleChange={setSubTitle} />
-      ) : node.id === 'seller-shop-create' ? (
-        <ShopCreate key={node.id} onDone={() => onNavigate('seller-shop-info')} />
       ) : node.id === 'seller-goods-list' ? (
         <GoodsList key={node.id} onCreate={() => onNavigate('seller-goods-publish')} />
       ) : node.id === 'seller-goods-publish' ? (
