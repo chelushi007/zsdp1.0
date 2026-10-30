@@ -53,9 +53,19 @@ export type StatementDraft = {
   periodStart?: string;
   periodEnd?: string;
   lines: StatementLine[];
+  contact: string;
+  phone: string;
+  settleDue: string;
   note: string;
   attachment: string;
 };
+
+const SETTLE_DUE_PRESETS = [
+  "买方确认对账后 7 日内付款",
+  "买方确认对账后 15 日内付款",
+  "买方确认对账后 30 日内付款",
+  "次月 25 日前付款",
+];
 
 const stateTone: Record<StatementState, string> = {
   待确认: "bg-amber-50 text-amber-700 ring-amber-200",
@@ -337,7 +347,7 @@ function CustomRangeEditor({
   );
 }
 
-/** 一次性对账：全量对账总览（商品项数、总数量、货款、运费、对账总额） */
+/** 一次性对账：全量对账总览（商品项��、总数量、货款、运费、对账总额） */
 function OneOffOverview({
   rows,
   goodsTotal,
@@ -516,10 +526,10 @@ function StatementHistory({
     );
   }
   const cols =
-    "56px minmax(150px,1fr) 110px minmax(150px,1.1fr) minmax(170px,1.3fr) 128px 84px minmax(150px,1.2fr)";
+    "56px minmax(150px,1fr) 110px minmax(150px,1.1fr) minmax(170px,1.3fr) minmax(170px,1.2fr) 128px 84px minmax(150px,1.2fr)";
   return (
     <div className="overflow-x-auto rounded border border-border">
-      <div className="min-w-[1040px]">
+      <div className="min-w-[1220px]">
         <div
           className="grid items-center gap-x-3 bg-muted/50 px-4 py-2 text-xs text-muted-foreground"
           style={{ gridTemplateColumns: cols }}
@@ -529,6 +539,7 @@ function StatementHistory({
           <span className="text-right">对账金额</span>
           <span>对账方式</span>
           <span>对账商品</span>
+          <span>对账信息</span>
           <span>创建时间</span>
           <span>状态</span>
           <span>买方反馈</span>
@@ -606,6 +617,26 @@ function StatementHistory({
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}
+              </span>
+              <span className="flex min-w-0 flex-col gap-0.5 text-xs">
+                {s.contact || s.phone ? (
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate">{s.contact || "—"}</span>
+                    {s.phone && (
+                      <span className="shrink-0 tabular-nums text-muted-foreground">
+                        {s.phone}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-muted-foreground">未填写联系人</span>
+                )}
+                <span
+                  className="truncate text-muted-foreground"
+                  title={s.settleDue}
+                >
+                  {s.settleDue ? `结算期限：${s.settleDue}` : "结算期限：—"}
+                </span>
               </span>
               <span className="text-xs tabular-nums text-muted-foreground">
                 {s.createdAt}
@@ -858,8 +889,15 @@ export function SaleReconcilePage({
             ? "结束日期不能晚于今天"
             : undefined
     : undefined;
+  const [contact, setContact] = useState(latest?.contact ?? "");
+  const [phone, setPhone] = useState(latest?.phone ?? "");
+  const [settleDue, setSettleDue] = useState(
+    latest?.settleDue ?? SETTLE_DUE_PRESETS[1],
+  );
   const [note, setNote] = useState("");
   const [attachment, setAttachment] = useState("");
+  const contactOk = contact.trim().length > 0;
+  const phoneOk = /^1\d{2}\s?\d{4}\s?\d{4}$/.test(phone.trim());
 
   const draftLines: StatementLine[] = rows
     .map((r) => ({ code: r.code, quantity: Number(qty[r.code]) || 0 }))
@@ -876,7 +914,10 @@ export function SaleReconcilePage({
     amountNum > 0 &&
     period.trim() &&
     !overflow &&
-    !rangeError;
+    !rangeError &&
+    contactOk &&
+    phoneOk &&
+    settleDue.trim().length > 0;
   const isLastPeriod = rows.every(
     (r) => (Number(qty[r.code]) || 0) >= r.remain,
   );
@@ -904,6 +945,9 @@ export function SaleReconcilePage({
     applyCycle(initialCycle);
     setQty(Object.fromEntries(rows.map((r) => [r.code, String(r.remain)])));
     setFreightIncluded(seq === 1);
+    setContact(latest?.contact ?? "");
+    setPhone(latest?.phone ?? "");
+    setSettleDue(latest?.settleDue ?? SETTLE_DUE_PRESETS[1]);
     setNote("");
     setAttachment("");
   };
@@ -1229,38 +1273,6 @@ export function SaleReconcilePage({
                     </span>
                   </div>
                 </DialogField>
-                <DialogField
-                  label="对账附件"
-                  hint="对账明细表、签收单等，支持 PDF / XLSX / 图片"
-                >
-                  {attachment ? (
-                    <div className="flex h-9 items-center justify-between rounded border border-border bg-background px-3 text-sm">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <Paperclip className="size-4 shrink-0 text-muted-foreground" />
-                        <span className="truncate">{attachment}</span>
-                      </span>
-                      <button
-                        type="button"
-                        className="text-xs text-muted-foreground hover:text-foreground"
-                        onClick={() => setAttachment("")}
-                      >
-                        移除
-                      </button>
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => setAttachment(`${no}-对账明细.xlsx`)}
-                      className={cn(
-                        INPUT_CLS,
-                        "flex items-center justify-center gap-2 border-dashed text-muted-foreground hover:border-[#1890ff] hover:text-[#1890ff]",
-                      )}
-                    >
-                      <Upload className="size-4" />
-                      上传附件
-                    </button>
-                  )}
-                </DialogField>
                 <DialogField label="订单金额">
                   <div className="flex h-9 items-center justify-between rounded border border-border bg-muted/40 px-3 text-sm tabular-nums">
                     <span className="text-xs text-muted-foreground">
@@ -1269,7 +1281,110 @@ export function SaleReconcilePage({
                     <span>{fmtMoney(orderAmount)}</span>
                   </div>
                 </DialogField>
-                <div className="sm:col-span-2">
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-border pt-4">
+                <div className="flex items-baseline justify-between">
+                  <span className="text-sm font-medium">对账信息</span>
+                  <span className="text-xs text-muted-foreground">
+                    随对账单一并发送给买方，便于买方核对与安排付款
+                  </span>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <DialogField label="联系人" required>
+                    <input
+                      aria-label="对账联系人"
+                      value={contact}
+                      onChange={(e) => setContact(e.target.value)}
+                      placeholder="负责本单对账的联系人姓名"
+                      className={INPUT_CLS}
+                    />
+                  </DialogField>
+                  <DialogField
+                    label="联系电话"
+                    required
+                    hint={
+                      phone && !phoneOk ? "请输入 11 位手机号" : undefined
+                    }
+                  >
+                    <input
+                      aria-label="对账联系电话"
+                      value={phone}
+                      inputMode="tel"
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="请输入手机号"
+                      className={cn(
+                        INPUT_CLS,
+                        phone && !phoneOk && "border-red-400",
+                      )}
+                    />
+                  </DialogField>
+                  <div className="sm:col-span-2">
+                    <DialogField
+                      label="结算期限"
+                      required
+                      hint="买方确认对账后的付款期限，可选择常用期限或自行填写"
+                    >
+                      <div className="flex flex-col gap-2">
+                        <div className="flex flex-wrap gap-1.5">
+                          {SETTLE_DUE_PRESETS.map((p) => (
+                            <button
+                              key={p}
+                              type="button"
+                              onClick={() => setSettleDue(p)}
+                              className={cn(
+                                "rounded border px-2 py-1 text-xs transition-colors",
+                                settleDue === p
+                                  ? "border-[#1890ff] bg-[#1890ff]/10 text-[#1890ff]"
+                                  : "border-border text-muted-foreground hover:border-[#1890ff] hover:text-[#1890ff]",
+                              )}
+                            >
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                        <input
+                          aria-label="结算期限"
+                          value={settleDue}
+                          onChange={(e) => setSettleDue(e.target.value)}
+                          placeholder="例如：买方确认对账后 15 日内付款"
+                          className={INPUT_CLS}
+                        />
+                      </div>
+                    </DialogField>
+                  </div>
+                  <DialogField
+                    label="对账附件"
+                    hint="对账明细表、签收单等，支持 PDF / XLSX / 图片"
+                  >
+                    {attachment ? (
+                      <div className="flex h-9 items-center justify-between rounded border border-border bg-background px-3 text-sm">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <Paperclip className="size-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate">{attachment}</span>
+                        </span>
+                        <button
+                          type="button"
+                          className="text-xs text-muted-foreground hover:text-foreground"
+                          onClick={() => setAttachment("")}
+                        >
+                          移除
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAttachment(`${no}-对账明细.xlsx`)}
+                        className={cn(
+                          INPUT_CLS,
+                          "flex items-center justify-center gap-2 border-dashed text-muted-foreground hover:border-[#1890ff] hover:text-[#1890ff]",
+                        )}
+                      >
+                        <Upload className="size-4" />
+                        上传附件
+                      </button>
+                    )}
+                  </DialogField>
                   <DialogField label="对账说明">
                     <textarea
                       aria-label="对账说明"
@@ -1320,6 +1435,9 @@ export function SaleReconcilePage({
                         periodStart: oneOff ? undefined : range.start,
                         periodEnd: oneOff ? undefined : range.end,
                         lines: draftLines,
+                        contact: contact.trim(),
+                        phone: phone.trim(),
+                        settleDue: settleDue.trim(),
                         note: note.trim(),
                         attachment,
                       });

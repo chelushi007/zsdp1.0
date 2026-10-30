@@ -90,6 +90,10 @@ export type Statement = {
   periodEnd?: string;
   /** 本期各商品对账数量 */
   lines?: StatementLine[];
+  /** 对账信息：商家侧对账联系人 / 电话 / 结算期限 */
+  contact?: string;
+  phone?: string;
+  settleDue?: string;
   note?: string;
   attachment?: string;
   state: StatementState;
@@ -160,6 +164,31 @@ export type SaleStatus =
 export type PayMethod = "对公转账" | "在线支付" | "账期结算";
 export type InvoiceState = "已开票" | "待开票" | "不开票";
 
+/** 一笔支付记录 */
+export type Payment = {
+  no: string;
+  amount: number;
+  method: PayMethod;
+  /** 支付 / 到账时间 */
+  at: string;
+  /** 流水号 / 凭证号 */
+  ref?: string;
+  /** 对应对账单号 */
+  statementNo?: string;
+  state: "待确认" | "已到账";
+};
+
+export type BargainAction = "出价" | "还价" | "接受" | "拒绝";
+/** 议价过程中的一次报价或处理 */
+export type Bargain = {
+  at: string;
+  by: Actor;
+  action: BargainAction;
+  /** 本次报价单价；接受 / 拒绝时为成交价或被拒价格 */
+  price: number;
+  note?: string;
+};
+
 export type SaleOrder = OrderBase & {
   kind: "sale";
   status: SaleStatus;
@@ -186,6 +215,10 @@ export type SaleOrder = OrderBase & {
   payMethod: PayMethod;
   invoice: InvoiceState;
   invoiceNo?: string;
+  /** 支付记录（按时间升序） */
+  payments?: Payment[];
+  /** 议价记录（按时间升序） */
+  bargains?: Bargain[];
   /** 商家已结束订单（归档） */
   closed?: boolean;
 };
@@ -514,7 +547,7 @@ const ADDR = {
   shanghai: "上海市浦东新区临港新片区 两港大道 1588 号 项目部",
   suzhou: "江苏省苏州市工业园区 星湖街 328 号 施工现场",
   hangzhou: "浙江省杭州市萧山区 机场高速 K12 项目部",
-  nanjing: "江苏省南京市江北新区 浦珠北路 商业综合体工地",
+  nanjing: "江苏省南京市江��新区 浦珠北路 商业综合体工地",
 };
 
 /* ---------- 租赁订单 ---------- */
@@ -839,13 +872,38 @@ export const saleOrdersData: SaleOrder[] = [
     payMethod: "对公转账",
     invoice: "待开票",
     createdAt: "2024-10-28 10:12",
-    updatedAt: "2024-10-28 10:12",
+    updatedAt: "2024-10-28 15:40",
+    bargains: [
+      {
+        at: "2024-10-28 10:12",
+        by: "买/租方",
+        action: "出价",
+        price: 165,
+        note: "批量采购 600 块，希望按 ¥165/块 成交",
+      },
+      {
+        at: "2024-10-28 11:30",
+        by: "商家",
+        action: "还价",
+        price: 180,
+        note: "近期铝材上涨，最低 ¥180/块，含标准配件",
+      },
+      {
+        at: "2024-10-28 15:40",
+        by: "买/租方",
+        action: "出价",
+        price: 172,
+        note: "¥172/块 可接受，运费按原报价",
+      },
+    ],
     timeline: [
       {
         at: "2024-10-28 10:12",
-        label: "买方提交订单并出价 ¥172/块",
+        label: "买方提交订单并出价 ¥165/块",
         by: "买/租方",
       },
+      { at: "2024-10-28 11:30", label: "商家还价 ¥180/块", by: "商家" },
+      { at: "2024-10-28 15:40", label: "买方再次出价 ¥172/块", by: "买/租方" },
     ],
   },
   {
@@ -904,6 +962,16 @@ export const saleOrdersData: SaleOrder[] = [
     contractNo: "MM-2024-1025-02",
     createdAt: "2024-10-25 16:10",
     updatedAt: "2024-10-25 16:15",
+    payments: [
+      {
+        no: "PAY2024102502",
+        amount: 82000,
+        method: "在线支付",
+        at: "2024-10-25 16:15",
+        ref: "2024102516150823457",
+        state: "已到账",
+      },
+    ],
     timeline: [
       { at: "2024-10-25 16:10", label: "买方提交订单", by: "买/租方" },
       { at: "2024-10-25 16:15", label: "在线支付成功", by: "买/租方" },
@@ -933,6 +1001,17 @@ export const saleOrdersData: SaleOrder[] = [
     contractNo: "MM-2024-0920-06",
     createdAt: "2024-09-20 09:00",
     updatedAt: "2024-09-26 11:30",
+    payments: [
+      {
+        no: "PAY2024092501",
+        amount: 74200,
+        method: "对公转账",
+        at: "2024-09-25 14:20",
+        ref: "CMB20240925001873",
+        statementNo: "DZ2024092003-01",
+        state: "已到账",
+      },
+    ],
     timeline: [
       { at: "2024-09-20 09:00", label: "买方提交订单", by: "买/租方" },
       {
@@ -942,6 +1021,7 @@ export const saleOrdersData: SaleOrder[] = [
       },
       { at: "2024-09-21 15:30", label: "商家发货", by: "商家" },
       { at: "2024-09-24 10:00", label: "买方确认收货", by: "买/租方" },
+      { at: "2024-09-25 14:20", label: "买方对公转账付款", by: "买/租方" },
       { at: "2024-09-26 11:30", label: "商家开具发票", by: "商家" },
     ],
   },
@@ -1054,6 +1134,9 @@ export const saleOrdersData: SaleOrder[] = [
           { code: G.support.code, quantity: 10 },
           { code: G.scaffold.code, quantity: 1000 },
         ],
+        contact: "王敏",
+        phone: "138 0011 2233",
+        settleDue: "买方确认对账后 15 日内付款",
         note: "8 月到货部分，按合同单价结算",
         state: "已确认",
         createdAt: "2024-09-02 10:00",
@@ -1073,6 +1156,9 @@ export const saleOrdersData: SaleOrder[] = [
           { code: G.support.code, quantity: 15 },
           { code: G.scaffold.code, quantity: 1000 },
         ],
+        contact: "王敏",
+        phone: "138 0011 2233",
+        settleDue: "买方确认对账后 15 日内付款",
         note: "9 月到货部分",
         state: "已确认",
         createdAt: "2024-10-08 09:30",
@@ -1176,6 +1262,9 @@ export const saleOrdersData: SaleOrder[] = [
           { code: G.hBeam.code, quantity: 110 },
           { code: G.box.code, quantity: 8 },
         ],
+        contact: "王敏",
+        phone: "138 0011 2233",
+        settleDue: "买方确认对账后 15 日内付款",
         note: "二季度到货部分，含首批运费",
         state: "已确认",
         createdAt: "2024-07-03 09:20",
@@ -1194,6 +1283,9 @@ export const saleOrdersData: SaleOrder[] = [
           { code: G.hBeam.code, quantity: 120 },
           { code: G.box.code, quantity: 8 },
         ],
+        contact: "王敏",
+        phone: "138 0011 2233",
+        settleDue: "买方确认对账后 15 日内付款",
         note: "三季度到货部分",
         state: "已确认",
         createdAt: "2024-10-08 10:00",
@@ -1270,6 +1362,9 @@ export const saleOrdersData: SaleOrder[] = [
           { code: G.fence.code, quantity: 120 },
           { code: G.formwork.code, quantity: 250 },
         ],
+        contact: "王敏",
+        phone: "138 0011 2233",
+        settleDue: "买方确认对账后 15 日内付款",
         note: "一期主体施工到货，按进场签收单对账",
         state: "已确认",
         createdAt: "2024-08-16 09:00",
@@ -1289,6 +1384,9 @@ export const saleOrdersData: SaleOrder[] = [
           { code: G.fence.code, quantity: 100 },
           { code: G.formwork.code, quantity: 300 },
         ],
+        contact: "王敏",
+        phone: "138 0011 2233",
+        settleDue: "买方确认对账后 15 日内付款",
         note: "二期进场部分，围挡以现场验收数量为准",
         state: "已确认",
         createdAt: "2024-10-08 14:00",

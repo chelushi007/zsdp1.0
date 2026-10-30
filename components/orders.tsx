@@ -64,7 +64,9 @@ import {
   settleAmount,
   type AfterOrder,
   type AfterStatus,
+  type Bargain,
   type OrderRole,
+  type Payment,
   type RentOrder,
   type RentStatus,
   type SaleOrder,
@@ -170,6 +172,36 @@ function SettleCell({ o }: { o: RentOrder | SaleOrder }) {
       </span>
     </span>
   );
+}
+
+/** 销售订单追加一条支付记录；租赁订单不记录 */
+function addPayment(
+  x: RentOrder | SaleOrder,
+  p: Omit<Payment, "at" | "no" | "method" | "statementNo">,
+): { payments?: Payment[] } {
+  if (x.kind !== "sale") return {};
+  const seq = (x.payments?.length ?? 0) + 1;
+  const latest = x.statements?.[x.statements.length - 1];
+  return {
+    payments: [
+      ...(x.payments ?? []),
+      {
+        ...p,
+        no: `PAY${x.id.slice(2)}-${String(seq).padStart(2, "0")}`,
+        method: x.payMethod,
+        statementNo: latest?.no,
+        at: nowStamp(),
+      },
+    ],
+  };
+}
+
+/** 销售订单追加一条议价记录 */
+function addBargain(
+  x: SaleOrder,
+  b: Omit<Bargain, "at">,
+): { bargains: Bargain[] } {
+  return { bargains: [...(x.bargains ?? []), { ...b, at: nowStamp() }] };
 }
 
 /** 对账与付款环节：先款后货在下单后、货到付款在交付后进入；买/租方可对账后付款，也可跳过对账直接付款 */
@@ -303,7 +335,17 @@ function settleActions<T extends RentOrder | SaleOrder>(
         confirmLabel: `确认支付 ${fmtMoney(o.statementAmount ?? amount)}`,
         apply: (x) =>
           withEvent(
-            { ...x, status: afterPaid(x) },
+            {
+              ...x,
+              status: afterPaid(x),
+              ...addPayment(x, {
+                amount: x.statementAmount ?? amount,
+                state:
+                  x.kind === "sale" && x.payMethod === "在线支付"
+                    ? "已到账"
+                    : "待确认",
+              }),
+            },
             `${payLabel} ${fmtMoney(x.statementAmount ?? amount)}`,
             by,
           ),
@@ -328,7 +370,15 @@ function settleActions<T extends RentOrder | SaleOrder>(
         ],
         apply: (x, v) =>
           withEvent(
-            { ...x, status: afterPaid(x) },
+            {
+              ...x,
+              status: afterPaid(x),
+              ...addPayment(x, {
+                amount: Number(v.amount) || amount,
+                ref: v.ref || undefined,
+                state: "已到账",
+              }),
+            },
             `商家确认收款 ${fmtMoney(Number(v.amount) || amount)}`,
             by,
             v.ref,
@@ -539,7 +589,7 @@ function rentActions(o: RentOrder, role: OrderRole): ActionDef<RentOrder>[] {
               ? d > 0
                 ? `验收完成，扣除损耗 ${fmtMoney(d)} 后退还押金`
                 : "验收完成，全额退还押金"
-              : `验收完成，应结租金 ${fmtMoney(settleAmount(next))}`;
+              : `验收完成，应��租金 ${fmtMoney(settleAmount(next))}`;
           return withEvent(next, label, by, v.note);
         },
         toast: (x) =>
@@ -1083,15 +1133,30 @@ function saleActions(o: SaleOrder, role: OrderRole): ActionDef<SaleOrder>[] {
         confirmTone: (v) => (v.decision === "reject" ? "danger" : "primary"),
         apply: (x, v) => {
           const price = x.bidPrice ?? x.unitPrice;
-          if (v.decision === "counter")
+          if (v.decision === "counter") {
+            const counter = Number(v.price) || x.unitPrice;
             return withEvent(
-              { ...x, unitPrice: Number(v.price) || x.unitPrice },
+              {
+                ...x,
+                unitPrice: counter,
+                ...addBargain(x, { by, action: "还价", price: counter }),
+              },
               `${by}还价 ¥${v.price}/${x.goods.unit}`,
               by,
             );
+          }
           if (v.decision === "reject")
             return withEvent(
-              { ...x, status: "cancelled" },
+              {
+                ...x,
+                status: "cancelled",
+                ...addBargain(x, {
+                  by,
+                  action: "拒绝",
+                  price,
+                  note: v.reason,
+                }),
+              },
               `${by}拒绝议价`,
               by,
               v.reason,
@@ -1102,6 +1167,7 @@ function saleActions(o: SaleOrder, role: OrderRole): ActionDef<SaleOrder>[] {
               status: afterNegotiated(x),
               unitPrice: price,
               reconcile: x.payTerm === "先款后货" ? "待对账" : x.reconcile,
+              ...addBargain(x, { by, action: "接受", price }),
             },
             `${by}接受出价，按 ¥${price}/${x.goods.unit} 成交`,
             by,
@@ -1637,6 +1703,9 @@ function SaleOrders({ role }: { role: OrderRole }) {
               periodStart: d.periodStart,
               periodEnd: d.periodEnd,
               lines: d.lines,
+              contact: d.contact || undefined,
+              phone: d.phone || undefined,
+              settleDue: d.settleDue || undefined,
               note: d.note || undefined,
               attachment: d.attachment || undefined,
               state: "待确认",

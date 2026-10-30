@@ -16,16 +16,18 @@ import {
   saleAmount,
   taxLabel,
   taxRatesOf,
+  type Bargain,
   type OrderRole,
   type SaleOrder,
 } from "@/lib/orders-data";
 
 const TABS = [
   "订单商品",
+  "议价记录",
   "订单合同",
   "对账单",
   "发货单",
-  "发票",
+  "支付/发票",
   "业务日记",
 ] as const;
 type Tab = (typeof TABS)[number];
@@ -375,6 +377,22 @@ function StatementTab({ o }: { o: SaleOrder }) {
                 : []),
               ["创建时间", s.createdAt],
               [s.state === "有异议" ? "异议时间" : "确认时间", s.repliedAt ?? "—"],
+              [
+                "对账联系人",
+                s.contact ? (
+                  <span key="c">
+                    {s.contact}
+                    {s.phone && (
+                      <span className="ml-2 tabular-nums text-muted-foreground">
+                        {s.phone}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  "—"
+                ),
+              ],
+              ["结算期限", s.settleDue ?? "—"],
               ...(s.note ? ([["对账说明", s.note]] as Row[]) : []),
               ...(s.reply
                 ? ([
@@ -450,43 +468,336 @@ function ShipmentTab({ o }: { o: SaleOrder }) {
   );
 }
 
-function InvoiceTab({ o }: { o: SaleOrder }) {
-  if (o.invoice === "不开票") return <Empty text="买方选择不开票" />;
-  if (o.invoice === "待开票")
-    return (
-      <Empty
-        text={o.status === "done" ? "订单已完成，待商家开票" : "订单完成后可开票"}
-      />
-    );
+/** 订单是否已完成付款（按状态推断，兼容无支付记录的历史订单） */
+function isPaid(o: SaleOrder) {
+  return !["negotiating", "toReconcile", "unpaid", "cancelled"].includes(
+    o.status,
+  );
+}
+
+function SectionTitle({
+  title,
+  extra,
+}: {
+  title: string;
+  extra?: React.ReactNode;
+}) {
   return (
-    <DocCard
-      title="增值税发票"
-      no={o.invoiceNo ?? `FP${o.id.slice(2)}`}
-      state="已开票"
-      stateTone="good"
-    >
+    <div className="flex items-baseline justify-between">
+      <span className="text-sm font-medium">{title}</span>
+      {extra && <span className="text-xs text-muted-foreground">{extra}</span>}
+    </div>
+  );
+}
+
+function PaymentSection({ o }: { o: SaleOrder }) {
+  const payments = o.payments ?? [];
+  const paid = isPaid(o);
+  const receivable = o.statementAmount ?? saleAmount(o);
+  const received = payments
+    .filter((p) => p.state === "已到账")
+    .reduce((s, p) => s + p.amount, 0);
+  const paidAt = stampOf(o, "支付") ?? stampOf(o, "付款") ?? stampOf(o, "收款");
+
+  return (
+    <div className="flex flex-col gap-3">
+      <SectionTitle
+        title="支付信息"
+        extra={
+          paid ? (
+            <span className="text-emerald-700">已收款</span>
+          ) : o.status === "unpaid" ? (
+            <span className="text-amber-700">待付款</span>
+          ) : (
+            "未到付款环节"
+          )
+        }
+      />
       <InfoGrid
         cols={2}
         rows={[
-          ["开票时间", stampOf(o, "发票") ?? "—"],
+          ["支付方式", o.payMethod],
+          ["履约方式", o.payTerm],
           [
-            "开票金额",
-            <span key="amt" className="font-medium">
-              {fmtMoney(o.statementAmount ?? saleAmount(o))}
+            "应付金额",
+            <span key="recv" className="font-medium">
+              {fmtMoney(receivable)}
             </span>,
           ],
-          ["税率", taxRatesOf(o).map(taxLabel).join(" / ")],
-          ["税额", goodsTax(o) > 0 ? fmtMoney(goodsTax(o)) : "—"],
-          ["发票抬头", o.buyer],
-          ["销售方", o.seller],
+          [
+            "已收金额",
+            <span
+              key="paid"
+              className={cn(
+                "font-medium",
+                paid ? "text-emerald-700" : "text-amber-700",
+              )}
+            >
+              {fmtMoney(payments.length ? received : paid ? receivable : 0)}
+            </span>,
+          ],
+          ["付款时间", paidAt ?? payments[payments.length - 1]?.at ?? "—"],
+          ["付款方", o.buyer],
         ]}
       />
-      <div>
-        <Button variant="outline" size="sm">
-          下载电子发票
-        </Button>
+      {payments.length > 0 ? (
+        <div className="overflow-x-auto rounded border border-border">
+          <div className="min-w-[640px]">
+            <div className="grid grid-cols-[minmax(140px,1fr)_110px_100px_minmax(160px,1.2fr)_minmax(130px,1fr)_80px] items-center gap-x-3 bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+              <span>支付单号</span>
+              <span className="text-right">金额</span>
+              <span>支付方式</span>
+              <span>流水 / 凭证号</span>
+              <span>支付时间</span>
+              <span>状态</span>
+            </div>
+            <ul className="divide-y divide-border">
+              {[...payments].reverse().map((p) => (
+                <li
+                  key={p.no}
+                  className="grid grid-cols-[minmax(140px,1fr)_110px_100px_minmax(160px,1.2fr)_minmax(130px,1fr)_80px] items-center gap-x-3 px-3 py-2.5 text-sm"
+                >
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate font-mono text-xs">{p.no}</span>
+                    {p.statementNo && (
+                      <span className="truncate text-[11px] text-muted-foreground">
+                        对账单 {p.statementNo}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-right font-medium tabular-nums">
+                    {fmtMoney(p.amount)}
+                  </span>
+                  <span className="text-xs">{p.method}</span>
+                  <span className="truncate font-mono text-xs text-muted-foreground">
+                    {p.ref ?? "—"}
+                  </span>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {p.at}
+                  </span>
+                  <span>
+                    <Tag
+                      className={
+                        p.state === "已到账"
+                          ? "bg-emerald-50 text-emerald-700 ring-emerald-200"
+                          : "bg-amber-50 text-amber-700 ring-amber-200"
+                      }
+                    >
+                      {p.state}
+                    </Tag>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : (
+        <p className="rounded border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+          {paid
+            ? "该订单付款发生在支付记录功能上线前，未留存流水明细。"
+            : "买方付款或商家确认收款后，支付流水将显示在这里。"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function InvoiceSection({ o }: { o: SaleOrder }) {
+  const issued = o.invoice === "已开票";
+  return (
+    <div className="flex flex-col gap-3">
+      <SectionTitle
+        title="发票信息"
+        extra={
+          o.invoice === "不开票"
+            ? "买方选择不开票"
+            : issued
+              ? <span className="text-emerald-700">已开票</span>
+              : <span className="text-amber-700">待开票</span>
+        }
+      />
+      {o.invoice === "不开票" ? (
+        <Empty text="买方选择不开票" />
+      ) : !issued ? (
+        <Empty
+          text={
+            o.status === "done" ? "订单已完成，待商家开票" : "订单完成后可开票"
+          }
+        />
+      ) : (
+        <DocCard
+          title="增值税发票"
+          no={o.invoiceNo ?? `FP${o.id.slice(2)}`}
+          state="已开票"
+          stateTone="good"
+        >
+          <InfoGrid
+            cols={2}
+            rows={[
+              ["开票时间", stampOf(o, "发票") ?? "—"],
+              [
+                "开票金额",
+                <span key="amt" className="font-medium">
+                  {fmtMoney(o.statementAmount ?? saleAmount(o))}
+                </span>,
+              ],
+              ["税率", taxRatesOf(o).map(taxLabel).join(" / ")],
+              ["税额", goodsTax(o) > 0 ? fmtMoney(goodsTax(o)) : "—"],
+              ["发票抬头", o.buyer],
+              ["销售方", o.seller],
+            ]}
+          />
+          <div>
+            <Button variant="outline" size="sm">
+              下载电子发票
+            </Button>
+          </div>
+        </DocCard>
+      )}
+    </div>
+  );
+}
+
+function PaymentInvoiceTab({ o }: { o: SaleOrder }) {
+  return (
+    <div className="flex flex-col gap-6">
+      <PaymentSection o={o} />
+      <div className="border-t border-border" />
+      <InvoiceSection o={o} />
+    </div>
+  );
+}
+
+/* ---------- 议价记录 ---------- */
+
+const bargainTone: Record<Bargain["action"], string> = {
+  出价: "bg-violet-50 text-violet-700 ring-violet-200",
+  还价: "bg-sky-50 text-sky-700 ring-sky-200",
+  接受: "bg-emerald-50 text-emerald-700 ring-emerald-200",
+  拒绝: "bg-red-50 text-red-700 ring-red-200",
+};
+
+function BargainTab({ o }: { o: SaleOrder }) {
+  const list = o.bargains ?? [];
+  const unit = o.goods.unit;
+  const listPrice = o.lines?.[0]?.unitPrice ?? o.unitPrice;
+  if (list.length === 0)
+    return (
+      <Empty
+        text={
+          o.status === "negotiating"
+            ? "买方尚未出价"
+            : "该订单按挂牌价成交，无议价记录"
+        }
+      />
+    );
+  const latest = list[list.length - 1];
+  const settled = list.find((b) => b.action === "接受");
+  const rejected = list.find((b) => b.action === "拒绝");
+  const rounds = list.filter((b) => b.action === "出价" || b.action === "还价")
+    .length;
+
+  return (
+    <div className="flex flex-col gap-4">
+      <InfoGrid
+        cols={2}
+        rows={[
+          ["挂牌单价", unitPrice(listPrice, unit)],
+          [
+            settled ? "成交单价" : rejected ? "被拒单价" : "买方最新出价",
+            <span
+              key="p"
+              className={cn(
+                "font-medium",
+                settled
+                  ? "text-emerald-700"
+                  : rejected
+                    ? "text-red-700"
+                    : "text-violet-700",
+              )}
+            >
+              {unitPrice(
+                settled?.price ?? rejected?.price ?? o.bidPrice ?? latest.price,
+                unit,
+              )}
+            </span>,
+          ],
+          ["议价轮次", `${rounds} 轮`],
+          [
+            "议价状态",
+            settled
+              ? `已成交 · ${settled.at}`
+              : rejected
+                ? `已拒绝 · ${rejected.at}`
+                : latest.by === "买/租方"
+                  ? "待商家处理"
+                  : "待买方回应",
+          ],
+        ]}
+      />
+      <div className="flex flex-col gap-2">
+        <SectionTitle title="议价过程" extra={`共 ${list.length} 条记录`} />
+        <ol className="flex flex-col">
+          {list.map((b, i) => {
+            const prev = list[i - 1];
+            const diff = prev ? b.price - prev.price : 0;
+            return (
+              <li
+                key={`${b.at}-${i}`}
+                className="relative flex gap-3 pb-4 last:pb-0"
+              >
+                <span className="flex flex-col items-center">
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "mt-1.5 size-2 shrink-0 rounded-full",
+                      b.action === "接受"
+                        ? "bg-emerald-500"
+                        : b.action === "拒绝"
+                          ? "bg-red-500"
+                          : b.by === "买/租方"
+                            ? "bg-violet-500"
+                            : "bg-sky-500",
+                    )}
+                  />
+                  {i < list.length - 1 && (
+                    <span aria-hidden className="mt-1 w-px flex-1 bg-border" />
+                  )}
+                </span>
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-medium">{b.by}</span>
+                    <Tag className={bargainTone[b.action]}>{b.action}</Tag>
+                    <span className="tabular-nums">{unitPrice(b.price, unit)}</span>
+                    {prev && diff !== 0 && (
+                      <span
+                        className={cn(
+                          "text-xs tabular-nums",
+                          diff > 0 ? "text-red-600" : "text-emerald-700",
+                        )}
+                      >
+                        {diff > 0 ? "+" : ""}
+                        {diff.toLocaleString("zh-CN", {
+                          maximumFractionDigits: 2,
+                        })}
+                      </span>
+                    )}
+                    <span className="ml-auto text-xs tabular-nums text-muted-foreground">
+                      {b.at}
+                    </span>
+                  </div>
+                  {b.note && (
+                    <p className="text-xs leading-relaxed text-muted-foreground">
+                      {b.note}
+                    </p>
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ol>
       </div>
-    </DocCard>
+    </div>
   );
 }
 
@@ -522,6 +833,15 @@ function ProgressCard({ o }: { o: SaleOrder }) {
           : "已签收"
         : "未发货",
       done: Boolean(shipNo) && o.status !== "shipped",
+    },
+    {
+      label: "支付",
+      value: isPaid(o)
+        ? `已收款 · ${o.payMethod}`
+        : o.status === "unpaid"
+          ? "待付款"
+          : "未开始",
+      done: isPaid(o),
     },
     {
       label: "发票",
@@ -566,10 +886,11 @@ export function SaleDetailPage({
   const [tab, setTab] = useState<Tab>("订单商品");
   const ready: Record<Tab, boolean> = {
     订单商品: true,
+    议价记录: Boolean(o.bargains?.length),
     订单合同: Boolean(o.contractNo),
     对账单: Boolean(o.statements?.length || o.statementAmount || o.reconcile),
     发货单: Boolean(o.logistics || o.pickupNo),
-    发票: o.invoice === "已开票",
+    "支付/发票": Boolean(o.payments?.length) || o.invoice === "已开票",
     业务日记: true,
   };
 
@@ -619,10 +940,11 @@ export function SaleDetailPage({
           </div>
           <div role="tabpanel" className="min-h-[320px] p-5">
             {tab === "订单商品" && <GoodsTab o={o} role={role} />}
+            {tab === "议价记录" && <BargainTab o={o} />}
             {tab === "订单合同" && <ContractTab o={o} />}
             {tab === "对账单" && <StatementTab o={o} />}
             {tab === "发货单" && <ShipmentTab o={o} />}
-            {tab === "发票" && <InvoiceTab o={o} />}
+            {tab === "支付/发票" && <PaymentInvoiceTab o={o} />}
             {tab === "业务日记" && <Timeline items={o.timeline} />}
           </div>
         </section>
