@@ -1438,10 +1438,12 @@ function EntrustDialog({
     ),
   );
 
-  const toggleType = (t: BizType) =>
-    setTypes((list) =>
-      list.includes(t) ? list.filter((x) => x !== t) : [...list, t],
-    );
+  const toggleType = (t: BizType) => setTypes([t]);
+  const originalPriceOf = (g: Goods, t: BizType) => {
+    const l = defaultPrice(g, t);
+    if (!l) return null;
+    return t === "rent" && l.period === "月" ? round2(l.price / 30) : l.price;
+  };
   const setLine = (code: string, patch: Partial<EntrustDraftLine>) =>
     setLines((m) => ({ ...m, [code]: { ...m[code], ...patch } }));
 
@@ -1509,7 +1511,7 @@ function EntrustDialog({
     );
   };
 
-  const cols = `24px minmax(130px,1fr) 80px 120px${types.includes("sale") ? " 120px" : ""}${types.includes("rent") ? " 130px 110px" : ""}`;
+  const cols = `24px minmax(130px,1fr) 80px 120px${types.includes("sale") ? " 100px 120px" : ""}${types.includes("rent") ? " 100px 130px 110px" : ""}`;
 
   return (
     <Modal
@@ -1560,10 +1562,10 @@ function EntrustDialog({
         <DialogField
           label="委托方式"
           required
-          hint="可同时勾选；服务商受理后按委托价加价上架，差价为服务商收益"
+          hint="每张委托单对应一种租售方式；服务商受理后按委托价加价上架，差价为服务商收益"
         >
           <div
-            role="group"
+            role="radiogroup"
             aria-label="委托方式"
             className="grid grid-cols-2 gap-2"
           >
@@ -1573,7 +1575,7 @@ function EntrustDialog({
                 <button
                   key={t}
                   type="button"
-                  role="checkbox"
+                  role="radio"
                   aria-checked={active}
                   onClick={() => toggleType(t)}
                   className={cn(
@@ -1623,9 +1625,15 @@ function EntrustDialog({
             <span>规格型号</span>
             <span>可委托</span>
             <span>委托数量</span>
-            {types.includes("sale") && <span>出售委托价</span>}
+            {types.includes("sale") && (
+              <>
+                <span>原价</span>
+                <span>出售委托价</span>
+              </>
+            )}
             {types.includes("rent") && (
               <>
+                <span>原价</span>
                 <span>出租委托价</span>
                 <span>押金</span>
               </>
@@ -1669,20 +1677,30 @@ function EntrustDialog({
                 disabled={!d.on}
               />
               {types.includes("sale") && (
-                <DialogInput
-                  label={`${g.spec} 出售委托价`}
-                  disabled={!d.on}
-                  type="number"
-                  value={d.salePrice}
-                  onChange={(v) => setLine(g.code, { salePrice: v })}
-                  placeholder="0.00"
-                  prefix="¥"
-                  suffix={`/ ${g.unit}`}
-                  invalid={included && !saleOk}
-                />
+                <>
+                  <OriginalPrice
+                    value={originalPriceOf(g, "sale")}
+                    suffix={`/ ${g.unit}`}
+                  />
+                  <DialogInput
+                    label={`${g.spec} 出售委托价`}
+                    disabled={!d.on}
+                    type="number"
+                    value={d.salePrice}
+                    onChange={(v) => setLine(g.code, { salePrice: v })}
+                    placeholder="0.00"
+                    prefix="¥"
+                    suffix={`/ ${g.unit}`}
+                    invalid={included && !saleOk}
+                  />
+                </>
               )}
               {types.includes("rent") && (
                 <>
+                  <OriginalPrice
+                    value={originalPriceOf(g, "rent")}
+                    suffix={`/ ${g.unit} / 天`}
+                  />
                   <DialogInput
                     label={`${g.spec} 出租委托价`}
                     disabled={!d.on}
@@ -1711,6 +1729,25 @@ function EntrustDialog({
         </div>
       </DialogField>
     </Modal>
+  );
+}
+
+/** 委托明细中的原价（该规格当前发布价，只读） */
+function OriginalPrice({
+  value,
+  suffix,
+}: {
+  value: number | null;
+  suffix: string;
+}) {
+  if (value === null) {
+    return <span className="text-xs text-muted-foreground">未发布</span>;
+  }
+  return (
+    <span className="flex min-w-0 flex-col leading-4 tabular-nums">
+      <span>¥ {value.toLocaleString()}</span>
+      <span className="truncate text-[11px] text-muted-foreground">{suffix}</span>
+    </span>
   );
 }
 
@@ -3311,7 +3348,7 @@ function ListingDetail({
   );
 }
 
-/** 商品详情页：与发布表单对应——基本信息与图片、商品明细、区域禁售、运费、商品详情，以及上架 / 委托记录；编辑、上架、委托均在此以整个商品为单位操作 */
+/** 商��详情页：与发布表单对应——基本信息与图片、商品明细、区域禁售、运费、商品详情，以及上架 / 委托记录；编辑、上架、委托均在此以整个商品为单位操作 */
 function GoodsDetail({
   group,
   entrusts,
