@@ -194,7 +194,7 @@ function GoodsManage({ onTitleChange }: { onTitleChange: (title: string | null) 
   if (view === 'publish') {
     return <GoodsPublish onBack={() => go('list')} onSubmitted={() => go('list')} />
   }
-  return <GoodsList onCreate={() => go('publish')} />
+  return <GoodsList onCreate={() => go('publish')} onTitleChange={onTitleChange} />
 }
 
 export function PageCanvas({ path, onNavigate }: Props) {

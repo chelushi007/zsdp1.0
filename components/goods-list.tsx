@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useId, useRef, useState } from "react";
+import { Fragment, useEffect, useId, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -1032,6 +1032,8 @@ export function Modal({
   children,
   footer,
   onClose,
+  mode = "dialog",
+  backLabel = "返回商品列表",
 }: {
   title: string;
   titleId: string;
@@ -1039,7 +1041,37 @@ export function Modal({
   children: React.ReactNode;
   footer: React.ReactNode;
   onClose: () => void;
+  /** page：在当前页面内整页打开，而非浮层弹窗 */
+  mode?: "dialog" | "page";
+  backLabel?: string;
 }) {
+  if (mode === "page") {
+    return (
+      <section
+        aria-labelledby={titleId}
+        className="flex flex-col rounded-md border border-border bg-card"
+      >
+        <div className="flex items-center gap-3 border-b border-border px-5 py-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" aria-hidden />
+            {backLabel}
+          </button>
+          <span className="h-4 w-px bg-border" aria-hidden />
+          <h3 id={titleId} className="text-base font-semibold">
+            {title}
+          </h3>
+        </div>
+        <div className="flex flex-col gap-4 p-5">{children}</div>
+        <div className="sticky bottom-0 flex items-center justify-end gap-2 border-t border-border bg-card px-5 py-3">
+          {footer}
+        </div>
+      </section>
+    );
+  }
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -1370,11 +1402,13 @@ function defaultPrice(g: Goods, type: BizType) {
 function EntrustDialog({
   items,
   records,
+  backLabel,
   onClose,
   onConfirm,
 }: {
   items: Goods[];
   records: EntrustRecord[];
+  backLabel?: string;
   onClose: () => void;
   onConfirm: (records: EntrustRecord[]) => void;
 }) {
@@ -1481,7 +1515,8 @@ function EntrustDialog({
     <Modal
       title="委托服务商运营"
       titleId="entrust-dialog-title"
-      width="max-w-[860px]"
+      mode="page"
+      backLabel={backLabel}
       onClose={onClose}
       footer={
         <>
@@ -1720,10 +1755,12 @@ function nextBatchId(items: Goods[]) {
 /** 上架：以整个商品为单位生成一张上架单，引用商品明细按规格分别定价、定量；运营规���（税率、结算、议价、租期等）为上架单共用 */
 function ListDialog({
   items,
+  backLabel,
   onClose,
   onConfirm,
 }: {
   items: Goods[];
+  backLabel?: string;
   onClose: () => void;
   onConfirm: (created: { code: string; listing: Listing }[]) => void;
 }) {
@@ -1819,7 +1856,8 @@ function ListDialog({
     <Modal
       title={relist ? "重新上架" : "新增上架"}
       titleId="list-dialog-title"
-      width="max-w-[860px]"
+      mode="page"
+      backLabel={backLabel}
       onClose={onClose}
       footer={
         <>
@@ -1860,7 +1898,7 @@ function ListDialog({
       </div>
 
       <DialogField
-        label="租赁方式"
+        label="租售方式"
         required
         hint="每张上架单对应一种租售方式；同一商品可多次上架"
       >
@@ -2147,7 +2185,7 @@ function ListGroup({
 
 const CATEGORY_OPTIONS: Record<string, string[]> = {
   循环物资: ["模板类", "脚手架类", "钢支撑类", "围挡类", "安全防护类"],
-  工程设备: ["起重设备", "混凝土设备", "土方设备", "桩工设备"],
+  工程设备: ["起重设备", "混凝土���备", "土方设备", "桩工设备"],
   周转材料: ["钢管扣件", "型钢", "集装箱房", "其他"],
 };
 const UNIT_OPTIONS = ["张", "根", "套", "块", "米", "吨", "台", "个", "箱"];
@@ -3583,7 +3621,14 @@ function GoodsDetail({
   );
 }
 
-export function GoodsList({ onCreate }: { onCreate: () => void }) {
+export function GoodsList({
+  onCreate,
+  onTitleChange,
+}: {
+  onCreate: () => void;
+  /** 页内打开上架 / 委托时同步页面标题 */
+  onTitleChange?: (title: string | null) => void;
+}) {
   const [goods, setGoods] = useState<Goods[]>(goodsData);
   const [draft, setDraft] = useState<Filters>(emptyFilters);
   const [applied, setApplied] = useState<Filters>(emptyFilters);
@@ -3721,9 +3766,69 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
     ? batchesOf(batchGroup.items).find((b) => b.id === detailBatch)
     : undefined;
 
+  const pageAction =
+    dialog && dialogGoods && (dialog.action === "list" || dialog.action === "entrust")
+      ? dialog.action
+      : null;
+  const pageTitle =
+    pageAction === "list"
+      ? dialogItems.every((g) => g.status === "off")
+        ? "重新上架"
+        : "新增上架"
+      : pageAction === "entrust"
+        ? "委托服务商运营"
+        : null;
+  useEffect(() => {
+    onTitleChange?.(pageTitle);
+  }, [pageTitle, onTitleChange]);
+  const backLabel = detailName ? "返回商品详情" : "返回商品列表";
+
   return (
     <div className="flex flex-col gap-4">
-      {batchGroup && batch ? (
+      {pageAction === "list" && dialogGoods ? (
+        <ListDialog
+          key={dialogGoods.name}
+          items={dialogItems}
+          backLabel={backLabel}
+          onClose={() => setDialog(null)}
+          onConfirm={(created) => {
+            const byCode = new Map(created.map((c) => [c.code, c.listing]));
+            setGoods((list) =>
+              list.map((g) => {
+                const l = byCode.get(g.code);
+                return l
+                  ? {
+                      ...g,
+                      status: "active" as const,
+                      statusNote: undefined,
+                      updatedAt: now(),
+                      listings: [l, ...g.listings],
+                    }
+                  : g;
+              }),
+            );
+            const qty = created.reduce((s, c) => s + c.listing.quantity, 0);
+            notify(
+              `已上架：${dialogGoods.name}（上架单 ${created[0].listing.batch}，${bizMeta[created[0].listing.type].label} ${created.length} 个规格共 ${qty.toLocaleString()} ${dialogGoods.unit}）`,
+            );
+          }}
+        />
+      ) : pageAction === "entrust" && dialogGoods ? (
+        <EntrustDialog
+          key={dialogGoods.name}
+          items={dialogItems}
+          records={records}
+          backLabel={backLabel}
+          onClose={() => setDialog(null)}
+          onConfirm={(created) => {
+            addEntrusts(created);
+            const qty = created[0].lines.reduce((s, l) => s + l.quantity, 0);
+            notify(
+              `已提交 ${created.length} 张委托单：${dialogGoods.name}（${created[0].types.map((t) => bizMeta[t].label).join("/")} ${qty.toLocaleString()} ${dialogGoods.unit}，待 ${created.map((c) => c.provider).join("、")} 受理）`,
+            );
+          }}
+        />
+      ) : batchGroup && batch ? (
         <ListingDetail
           group={batchGroup}
           batch={batch}
@@ -3978,49 +4083,6 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
         </>
       )}
 
-      {dialog?.action === "list" && dialogGoods && (
-        <ListDialog
-          key={dialogGoods.name}
-          items={dialogItems}
-          onClose={() => setDialog(null)}
-          onConfirm={(created) => {
-            const byCode = new Map(created.map((c) => [c.code, c.listing]));
-            setGoods((list) =>
-              list.map((g) => {
-                const l = byCode.get(g.code);
-                return l
-                  ? {
-                      ...g,
-                      status: "active" as const,
-                      statusNote: undefined,
-                      updatedAt: now(),
-                      listings: [l, ...g.listings],
-                    }
-                  : g;
-              }),
-            );
-            const qty = created.reduce((s, c) => s + c.listing.quantity, 0);
-            notify(
-              `已上架：${dialogGoods.name}（上架单 ${created[0].listing.batch}，${bizMeta[created[0].listing.type].label} ${created.length} 个规格共 ${qty.toLocaleString()} ${dialogGoods.unit}）`,
-            );
-          }}
-        />
-      )}
-      {dialog?.action === "entrust" && dialogGoods && (
-        <EntrustDialog
-          key={dialogGoods.name}
-          items={dialogItems}
-          records={records}
-          onClose={() => setDialog(null)}
-          onConfirm={(created) => {
-            addEntrusts(created);
-            const qty = created[0].lines.reduce((s, l) => s + l.quantity, 0);
-            notify(
-              `已提交 ${created.length} 张委托单：${dialogGoods.name}（${created[0].types.map((t) => bizMeta[t].label).join("/")} ${qty.toLocaleString()} ${dialogGoods.unit}，待 ${created.map((c) => c.provider).join("、")} 受理）`,
-            );
-          }}
-        />
-      )}
       {dialog?.action === "edit" && dialogGoods && (
         <EditDialog
           key={dialogGoods.name}
