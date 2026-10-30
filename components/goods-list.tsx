@@ -518,6 +518,58 @@ const goodsData: Goods[] = [
     createdAt: "2024-10-16 13:20",
     updatedAt: "2024-10-18 09:35",
   },
+  {
+    code: "G2024100009",
+    shop: "华东建设工程有限公司周转材料店",
+    name: "铝合金模板 400×2700 标准墙板",
+    spec: "4mm 面板 / 65mm 边框",
+    category: "循环物资",
+    subCategory: "模板类",
+    unit: "㎡",
+    stock: 4200,
+    status: "reviewing",
+    statusNote: "2024-10-28 16:05 提交审核，平台预计 1 个工作日内完成",
+    location: "上海市 松江区 车墩镇 北松公路 1688 号堆场",
+    images: ["/images/goods-aluminum-formwork.png"],
+    banAreas: ["西藏自治区", "新疆维吾尔自治区"],
+    freight: "按吨计费：¥ 320 / 吨，起运 3 吨；订单满 ¥ 80,000 包邮",
+    description:
+      "6061-T6 铝合金整体挤压成型，单块重量约 25kg，人工即可搬运拼装。表面平整度高，可实现清水混凝土效果，周转次数 300 次以上。附带销钉、楔片与背楞，配套方案可按图纸深化。",
+    listings: [
+      {
+        id: "L241028001",
+
+        batch: "S241028001",
+        createdAt: "2024-10-28",
+        taxRate: "13%",
+        payTerm: "先款后货",
+        type: "sale",
+        status: "off",
+        price: 1180,
+        minOrder: 100,
+        quantity: 1500,
+        used: 0,
+      },
+      {
+        id: "L241028002",
+
+        batch: "S241028002",
+        createdAt: "2024-10-28",
+        taxRate: "13%",
+        payTerm: "货到付款",
+        type: "rent",
+        status: "off",
+        price: 1.8,
+        period: "天",
+        deposit: 300,
+        minDays: 60,
+        quantity: 2700,
+        used: 0,
+      },
+    ],
+    createdAt: "2024-10-28 15:40",
+    updatedAt: "2024-10-28 16:05",
+  },
 ];
 
 export const bizMeta: Record<BizType, { label: string; className: string }> = {
@@ -1665,7 +1717,7 @@ function nextBatchId(items: Goods[]) {
   return `S${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}${String(batches.size + 1).padStart(3, "0")}`;
 }
 
-/** 上架：以整个商品为单位生成一张上架单，引用商品明细按规格分别定价、定量；运营规则（税率、结算、议价、租期等）为上架单共用 */
+/** 上架：以整个商品为单位生成一张上架单，引用商品明细按规格分别定价、定量；运营规���（税率、结算、议价、租期等）为上架单共用 */
 function ListDialog({
   items,
   onClose,
@@ -2538,18 +2590,21 @@ function SubmitReviewDialog({
 
 type EntrustFilter = "" | "has" | "none" | "pending" | "accepted";
 type Filters = {
-  code: string;
   name: string;
   category: string;
   status: GoodsStatus | "";
   entrust: EntrustFilter;
+  /** 创建时间范围（YYYY-MM-DD，含边界） */
+  createdFrom: string;
+  createdTo: string;
 };
 const emptyFilters: Filters = {
-  code: "",
   name: "",
   category: "",
   status: "",
   entrust: "",
+  createdFrom: "",
+  createdTo: "",
 };
 
 const entrustOptions: { label: string; value: EntrustFilter }[] = [
@@ -2621,13 +2676,6 @@ function FilterPanel({
   return (
     <div className="flex flex-col gap-4 rounded-md bg-card p-5">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <FilterRow label="商品编码">
-          <FilterInput
-            label="商品编码"
-            value={draft.code}
-            onChange={(code) => onDraftChange({ ...draft, code })}
-          />
-        </FilterRow>
         <FilterRow label="商品名称">
           <FilterInput
             label="商品名称"
@@ -2672,6 +2720,29 @@ function FilterPanel({
             }
           />
         </FilterRow>
+        <FilterRow label="创建时间">
+          <input
+            type="date"
+            aria-label="创建时间开始"
+            value={draft.createdFrom}
+            max={draft.createdTo || undefined}
+            onChange={(e) =>
+              onDraftChange({ ...draft, createdFrom: e.target.value })
+            }
+            className="h-9 min-w-0 flex-1 rounded border border-border bg-background px-2 text-sm"
+          />
+          <span className="text-xs text-muted-foreground">至</span>
+          <input
+            type="date"
+            aria-label="创建时间结束"
+            value={draft.createdTo}
+            min={draft.createdFrom || undefined}
+            onChange={(e) =>
+              onDraftChange({ ...draft, createdTo: e.target.value })
+            }
+            className="h-9 min-w-0 flex-1 rounded border border-border bg-background px-2 text-sm"
+          />
+        </FilterRow>
       </div>
       <div className="flex items-center gap-2">
         <Button
@@ -2695,8 +2766,9 @@ function FilterPanel({
 
 function matches(g: Goods, f: Filters, records: EntrustRecord[]) {
   const entrusts = entrustsOf(g.name, records);
-  if (f.code && !g.code.toLowerCase().includes(f.code.trim().toLowerCase()))
-    return false;
+  const createdDay = g.createdAt.slice(0, 10);
+  if (f.createdFrom && createdDay < f.createdFrom) return false;
+  if (f.createdTo && createdDay > f.createdTo) return false;
   if (f.name && !g.name.includes(f.name.trim())) return false;
   if (f.category && g.subCategory !== f.category) return false;
   if (f.status && g.status !== f.status) return false;
@@ -3622,7 +3694,7 @@ export function GoodsList({ onCreate }: { onCreate: () => void }) {
   const visible = goods.filter((g) => matches(g, applied, records));
   const isFiltered = Object.values(applied).some(Boolean);
 
-  /** 各状态数量按除状态以外的其他条件统计，便于在页签间切换时看到全貌 */
+  /** 各状态数量按除状态以外的其他条件统计，便于在页签间切换时看��全貌 */
   const baseFilters: Filters = { ...applied, status: "" };
   const base = goods.filter((g) => matches(g, baseFilters, records));
   const countOf = (s: GoodsStatus | "") =>
